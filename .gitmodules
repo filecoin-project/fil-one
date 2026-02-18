@@ -1,0 +1,3 @@
+[submodule "testing/s3-tests"]
+	path = testing/s3-tests
+	url = https://github.com/ceph/s3-tests
