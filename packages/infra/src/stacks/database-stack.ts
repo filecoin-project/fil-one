@@ -8,7 +8,7 @@ export class DatabaseStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    this.uploadsTable = new dynamodb.Table(this, 'UploadsTable', {
+    this.uploadsTable = new dynamodb.Table(this, 'HyperspaceUploadsTable', {
       tableName: 'hyperspace-uploads',
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },

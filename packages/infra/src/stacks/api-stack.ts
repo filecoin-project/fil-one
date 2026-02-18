@@ -9,6 +9,8 @@ import { Construct } from 'constructs';
 
 interface ApiStackProps extends cdk.StackProps {
   uploadsTable: dynamodb.ITable;
+  /** Origins allowed by CORS preflight, e.g. ["https://xxxx.cloudfront.net", "http://localhost:5173"] */
+  allowedOrigins: string[];
 }
 
 export class ApiStack extends cdk.Stack {
@@ -17,7 +19,7 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const uploadFn = new lambdaNodejs.NodejsFunction(this, 'UploadFunction', {
+    const uploadFn = new lambdaNodejs.NodejsFunction(this, 'HyperspaceUploadFunction', {
       entry: path.resolve(
         __dirname,
         '../../../backend/src/handlers/upload.ts',
@@ -38,11 +40,12 @@ export class ApiStack extends cdk.Stack {
 
     props.uploadsTable.grantWriteData(uploadFn);
 
-    const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
+    const httpApi = new apigwv2.HttpApi(this, 'HyperspaceHttpApi', {
       corsPreflight: {
-        allowOrigins: ['*'],
+        allowOrigins: props.allowedOrigins,
         allowMethods: [apigwv2.CorsHttpMethod.POST, apigwv2.CorsHttpMethod.OPTIONS],
-        allowHeaders: ['Content-Type'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+        maxAge: cdk.Duration.days(1),
       },
     });
 
@@ -50,14 +53,14 @@ export class ApiStack extends cdk.Stack {
       path: '/upload',
       methods: [apigwv2.HttpMethod.POST],
       integration: new apigwv2Integrations.HttpLambdaIntegration(
-        'UploadIntegration',
+        'HyperspaceUploadIntegration',
         uploadFn,
       ),
     });
 
     this.apiUrl = httpApi.apiEndpoint;
 
-    new cdk.CfnOutput(this, 'ApiUrl', {
+    new cdk.CfnOutput(this, 'HyperspaceApiUrl', {
       value: httpApi.apiEndpoint,
       description: 'API Gateway HTTP API endpoint URL',
     });

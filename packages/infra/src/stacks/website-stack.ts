@@ -1,5 +1,4 @@
 import * as cdk from 'aws-cdk-lib';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as cloudfrontOrigins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as route53 from 'aws-cdk-lib/aws-route53';
@@ -11,20 +10,23 @@ import { Construct } from 'constructs';
 
 interface WebsiteStackProps extends cdk.StackProps {
   hostedZone: route53.IHostedZone;
-  certificate: acm.ICertificate;
+  // certificate: acm.ICertificate; // re-enable once DNS delegation is in place
 }
 
 export class WebsiteStack extends cdk.Stack {
+  /** e.g. "xxxx.cloudfront.net" — pass to ApiStack for CORS allowed origins. */
+  public readonly distributionDomainName: string;
+
   constructor(scope: Construct, id: string, props: WebsiteStackProps) {
     super(scope, id, props);
 
-    const assetsBucket = new s3.Bucket(this, 'AssetsBucket', {
+    const assetsBucket = new s3.Bucket(this, 'HyperspaceAssetsBucket', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
-    const distribution = new cloudfront.Distribution(this, 'Distribution', {
+    const distribution = new cloudfront.Distribution(this, 'HyperspaceDistribution', {
       defaultBehavior: {
         // S3BucketOrigin.withOriginAccessControl() creates an OAC and
         // bucket policy automatically — no manual bucket policy needed.
@@ -48,19 +50,21 @@ export class WebsiteStack extends cdk.Stack {
           responsePagePath: '/index.html',
         },
       ],
-      certificate: props.certificate,
-      domainNames: [props.hostedZone.zoneName],
+      // certificate: props.certificate,     // re-enable with cert
+      // domainNames: [props.hostedZone.zoneName], // re-enable with cert
     });
 
-    // Route53 alias — points hyperspace.filecoin.io → CloudFront distribution.
-    new route53.ARecord(this, 'AliasRecord', {
+    this.distributionDomainName = distribution.distributionDomainName;
+
+    // Route53 alias — points hyperspace.filecoin.dev → CloudFront distribution.
+    new route53.ARecord(this, 'HyperspaceAliasRecord', {
       zone: props.hostedZone,
       target: route53.RecordTarget.fromAlias(
         new route53Targets.CloudFrontTarget(distribution),
       ),
     });
 
-    new s3deploy.BucketDeployment(this, 'Deploy', {
+    new s3deploy.BucketDeployment(this, 'HyperspaceDeployment', {
       sources: [
         s3deploy.Source.asset(
           path.resolve(__dirname, '../../../website/dist'),
@@ -71,14 +75,14 @@ export class WebsiteStack extends cdk.Stack {
       distributionPaths: ['/*'],
     });
 
-    new cdk.CfnOutput(this, 'SiteUrl', {
+    new cdk.CfnOutput(this, 'HyperspaceSiteUrl', {
       value: `https://${props.hostedZone.zoneName}`,
-      description: 'Website URL',
+      description: 'Website URL (resolves once DNS delegation is complete)',
     });
 
-    new cdk.CfnOutput(this, 'CloudFrontDomain', {
+    new cdk.CfnOutput(this, 'HyperspaceCloudFrontDomain', {
       value: distribution.distributionDomainName,
-      description: 'CloudFront distribution domain (for debugging)',
+      description: 'CloudFront distribution domain — reachable immediately without DNS delegation',
     });
   }
 }
