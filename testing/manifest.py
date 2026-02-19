@@ -18,31 +18,34 @@ Schema (manifest.json):
 import json
 from pathlib import Path
 
-MANIFEST_FILE = Path(__file__).parent / "manifest.json"
+
+def _path(provider_dir: Path) -> Path:
+    return provider_dir / "manifest.json"
 
 
-def load() -> dict:
-    if MANIFEST_FILE.exists():
-        with open(MANIFEST_FILE) as f:
+def load(provider_dir: Path) -> dict:
+    path = _path(provider_dir)
+    if path.exists():
+        with open(path) as f:
             return json.load(f)
     return {"files": {}}
 
 
-def save(manifest: dict):
-    with open(MANIFEST_FILE, "w") as f:
+def save(manifest: dict, provider_dir: Path):
+    with open(_path(provider_dir), "w") as f:
         json.dump(manifest, f, indent=2)
 
 
-def mark_done(manifest: dict, key: str, **kwargs):
+def mark_done(manifest: dict, provider_dir: Path, key: str, **kwargs):
     manifest["files"].setdefault(key, {})
     manifest["files"][key].update({"status": "done", **kwargs})
-    save(manifest)
+    save(manifest, provider_dir)
 
 
-def mark_failed(manifest: dict, key: str, reason: str):
+def mark_failed(manifest: dict, provider_dir: Path, key: str, reason: str):
     manifest["files"].setdefault(key, {})
     manifest["files"][key].update({"status": "failed", "reason": reason})
-    save(manifest)
+    save(manifest, provider_dir)
 
 
 def is_done(manifest: dict, key: str) -> bool:

@@ -5,8 +5,6 @@ from pathlib import Path
 
 import report as _report
 
-_BASE = Path(__file__).parent
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -37,12 +35,12 @@ def _extract_boto_error(exc: Exception) -> dict:
 
 
 class Logger:
-    def __init__(self, script_name: str):
+    def __init__(self, script_name: str, provider_dir: Path):
         self.ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.script = script_name
 
-        logs_dir = _BASE / "logs"
-        reports_dir = _BASE / "reports"
+        logs_dir = provider_dir / "logs"
+        reports_dir = provider_dir / "reports"
         logs_dir.mkdir(exist_ok=True)
         reports_dir.mkdir(exist_ok=True)
 

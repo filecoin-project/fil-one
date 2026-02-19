@@ -1,35 +1,31 @@
 """
-Fetch objects from Aurora — metadata, content preview, and version listing.
+Fetch objects from an S3-compatible provider — metadata, content preview, and version listing.
 
 By default operates on all keys in manifest.json with status=done.
 Pass --key to target a specific key, optionally with --version-id.
 
 Usage:
-  python fetch.py
-  python fetch.py --key gov-data/somefile.csv
-  python fetch.py --key gov-data/somefile.csv --version-id <vid>
+  python fetch.py --provider aurora
+  python fetch.py --provider aurora --key gov-data/somefile.csv
+  python fetch.py --provider aurora --key gov-data/somefile.csv --version-id <vid>
 """
 import argparse
 import os
 import sys
 import time
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import manifest as mf
-from client import get_aurora_client
+from client import resolve_provider, get_s3_client
 from logger import Logger
 
 PREVIEW_BYTES = 1024  # bytes to read for content preview
 
 
-def head_object(aurora, bucket: str, key: str, version_id: str = None) -> dict:
+def head_object(s3, bucket: str, key: str, version_id: str = None) -> dict:
     kwargs = {"Bucket": bucket, "Key": key}
     if version_id:
         kwargs["VersionId"] = version_id
-    resp = aurora.head_object(**kwargs)
+    resp = s3.head_object(**kwargs)
     return {
         "content_length": resp.get("ContentLength"),
         "content_type": resp.get("ContentType"),
@@ -40,7 +36,7 @@ def head_object(aurora, bucket: str, key: str, version_id: str = None) -> dict:
     }
 
 
-def get_object_preview(aurora, bucket: str, key: str, version_id: str = None) -> dict:
+def get_object_preview(s3, bucket: str, key: str, version_id: str = None) -> dict:
     kwargs = {
         "Bucket": bucket,
         "Key": key,
@@ -48,7 +44,7 @@ def get_object_preview(aurora, bucket: str, key: str, version_id: str = None) ->
     }
     if version_id:
         kwargs["VersionId"] = version_id
-    resp = aurora.get_object(**kwargs)
+    resp = s3.get_object(**kwargs)
     preview = resp["Body"].read(PREVIEW_BYTES)
     return {
         "content_length": resp.get("ContentLength"),
@@ -60,8 +56,8 @@ def get_object_preview(aurora, bucket: str, key: str, version_id: str = None) ->
     }
 
 
-def list_versions(aurora, bucket: str, key: str) -> list:
-    resp = aurora.list_object_versions(Bucket=bucket, Prefix=key)
+def list_versions(s3, bucket: str, key: str) -> list:
+    resp = s3.list_object_versions(Bucket=bucket, Prefix=key)
     return [
         {
             "version_id": v.get("VersionId"),
@@ -75,14 +71,14 @@ def list_versions(aurora, bucket: str, key: str) -> list:
     ]
 
 
-def fetch_key(aurora, log: Logger, bucket: str, key: str, version_id: str = None):
+def fetch_key(s3, log: Logger, bucket: str, key: str, version_id: str = None):
     label = f"{key}" + (f" [version={version_id}]" if version_id else "")
     print(f"\nFetching: {label}")
 
     # HeadObject
     t0 = time.monotonic()
     try:
-        meta = head_object(aurora, bucket, key, version_id)
+        meta = head_object(s3, bucket, key, version_id)
         log.success("head_object", key=key, elapsed_s=round(time.monotonic() - t0, 3), **meta)
     except Exception as e:
         log.error("head_object", e, key=key, version_id=version_id, bucket=bucket,
@@ -91,7 +87,7 @@ def fetch_key(aurora, log: Logger, bucket: str, key: str, version_id: str = None
     # GetObject (preview only — no full download)
     t0 = time.monotonic()
     try:
-        preview = get_object_preview(aurora, bucket, key, version_id)
+        preview = get_object_preview(s3, bucket, key, version_id)
         log.success("get_object_preview", key=key, elapsed_s=round(time.monotonic() - t0, 3), **preview)
     except Exception as e:
         log.error("get_object_preview", e, key=key, version_id=version_id, bucket=bucket,
@@ -100,7 +96,7 @@ def fetch_key(aurora, log: Logger, bucket: str, key: str, version_id: str = None
     # ListObjectVersions
     t0 = time.monotonic()
     try:
-        versions = list_versions(aurora, bucket, key)
+        versions = list_versions(s3, bucket, key)
         log.success("list_versions", key=key, version_count=len(versions), versions=versions,
                     elapsed_s=round(time.monotonic() - t0, 3))
     except Exception as e:
@@ -109,19 +105,21 @@ def fetch_key(aurora, log: Logger, bucket: str, key: str, version_id: str = None
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fetch objects from Aurora")
+    parser = argparse.ArgumentParser(description="Fetch objects from an S3-compatible provider")
+    parser.add_argument("--provider", required=True, help="Provider name (e.g. aurora, fth)")
     parser.add_argument("--key", help="Specific key to fetch (skips manifest)")
     parser.add_argument("--version-id", help="Version ID for --key")
     args = parser.parse_args()
 
-    log = Logger("fetch")
-    aurora = get_aurora_client()
-    bucket = os.environ["AURORA_BUCKET"]
+    provider_dir = resolve_provider(args.provider)
+    log = Logger("fetch", provider_dir)
+    s3 = get_s3_client()
+    bucket = os.environ["S3_BUCKET"]
 
     if args.key:
-        fetch_key(aurora, log, bucket, args.key, args.version_id)
+        fetch_key(s3, log, bucket, args.key, args.version_id)
     else:
-        manifest = mf.load()
+        manifest = mf.load(provider_dir)
         done_keys = [k for k, v in manifest["files"].items() if v.get("status") == "done"]
         if not done_keys:
             print("No done entries in manifest.json. Run upload.py first.")
@@ -129,7 +127,7 @@ def main():
         print(f"Fetching {len(done_keys)} key(s) from manifest...")
         for key in done_keys:
             version_id = manifest["files"][key].get("version_id")
-            fetch_key(aurora, log, bucket, key, version_id)
+            fetch_key(s3, log, bucket, key, version_id)
 
     log.write_report("Fetch")
 

@@ -1,34 +1,30 @@
 """
-Delete objects from Aurora.
+Delete objects from an S3-compatible provider.
 
 By default deletes all keys in manifest.json with status=done.
 Updates the manifest entry to status=deleted on success.
 
 Usage:
-  python delete.py                        # delete all manifest done entries
-  python delete.py --key gov-data/f.csv   # delete a specific key
-  python delete.py --key gov-data/f.csv --version-id <vid>
-  python delete.py --dry-run              # print what would be deleted
+  python delete.py --provider aurora                        # delete all manifest done entries
+  python delete.py --provider aurora --key gov-data/f.csv  # delete a specific key
+  python delete.py --provider aurora --key gov-data/f.csv --version-id <vid>
+  python delete.py --provider aurora --dry-run             # print what would be deleted
 """
 import argparse
 import os
 import sys
 import time
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import manifest as mf
-from client import get_aurora_client
+from client import resolve_provider, get_s3_client
 from logger import Logger
 
 
-def delete_object(aurora, bucket: str, key: str, version_id: str = None) -> dict:
+def delete_object(s3, bucket: str, key: str, version_id: str = None) -> dict:
     kwargs = {"Bucket": bucket, "Key": key}
     if version_id:
         kwargs["VersionId"] = version_id
-    resp = aurora.delete_object(**kwargs)
+    resp = s3.delete_object(**kwargs)
     return {
         "delete_marker": resp.get("DeleteMarker"),
         "version_id": resp.get("VersionId"),
@@ -36,17 +32,19 @@ def delete_object(aurora, bucket: str, key: str, version_id: str = None) -> dict
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Delete objects from Aurora")
+    parser = argparse.ArgumentParser(description="Delete objects from an S3-compatible provider")
+    parser.add_argument("--provider", required=True, help="Provider name (e.g. aurora, fth)")
     parser.add_argument("--key", help="Specific key to delete")
     parser.add_argument("--version-id", help="Specific version ID to delete")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print what would be deleted without actually deleting")
     args = parser.parse_args()
 
-    log = Logger("delete")
-    aurora = get_aurora_client()
-    bucket = os.environ["AURORA_BUCKET"]
-    manifest = mf.load()
+    provider_dir = resolve_provider(args.provider)
+    log = Logger("delete", provider_dir)
+    s3 = get_s3_client()
+    bucket = os.environ["S3_BUCKET"]
+    manifest = mf.load(provider_dir)
 
     if args.key:
         # Pull version_id from manifest if not specified explicitly
@@ -76,10 +74,10 @@ def main():
 
         t0 = time.monotonic()
         try:
-            result = delete_object(aurora, bucket, key, version_id)
+            result = delete_object(s3, bucket, key, version_id)
             elapsed = round(time.monotonic() - t0, 3)
             manifest["files"].setdefault(key, {})["status"] = "deleted"
-            mf.save(manifest)
+            mf.save(manifest, provider_dir)
             log.success("delete_object", key=key, version_id=version_id, bucket=bucket,
                         elapsed_s=elapsed, **result)
         except Exception as e:

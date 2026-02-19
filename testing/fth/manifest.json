@@ -1,0 +1,8 @@
+{
+  "files": {
+    "gov-data/README.md": {
+      "status": "failed",
+      "reason": "Could not connect to the endpoint URL: \"https://your-fth-endpoint.example.com/your-bucket-name/gov-data/README.md\""
+    }
+  }
+}

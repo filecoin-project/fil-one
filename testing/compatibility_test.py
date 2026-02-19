@@ -1,24 +1,24 @@
 """
-S3 Compatibility Test: runs the ceph/s3-tests suite against Aurora.
+S3 Compatibility Test: runs the ceph/s3-tests suite against an S3-compatible provider.
 
-Generates s3tests.conf from .env, runs pytest with --json-report,
+Generates s3tests.conf from the provider's .env, runs pytest with --json-report,
 parses the results, and writes a unified report in the same format
 as the other test scripts.
 
 Prerequisites:
   pip install pytest pytest-json-report
-  pip install -r ../s3-tests/requirements.txt
+  pip install -r s3-tests/requirements.txt
 
 Usage:
-  python compatibility_test.py
-  python compatibility_test.py --marks 'not fails_on_aws'
-  python compatibility_test.py --test-file s3tests/functional/test_s3.py::test_bucket_list_empty
-  python compatibility_test.py --marks 'versioning and not fails_on_aws'
+  python compatibility_test.py --provider aurora
+  python compatibility_test.py --provider aurora --marks 'not fails_on_aws'
+  python compatibility_test.py --provider aurora --test-file s3tests/functional/test_s3.py::test_bucket_list_empty
+  python compatibility_test.py --provider aurora --marks 'versioning and not fails_on_aws'
 
 Notes:
-  - [s3 alt] tests (cross-user) require AURORA_ALT_* credentials in .env.
+  - [s3 alt] tests (cross-user) require S3_ALT_* credentials in the provider's .env.
     Without them, alt credentials fall back to main and those tests will fail.
-  - IAM/STS tests require Aurora to support those APIs.
+  - IAM/STS tests require the provider to support those APIs.
   - Default marks filter ('not fails_on_aws') excludes tests known to fail
     on real AWS S3, giving the most meaningful compatibility signal.
 """
@@ -33,14 +33,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import report as _report
+from client import resolve_provider
 
-_BASE = Path(__file__).parent
-S3TESTS_DIR = _BASE.parent / "s3-tests"
+_SCRIPTS_DIR = Path(__file__).parent
+S3TESTS_DIR = _SCRIPTS_DIR / "s3-tests"
 
 # Marks defined in s3-tests pytest.ini that represent test categories.
 # Checked in priority order — first match wins for grouping.
@@ -90,7 +87,7 @@ def _check_prereqs():
         print(
             f"ERROR: s3-tests directory not found at {S3TESTS_DIR}\n"
             "Clone it with:\n"
-            "  git clone https://github.com/ceph/s3-tests ../s3-tests"
+            "  git clone https://github.com/ceph/s3-tests s3-tests"
         )
         sys.exit(1)
 
@@ -111,32 +108,32 @@ def _check_prereqs():
             sys.exit(1)
 
 
-def _generate_conf(tmp_dir: Path) -> Path:
+def _generate_conf(tmp_dir: Path, provider: str) -> Path:
     """Write an s3tests.conf file from environment variables."""
-    endpoint = os.environ.get("AURORA_ENDPOINT", "https://a-s3.aur.lu")
+    endpoint = os.environ.get("S3_ENDPOINT", "https://s3.example.com")
     parsed = urlparse(endpoint)
     host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     is_secure = parsed.scheme == "https"
 
-    main_access = os.environ["AURORA_ACCESS_KEY_ID"]
-    main_secret = os.environ["AURORA_SECRET_ACCESS_KEY"]
+    main_access = os.environ["S3_ACCESS_KEY_ID"]
+    main_secret = os.environ["S3_SECRET_ACCESS_KEY"]
 
     # Alt credentials: fall back to main if not set (cross-user tests will fail)
-    alt_access = os.environ.get("AURORA_ALT_ACCESS_KEY_ID", main_access)
-    alt_secret = os.environ.get("AURORA_ALT_SECRET_ACCESS_KEY", main_secret)
+    alt_access = os.environ.get("S3_ALT_ACCESS_KEY_ID", main_access)
+    alt_secret = os.environ.get("S3_ALT_SECRET_ACCESS_KEY", main_secret)
 
     main = {
-        "display_name": os.environ.get("AURORA_DISPLAY_NAME", "aurora-main"),
-        "user_id": os.environ.get("AURORA_USER_ID", "aurora-main-user"),
-        "email": os.environ.get("AURORA_EMAIL", "main@aurora.test"),
+        "display_name": os.environ.get("S3_DISPLAY_NAME", f"{provider}-main"),
+        "user_id": os.environ.get("S3_USER_ID", f"{provider}-main-user"),
+        "email": os.environ.get("S3_EMAIL", f"main@{provider}.test"),
         "access_key": main_access,
         "secret_key": main_secret,
     }
     alt = {
-        "display_name": os.environ.get("AURORA_ALT_DISPLAY_NAME", "aurora-alt"),
-        "user_id": os.environ.get("AURORA_ALT_USER_ID", "aurora-alt-user"),
-        "email": os.environ.get("AURORA_ALT_EMAIL", "alt@aurora.test"),
+        "display_name": os.environ.get("S3_ALT_DISPLAY_NAME", f"{provider}-alt"),
+        "user_id": os.environ.get("S3_ALT_USER_ID", f"{provider}-alt-user"),
+        "email": os.environ.get("S3_ALT_EMAIL", f"alt@{provider}.test"),
         "access_key": alt_access,
         "secret_key": alt_secret,
     }
@@ -150,11 +147,11 @@ def _generate_conf(tmp_dir: Path) -> Path:
         "ssl_verify": "True",
     }
     cfg["fixtures"] = {
-        "bucket prefix": "aurora-compat-{random}-",
+        "bucket prefix": f"{provider}-compat-{{random}}-",
     }
     cfg["s3 main"] = main
     cfg["s3 alt"] = alt
-    cfg["s3 tenant"] = {**alt, "tenant": "aurora-tenant"}
+    cfg["s3 tenant"] = {**alt, "tenant": f"{provider}-tenant"}
     cfg["iam"] = main
     cfg["iam root"] = {
         "access_key": main_access,
@@ -270,7 +267,8 @@ def _parse_results(json_out: Path) -> tuple:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="S3 compatibility tests against Aurora")
+    parser = argparse.ArgumentParser(description="S3 compatibility tests against a provider")
+    parser.add_argument("--provider", required=True, help="Provider name (e.g. aurora, fth)")
     parser.add_argument(
         "--marks",
         default="not fails_on_aws",
@@ -285,8 +283,10 @@ def main():
 
     _check_prereqs()
 
-    logs_dir = _BASE / "logs"
-    reports_dir = _BASE / "reports"
+    provider_dir = resolve_provider(args.provider)
+
+    logs_dir = provider_dir / "logs"
+    reports_dir = provider_dir / "reports"
     logs_dir.mkdir(exist_ok=True)
     reports_dir.mkdir(exist_ok=True)
 
@@ -295,7 +295,7 @@ def main():
     report_file = reports_dir / f"{ts}_compatibility_report.txt"
 
     with tempfile.TemporaryDirectory() as tmp:
-        conf_path = _generate_conf(Path(tmp))
+        conf_path = _generate_conf(Path(tmp), args.provider)
         exit_code = _run_pytest(conf_path, args.marks, args.test_file, json_out)
 
     if not json_out.exists():
@@ -309,6 +309,7 @@ def main():
 
     extra = [
         "TEST RUN",
+        f"  Provider  : {args.provider}",
         f"  Collected : {meta['collected']}",
         f"  Passed    : {meta['passed']}",
         f"  Failed    : {meta['failed']}",
@@ -321,7 +322,7 @@ def main():
     ]
 
     text = _report.write_report(
-        title="S3 Compatibility Test",
+        title=f"S3 Compatibility Test — {args.provider}",
         script_name="compatibility_test",
         ts=ts,
         entries=entries,

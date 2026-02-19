@@ -1,8 +1,8 @@
 """
-Load test Aurora with concurrent uploads from source.coop.
+Load test an S3-compatible provider with concurrent uploads from source.coop.
 
-State is stored in load_test_state.db (SQLite) so the run can be resumed
-after any failure — network drop, process kill, rate limit, etc.
+State is stored in load_test_state.db (SQLite) inside the provider directory,
+so the run can be resumed after any failure — network drop, process kill, rate limit, etc.
 
 Failure scenarios handled:
   - Network timeout mid-upload     → multipart aborted; entry stays 'failed', retry on resume
@@ -11,10 +11,10 @@ Failure scenarios handled:
   - Source file unavailable        → logged as source_error; skipped on resume by default
 
 Usage:
-  python load_test.py --count 50 --workers 8
-  python load_test.py --resume              # retry failed/interrupted entries
-  python load_test.py --resume --workers 4  # resume with different concurrency
-  python load_test.py --force               # delete DB and start from scratch
+  python load_test.py --provider aurora --count 50 --workers 8
+  python load_test.py --provider aurora --resume              # retry failed/interrupted entries
+  python load_test.py --provider aurora --resume --workers 4  # resume with different concurrency
+  python load_test.py --provider aurora --force               # delete DB and start from scratch
 """
 import argparse
 import os
@@ -25,14 +25,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
-from client import get_aurora_client, get_source_client
+from client import resolve_provider, get_s3_client, get_source_client
 from logger import Logger
-
-DB_FILE = Path(__file__).parent / "load_test_state.db"
 
 MULTIPART_THRESHOLD = 50 * 1024 * 1024
 PART_SIZE = 50 * 1024 * 1024
@@ -117,19 +111,19 @@ def db_summary(conn: sqlite3.Connection) -> dict:
 
 def _do_upload(source_key: str, size: int, source_bucket: str, target_bucket: str) -> dict:
     """Create per-thread clients and upload. boto3 clients are not thread-safe."""
-    aurora = get_aurora_client()
+    s3 = get_s3_client()
     source = get_source_client()
 
     if size <= MULTIPART_THRESHOLD:
         resp = source.get_object(Bucket=source_bucket, Key=source_key)
         body = resp["Body"].read()
-        put_resp = aurora.put_object(Bucket=target_bucket, Key=source_key, Body=body)
+        put_resp = s3.put_object(Bucket=target_bucket, Key=source_key, Body=body)
         return {
             "etag": put_resp.get("ETag", "").strip('"'),
             "version_id": put_resp.get("VersionId"),
         }
 
-    mpu = aurora.create_multipart_upload(Bucket=target_bucket, Key=source_key)
+    mpu = s3.create_multipart_upload(Bucket=target_bucket, Key=source_key)
     upload_id = mpu["UploadId"]
     parts = []
     part_number = 1
@@ -140,13 +134,13 @@ def _do_upload(source_key: str, size: int, source_bucket: str, target_bucket: st
             chunk = stream.read(PART_SIZE)
             if not chunk:
                 break
-            part_resp = aurora.upload_part(
+            part_resp = s3.upload_part(
                 Bucket=target_bucket, Key=source_key,
                 UploadId=upload_id, PartNumber=part_number, Body=chunk,
             )
             parts.append({"PartNumber": part_number, "ETag": part_resp["ETag"]})
             part_number += 1
-        complete_resp = aurora.complete_multipart_upload(
+        complete_resp = s3.complete_multipart_upload(
             Bucket=target_bucket, Key=source_key,
             UploadId=upload_id, MultipartUpload={"Parts": parts},
         )
@@ -155,13 +149,13 @@ def _do_upload(source_key: str, size: int, source_bucket: str, target_bucket: st
             "version_id": complete_resp.get("VersionId"),
         }
     except Exception:
-        aurora.abort_multipart_upload(Bucket=target_bucket, Key=source_key, UploadId=upload_id)
+        s3.abort_multipart_upload(Bucket=target_bucket, Key=source_key, UploadId=upload_id)
         raise
 
 
-def upload_worker(task: tuple, source_bucket: str, target_bucket: str) -> tuple:
+def upload_worker(task: tuple, source_bucket: str, target_bucket: str, db_file: Path) -> tuple:
     source_key, size = task
-    conn = sqlite3.connect(DB_FILE)  # Each thread gets its own connection
+    conn = sqlite3.connect(db_file)  # Each thread gets its own connection
     mark_in_progress(conn, source_key)
     t0 = time.monotonic()
 
@@ -193,15 +187,16 @@ def upload_worker(task: tuple, source_bucket: str, target_bucket: str) -> tuple:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Load test Aurora with concurrent uploads")
+    parser = argparse.ArgumentParser(description="Load test an S3-compatible provider with concurrent uploads")
+    parser.add_argument("--provider", required=True, help="Provider name (e.g. aurora, fth)")
     parser.add_argument("--count", type=int, default=50,
                         help="Number of files to queue (default: 50, ignored on --resume)")
     parser.add_argument("--workers", type=int, default=8,
                         help="Concurrent upload threads (default: 8)")
     parser.add_argument("--max-size-mb", type=float, default=200.0,
                         help="Skip source files larger than this MB (default: 200)")
-    parser.add_argument("--prefix", default=os.environ.get("SOURCE_PREFIX", "gov-data/"),
-                        help="Source object prefix")
+    parser.add_argument("--prefix", default=None,
+                        help="Source object prefix (default: SOURCE_PREFIX from .env)")
     parser.add_argument("--resume", action="store_true",
                         help="Resume — retry failed/interrupted entries from existing DB")
     parser.add_argument("--force", action="store_true",
@@ -212,25 +207,29 @@ def main():
         print("ERROR: --force and --resume are mutually exclusive.")
         sys.exit(1)
 
-    if args.force and DB_FILE.exists():
-        DB_FILE.unlink()
-        print(f"--force: deleted {DB_FILE}, starting fresh\n")
+    provider_dir = resolve_provider(args.provider)
+    db_file = provider_dir / "load_test_state.db"
 
-    log = Logger("load_test")
-    conn = sqlite3.connect(DB_FILE)
+    if args.force and db_file.exists():
+        db_file.unlink()
+        print(f"--force: deleted {db_file}, starting fresh\n")
+
+    log = Logger("load_test", provider_dir)
+    conn = sqlite3.connect(db_file)
     init_db(conn)
 
     source_bucket = os.environ.get("SOURCE_BUCKET", "harvard-lil")
-    target_bucket = os.environ["AURORA_BUCKET"]
+    target_bucket = os.environ["S3_BUCKET"]
+    prefix = args.prefix or os.environ.get("SOURCE_PREFIX", "gov-data/")
     max_size_bytes = int(args.max_size_mb * 1024 * 1024)
 
     if not args.resume:
         source = get_source_client()
-        print(f"Listing up to {args.count} file(s) from s3://{source_bucket}/{args.prefix}")
+        print(f"Listing up to {args.count} file(s) from s3://{source_bucket}/{prefix}")
         paginator = source.get_paginator("list_objects_v2")
         inserted = 0
         try:
-            for page in paginator.paginate(Bucket=source_bucket, Prefix=args.prefix):
+            for page in paginator.paginate(Bucket=source_bucket, Prefix=prefix):
                 for obj in page.get("Contents", []):
                     if obj["Size"] <= max_size_bytes:
                         insert_pending(conn, obj["Key"], obj["Size"])
@@ -240,7 +239,7 @@ def main():
                 if inserted >= args.count:
                     break
         except Exception as e:
-            log.error("list_source_files", e, bucket=source_bucket, prefix=args.prefix)
+            log.error("list_source_files", e, bucket=source_bucket, prefix=prefix)
             log.write_report("Load Test")
             conn.close()
             sys.exit(1)
@@ -266,7 +265,7 @@ def main():
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
-            executor.submit(upload_worker, task, source_bucket, target_bucket): task
+            executor.submit(upload_worker, task, source_bucket, target_bucket, db_file): task
             for task in tasks
         }
         for future in as_completed(futures):
@@ -295,9 +294,9 @@ def main():
         f"  Data uploaded OK  : {total_mb:.1f} MB",
         f"  Avg throughput    : {throughput:.1f} MB/s",
         f"  Workers           : {args.workers}",
-        f"  State DB          : {DB_FILE}",
+        f"  State DB          : {db_file}",
         "",
-        "To retry failures:  python load_test.py --resume",
+        f"To retry failures:  python load_test.py --provider {args.provider} --resume",
     ]
     log.write_report("Load Test", extra_lines=extra)
 
