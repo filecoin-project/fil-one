@@ -14,7 +14,7 @@ hyperspace/
 │   └── website/    # Vite + React 19 + TanStack Router SPA + Tailwind v4
 ```
 
-> `packages/ui` is a git submodule — a standalone fork of `@filecoin-foundation/ui-filecoin` adapted for React/Vite. The upstream fork lives at `joemocode-business/filecoin-foundation` for tracking upstream changes.
+> `packages/ui` is a git submodule — a standalone fork of `@filecoin-foundation/ui-filecoin` adapted for React/Vite. The upstream fork lives at `joemocode-business/filecoin-foundation` for tracking upstream changes. TODO Move this to something more official and not my Github :) 
 
 ## AWS account
 
