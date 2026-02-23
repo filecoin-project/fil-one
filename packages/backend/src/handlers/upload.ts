@@ -1,72 +1,43 @@
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
+import middy from '@middy/core';
+import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { v4 as uuidv4 } from 'uuid';
-import type { UploadRequest, UploadResponse } from '@hyperspace/shared';
+import type { ErrorResponse, UploadRequest, UploadResponse } from '@hyperspace/shared';
+import { getEnv } from '../lib/env.js';
+import { ResponseBuilder } from '../lib/response-builder.js';
+import { authMiddleware, Scope } from '../middleware/auth.js';
+import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 const dynamo = new DynamoDBClient({});
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-
-function respond(statusCode: number, body: UploadResponse): APIGatewayProxyResultV2 {
-  return {
-    statusCode,
-    headers: CORS_HEADERS,
-    body: JSON.stringify(body),
-  };
-}
-
-export const handler = async (
+async function baseHandler(
   event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyResultV2> => {
-  if (event.requestContext.http.method === 'OPTIONS') {
-    return { statusCode: 204, headers: CORS_HEADERS, body: '' };
-  }
-
+): Promise<APIGatewayProxyResultV2> {
   let request: UploadRequest;
   try {
     request = JSON.parse(event.body ?? '{}') as UploadRequest;
   } catch {
-    return respond(400, {
-      uploadId: '',
-      bucketName: '',
-      key: '',
-      status: 'error',
-      message: 'Invalid JSON body',
-    });
+    return new ResponseBuilder()
+      .status(400)
+      .body<ErrorResponse>({ message: 'Invalid JSON body' })
+      .build();
   }
 
   const { bucketName, key, fileName, contentType } = request;
   if (!bucketName || !key || !fileName || !contentType) {
-    return respond(400, {
-      uploadId: '',
-      bucketName: bucketName ?? '',
-      key: key ?? '',
-      status: 'error',
-      message: 'Missing required fields: bucketName, key, fileName, contentType',
-    });
+    return new ResponseBuilder()
+      .status(400)
+      .body<ErrorResponse>({ message: 'Missing required fields: bucketName, key, fileName, contentType' })
+      .build();
   }
 
   const uploadId = uuidv4();
-  const tableName = process.env['UPLOADS_TABLE_NAME'];
-  if (!tableName) {
-    return respond(500, {
-      uploadId: '',
-      bucketName,
-      key,
-      status: 'error',
-      message: 'Server misconfiguration: UPLOADS_TABLE_NAME not set',
-    });
-  }
 
   await dynamo.send(
     new PutItemCommand({
-      TableName: tableName,
+      TableName: getEnv('UPLOADS_TABLE_NAME'),
       Item: marshall({
         pk: `UPLOAD#${uploadId}`,
         sk: 'METADATA',
@@ -80,5 +51,13 @@ export const handler = async (
     }),
   );
 
-  return respond(200, { uploadId, bucketName, key, status: 'success' });
-};
+  return new ResponseBuilder()
+    .status(200)
+    .body<UploadResponse>({ uploadId, bucketName, key })
+    .build();
+}
+
+export const handler = middy(baseHandler)
+  .use(httpHeaderNormalizer())
+  .use(authMiddleware([Scope.UploadWrite]))
+  .use(errorHandlerMiddleware());

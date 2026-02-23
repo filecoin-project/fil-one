@@ -83,6 +83,18 @@ aws cloudfront create-invalidation \
   --distribution-id <id> --paths "/*" --profile=hyperspace
 ```
 
+## Auth0
+
+| | |
+|---|---|
+| Dev environment | **FilHyperspaceDev** |
+| Tenant domain | `dev-oar2nhqh58xf5pwf.us.auth0.com` |
+| Dashboard | https://manage.auth0.com/dashboard/us/dev-oar2nhqh58xf5pwf/applications/hAHMVzFTsFMrtxHDfzOvQCLHgaAf3bPQ/settings |
+
+After deploying, add to the Auth0 application settings:
+- **Allowed Callback URLs**: `{API_URL}/auth/callback`
+- **Allowed Logout URLs**: `{WEBSITE_URL}/sign-in`
+
 ## Stacks
 
 | Stack | Resources |

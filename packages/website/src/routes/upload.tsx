@@ -1,7 +1,7 @@
 import { createRoute } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import type { UploadRequest, UploadResponse } from '@hyperspace/shared';
-import { API_URL } from '../env.js';
+import { apiRequest } from '../lib/api.js';
 import { Route as rootRoute } from './__root.js';
 
 type FormStatus =
@@ -43,14 +43,6 @@ function UploadPage() {
       return;
     }
 
-    if (!API_URL) {
-      setStatus({
-        kind: 'error',
-        message: 'VITE_API_URL is not configured. Add it to your .env.local file.',
-      });
-      return;
-    }
-
     try {
       const fileBase64 = await readFileAsBase64(file);
       const body: UploadRequest = {
@@ -61,19 +53,12 @@ function UploadPage() {
         contentType: file.type || 'application/octet-stream',
       };
 
-      const response = await fetch(`${API_URL}/upload`, {
+      const data = await apiRequest<UploadResponse>('/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
-      const data: UploadResponse = await response.json();
-
-      if (data.status === 'success') {
-        setStatus({ kind: 'success', uploadId: data.uploadId });
-      } else {
-        setStatus({ kind: 'error', message: data.message ?? 'Unknown error' });
-      }
+      setStatus({ kind: 'success', uploadId: data.uploadId });
     } catch (err) {
       setStatus({
         kind: 'error',

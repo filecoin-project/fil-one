@@ -1,0 +1,141 @@
+import * as cdk from 'aws-cdk-lib';
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as cloudfrontOrigins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as path from 'path';
+import { Construct } from 'constructs';
+import { ApiFunction } from '../constructs/api-function';
+
+interface PlatformStackProps extends cdk.StackProps {
+  uploadsTable: dynamodb.ITable;
+}
+
+export class PlatformStack extends cdk.Stack {
+  public readonly distributionDomainName: string;
+
+  constructor(scope: Construct, id: string, props: PlatformStackProps) {
+    super(scope, id, props);
+
+    // ── Auth0 credentials ──────────────────────────────────────────────
+    const authSecret = new secretsmanager.Secret(this, 'AuthenticationSecrets', {
+      secretName: 'AuthenticationSecrets',
+      description: 'Auth0 client credentials (AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET)',
+    });
+
+    const httpApi = new apigwv2.HttpApi(this, 'HyperspaceHttpApi');
+
+    // ── Shared Lambda config ───────────────────────────────────────────
+    const auth0Env = {
+      AUTH_SECRET_NAME: authSecret.secretName,
+      AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',//TODO Update to our own DNS
+      AUTH0_AUDIENCE: 'console.filhyperspace.com',
+    };
+
+    const sharedBundling: lambdaNodejs.BundlingOptions = {
+      externalModules: [],
+      minify: true,
+      sourceMap: true,
+    };
+
+    // ── S3 bucket for the SPA ──────────────────────────────────────────
+    const assetsBucket = new s3.Bucket(this, 'HyperspaceAssetsBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    // ── CloudFront distribution ────────────────────────────────────────
+    // Extract the API GW domain from its endpoint (https://xxxx.execute-api.region.amazonaws.com)
+    const apiDomain = cdk.Fn.select(2, cdk.Fn.split('/', httpApi.apiEndpoint));
+
+    const apiOrigin = new cloudfrontOrigins.HttpOrigin(apiDomain, {
+      protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+    });
+
+    const distribution = new cloudfront.Distribution(this, 'HyperspaceDistribution', {
+      defaultBehavior: {
+        origin: cloudfrontOrigins.S3BucketOrigin.withOriginAccessControl(assetsBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      additionalBehaviors: {
+        '/api/*': {
+          origin: apiOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        },
+      },
+      defaultRootObject: 'index.html',
+      errorResponses: [
+        {
+          httpStatus: 403,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html',
+        },
+        {
+          httpStatus: 404,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html',
+        },
+      ],
+    });
+
+    this.distributionDomainName = distribution.distributionDomainName;
+
+    // ── Lambda env vars (need CloudFront domain) ───────────────────────
+    const cfDomain = `https://${distribution.distributionDomainName}`;
+
+    const apiDefaults = { httpApi, authSecret, auth0Env, sharedBundling };
+
+    new ApiFunction(this, 'Upload', {
+      ...apiDefaults,
+      handlerFile: 'upload.ts',
+      routePath: '/api/upload',
+      methods: [apigwv2.HttpMethod.POST],
+      environment: { UPLOADS_TABLE_NAME: props.uploadsTable.tableName },
+      table: props.uploadsTable,
+      tableAccess: 'write',
+    });
+
+    new ApiFunction(this, 'AuthCallback', {
+      ...apiDefaults,
+      handlerFile: 'auth-callback.ts',
+      routePath: '/api/auth/callback',
+      methods: [apigwv2.HttpMethod.GET],
+      environment: { AUTH_CALLBACK_URL: `${cfDomain}/api/auth/callback`, WEBSITE_URL: cfDomain },
+    });
+
+    new ApiFunction(this, 'AuthLogout', {
+      ...apiDefaults,
+      handlerFile: 'auth-logout.ts',
+      routePath: '/api/auth/logout',
+      methods: [apigwv2.HttpMethod.GET],
+      environment: { WEBSITE_URL: cfDomain },
+    });
+
+    // ── Deploy SPA to S3 ───────────────────────────────────────────────
+    new s3deploy.BucketDeployment(this, 'HyperspaceDeployment', {
+      sources: [
+        s3deploy.Source.asset(
+          path.resolve(__dirname, '../../../website/dist'),
+        ),
+      ],
+      destinationBucket: assetsBucket,
+      distribution,
+      distributionPaths: ['/*'],
+    });
+
+    // ── Outputs ────────────────────────────────────────────────────────
+    new cdk.CfnOutput(this, 'HyperspaceCloudFrontDomain', {
+      value: distribution.distributionDomainName,
+      description: 'CloudFront distribution domain (serves both SPA and API)',
+    });
+  }
+}

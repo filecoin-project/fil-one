@@ -2,8 +2,10 @@ import {
   DatabaseIcon,
   QuestionIcon,
   BellIcon,
+  SignOutIcon,
 } from '@phosphor-icons/react/dist/ssr';
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
+import { logout } from '../lib/api.js';
 
 type AppHeaderProps = {
   collapsed: boolean;
@@ -48,6 +50,15 @@ export function AppHeader({ collapsed }: AppHeaderProps) {
         <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white">
           U
         </div>
+
+        <button
+          type="button"
+          aria-label="Sign out"
+          onClick={logout}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+        >
+          <SignOutIcon size={18} />
+        </button>
       </div>
     </header>
   );

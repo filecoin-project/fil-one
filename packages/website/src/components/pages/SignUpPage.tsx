@@ -1,18 +1,17 @@
 import { useState } from 'react';
-import { Link, useRouter } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { Input } from '@hyperspace/ui/Input';
 import { Button } from '@hyperspace/ui/Button';
 import { DividerWithLabel } from '@hyperspace/ui/DividerWithLabel';
+import { redirectToLogin } from '../../lib/api.js';
 
 export function SignUpPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // UNKNOWN: real auth/registration flow is not implemented — navigating to /dashboard to simulate success
-    void router.navigate({ to: '/dashboard' });
+    redirectToLogin({ loginHint: email, screenHint: 'signup' });
   }
 
   return (
@@ -33,20 +32,21 @@ export function SignUpPage() {
 
       {/* Social buttons */}
       <div className="flex flex-col gap-3">
-        {/* TODO: add real OAuth for Google and GitHub */}
         <button
           type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          disabled
+          title="Coming soon"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 opacity-50 cursor-not-allowed"
         >
-          {/* TODO: replace with proper Google "G" SVG logo */}
           <span className="font-bold text-[#4285F4]">G</span>
           Continue with Google
         </button>
         <button
           type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          disabled
+          title="Coming soon"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 opacity-50 cursor-not-allowed"
         >
-          {/* TODO: replace with proper GitHub octocat SVG logo */}
           <GitHubIcon />
           Continue with GitHub
         </button>

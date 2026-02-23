@@ -7,7 +7,6 @@ export interface UploadRequest {
 }
 
 export interface UploadResponse {
-  status: 'success' | 'error';
   uploadId: string;
   bucketName: string;
   key: string;
