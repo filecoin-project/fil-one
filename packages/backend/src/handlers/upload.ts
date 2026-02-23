@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ErrorResponse, UploadRequest, UploadResponse } from '@hyperspace/shared';
 import { getEnv } from '../lib/env.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
-import { authMiddleware, Scope } from '../middleware/auth.js';
+import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 const dynamo = new DynamoDBClient({});
@@ -59,5 +59,5 @@ async function baseHandler(
 
 export const handler = middy(baseHandler)
   .use(httpHeaderNormalizer())
-  .use(authMiddleware([Scope.UploadWrite]))
+  .use(authMiddleware())
   .use(errorHandlerMiddleware());

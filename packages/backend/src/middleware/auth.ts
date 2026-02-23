@@ -12,14 +12,6 @@ import { getEnv } from '../lib/env.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
 
 // ---------------------------------------------------------------------------
-// Scopes — extend this enum as new handlers are added. Pass the required
-// scopes to authMiddleware() at each handler's middy definition.
-// ---------------------------------------------------------------------------
-export enum Scope {
-  UploadWrite = 'upload:write',
-}
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -59,13 +51,18 @@ function getJWKS(domain: string): ReturnType<typeof createRemoteJWKSet> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseCookies(cookieHeader: string): Record<string, string> {
-  if (!cookieHeader) return {};
+/**
+ * Parse cookies from the API Gateway v2 event.
+ * Payload format 2.0 puts cookies in `event.cookies` (string[]),
+ * NOT in `event.headers['cookie']`.
+ */
+function parseCookies(cookieArray: string[] | undefined): Record<string, string> {
+  if (!cookieArray?.length) return {};
   return Object.fromEntries(
-    cookieHeader.split(';').flatMap((part) => {
-      const eqIdx = part.indexOf('=');
+    cookieArray.flatMap((entry) => {
+      const eqIdx = entry.indexOf('=');
       if (eqIdx === -1) return [];
-      return [[part.slice(0, eqIdx).trim(), part.slice(eqIdx + 1).trim()]];
+      return [[entry.slice(0, eqIdx).trim(), entry.slice(eqIdx + 1).trim()]];
     }),
   );
 }
@@ -77,26 +74,15 @@ function unauthorizedResponse(): APIGatewayProxyResultV2 {
     .build();
 }
 
-function forbiddenResponse(): APIGatewayProxyResultV2 {
-  return new ResponseBuilder()
-    .status(403)
-    .body<ErrorResponse>({ message: 'Forbidden: insufficient permissions for this API' })
-    .build();
-}
-
 // ---------------------------------------------------------------------------
 // Middleware factory
 // ---------------------------------------------------------------------------
-
-export function authMiddleware(
-  requiredScopes: Scope[],
-): MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2> {
+export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2> {
   const before = async (
     request: AuthMiddlewareRequest,
   ): Promise<APIGatewayProxyResultV2 | void> => {
     const { event } = request;
-    // Headers are lowercased by httpHeaderNormalizer
-    const cookies = parseCookies(event.headers['cookie'] ?? '');
+    const cookies = parseCookies(event.cookies);
 
     const accessToken = cookies[COOKIE_NAMES.ACCESS_TOKEN];
     const idToken = cookies[COOKIE_NAMES.ID_TOKEN];
@@ -110,16 +96,17 @@ export function authMiddleware(
     const secrets = await getAuthSecrets();
     const jwks = getJWKS(domain);
 
+    const hasCookies = { accessToken: !!accessToken, idToken: !!idToken, refreshToken: !!refreshToken };
+    console.warn('[auth] Starting auth check', { hasCookies });
+
     // Step 1: Validate existing access token
     if (accessToken) {
       try {
-        const { payload } = await jwtVerify(accessToken, jwks, { audience, issuer });
-        const tokenScopes = ((payload['scope'] as string | undefined) ?? '').split(' ');
-        const hasAllScopes = requiredScopes.every((s) => tokenScopes.includes(s));
-        if (!hasAllScopes) throw new Error('Missing required scope(s)');
+        await jwtVerify(accessToken, jwks, { audience, issuer });
         return; // Valid — continue to handler
-      } catch {
-        // Expired or insufficient — fall through to refresh
+      } catch (err) {
+        // Expired or invalid — fall through to refresh
+        console.warn('[auth] Access token verification failed', { error: (err as Error).message });
       }
     }
 
@@ -150,29 +137,18 @@ export function authMiddleware(
             // Use the rotated token if Auth0 returned one, otherwise reuse the old one
             refresh_token: tokens.refresh_token ?? refreshToken,
           } satisfies NewTokens;
+          console.warn('[auth] Token refresh succeeded');
           return; // Continue to handler
         }
-      } catch {
+        const refreshBody = await tokenRes.text().catch(() => '');
+        console.warn('[auth] Token refresh failed', { status: tokenRes.status, body: refreshBody });
+      } catch (err) {
         // Refresh failed — fall through
+        console.warn('[auth] Token refresh threw', { error: (err as Error).message });
       }
     }
 
-    // Step 3: Cannot obtain a valid access token.
-    // Check if the id_token is still valid to distinguish 403 from 401.
-    if (idToken) {
-      try {
-        // id_token audience is the Auth0 client ID, not the API audience
-        await jwtVerify(idToken, jwks, {
-          audience: secrets.AUTH0_CLIENT_ID,
-          issuer,
-        });
-        // Authenticated identity, but cannot access this API → 403
-        return forbiddenResponse();
-      } catch {
-        // id_token also invalid — fall through to 401
-      }
-    }
-
+    console.warn('[auth] Returning 401 — no valid tokens');
     return unauthorizedResponse();
   };
 

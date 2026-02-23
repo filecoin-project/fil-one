@@ -109,9 +109,14 @@ aws secretsmanager put-secret-value \
   --profile hyperspace
 ```
 
-After deploying, add to the Auth0 application settings:
-- **Allowed Callback URLs**: `{API_URL}/auth/callback`
-- **Allowed Logout URLs**: `{WEBSITE_URL}/sign-in`
+**Application settings** (Applications > your app > Settings):
+- **Allowed Callback URLs**: `{CLOUDFRONT_DOMAIN}/api/auth/callback`
+- **Allowed Logout URLs**: `{CLOUDFRONT_DOMAIN}/sign-in` — Auth0 rejects any `returnTo` URL not listed here.
+- Under **Advanced Settings > Grant Types**, ensure **Authorization Code** and **Refresh Token** are enabled.
+
+**API setup** (APIs > Create API):
+- **Identifier (audience)**: `console.filhyperspace.com` — this must match `AUTH0_AUDIENCE` in the CDK stack and website env. It's what makes Auth0 issue a JWT access token (instead of an opaque one) and is the `aud` claim the middleware validates.
+- Under the API's **Machine to Machine Applications** tab, authorize your application so it can exchange tokens.
 
 ## Stacks
 
