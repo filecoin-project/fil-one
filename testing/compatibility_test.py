@@ -172,7 +172,8 @@ def _generate_conf(tmp_dir: Path, provider: str) -> Path:
     return conf_path
 
 
-def _run_pytest(conf_path: Path, marks: str, test_target: str, json_out: Path) -> int:
+def _run_pytest(conf_path: Path, marks: str, test_target: str, json_out: Path,
+                 provider: str = "") -> int:
     cmd = [
         sys.executable, "-m", "pytest",
         f"--json-report",
@@ -180,15 +181,31 @@ def _run_pytest(conf_path: Path, marks: str, test_target: str, json_out: Path) -
         "--tb=short",
         "-q",
     ]
+
+    # Aurora: load the S3 bridge plugin to redirect bucket ops to Portal API
+    if provider == "aurora" and os.environ.get("AURORA_PORTAL_ORIGIN"):
+        cmd += ["-p", "aurora_s3_bridge"]
+
     if marks:
         cmd += ["-m", marks]
     cmd.append(test_target)
 
     env = {**os.environ, "S3TEST_CONF": str(conf_path)}
 
+    # Aurora: ensure the plugin is importable and Portal env vars are forwarded
+    if provider == "aurora":
+        testing_dir = str(_SCRIPTS_DIR)
+        env["PYTHONPATH"] = testing_dir + os.pathsep + env.get("PYTHONPATH", "")
+        # Forward Portal API env vars (already in os.environ from .env load)
+        for var in ("AURORA_PORTAL_ORIGIN", "AURORA_TENANT_ID", "AURORA_NO_VERIFY_SSL"):
+            if var in os.environ:
+                env[var] = os.environ[var]
+
     print(f"Command : {' '.join(str(c) for c in cmd)}")
     print(f"CWD     : {S3TESTS_DIR}")
     print(f"Marks   : {marks or '(none)'}")
+    if provider == "aurora" and os.environ.get("AURORA_PORTAL_ORIGIN"):
+        print(f"Plugin  : aurora_s3_bridge (Portal API bridge)")
     print()
 
     result = subprocess.run(cmd, cwd=S3TESTS_DIR, env=env)
@@ -296,7 +313,8 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp:
         conf_path = _generate_conf(Path(tmp), args.provider)
-        exit_code = _run_pytest(conf_path, args.marks, args.test_file, json_out)
+        exit_code = _run_pytest(conf_path, args.marks, args.test_file, json_out,
+                               provider=args.provider)
 
     if not json_out.exists():
         print(
