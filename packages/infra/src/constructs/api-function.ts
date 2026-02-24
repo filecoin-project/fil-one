@@ -1,3 +1,4 @@
+import * as cdk from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -7,6 +8,12 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as path from 'path';
 import { Construct } from 'constructs';
+
+export enum AccessLevel {
+  READ = 'read',
+  WRITE = 'write',
+  READ_WRITE = 'readWrite',
+}
 
 export interface ApiFunctionProps {
   handlerFile: string;
@@ -18,9 +25,28 @@ export interface ApiFunctionProps {
   sharedBundling: lambdaNodejs.BundlingOptions;
   environment?: Record<string, string>;
   table?: dynamodb.ITable;
-  tableAccess?: 'read' | 'write' | 'readWrite';
+  tableAccess?: AccessLevel;
   s3Bucket?: s3.IBucket;
-  s3Access?: 'read' | 'write' | 'readWrite';
+  s3Access?: AccessLevel;
+  lambdaProps?: Partial<lambdaNodejs.NodejsFunctionProps>;
+}
+
+function grantTableAccess(fn: lambda.IFunction, table: dynamodb.ITable, access: AccessLevel) {
+  const grants = {
+    [AccessLevel.READ]: () => table.grantReadData(fn),
+    [AccessLevel.WRITE]: () => table.grantWriteData(fn),
+    [AccessLevel.READ_WRITE]: () => table.grantReadWriteData(fn),
+  };
+  grants[access]();
+}
+
+function grantBucketAccess(fn: lambda.IFunction, bucket: s3.IBucket, access: AccessLevel) {
+  const grants = {
+    [AccessLevel.READ]: () => bucket.grantRead(fn),
+    [AccessLevel.WRITE]: () => bucket.grantWrite(fn),
+    [AccessLevel.READ_WRITE]: () => bucket.grantReadWrite(fn),
+  };
+  grants[access]();
 }
 
 export class ApiFunction extends Construct {
@@ -29,50 +55,34 @@ export class ApiFunction extends Construct {
   constructor(scope: Construct, id: string, props: ApiFunctionProps) {
     super(scope, id);
 
+    const { lambdaProps, ...rest } = props;
+
     this.function = new lambdaNodejs.NodejsFunction(this, 'Handler', {
-      entry: path.resolve(__dirname, '../../../backend/src/handlers', props.handlerFile),
+      entry: path.resolve(__dirname, '../../../backend/src/handlers', rest.handlerFile),
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'handler',
+      timeout: cdk.Duration.seconds(5),
       environment: {
-        ...props.auth0Env,
-        ...props.environment,
+        ...rest.auth0Env,
+        ...rest.environment,
       },
-      bundling: props.sharedBundling,
+      bundling: rest.sharedBundling,
+      ...lambdaProps,
     });
 
-    props.authSecret.grantRead(this.function);
+    rest.authSecret.grantRead(this.function);
 
-    if (props.table) {
-      switch (props.tableAccess) {
-        case 'read':
-          props.table.grantReadData(this.function);
-          break;
-        case 'write':
-          props.table.grantWriteData(this.function);
-          break;
-        case 'readWrite':
-          props.table.grantReadWriteData(this.function);
-          break;
-      }
+    if (rest.table && rest.tableAccess) {
+      grantTableAccess(this.function, rest.table, rest.tableAccess);
     }
 
-    if (props.s3Bucket) {
-      switch (props.s3Access) {
-        case 'read':
-          props.s3Bucket.grantRead(this.function);
-          break;
-        case 'write':
-          props.s3Bucket.grantWrite(this.function);
-          break;
-        case 'readWrite':
-          props.s3Bucket.grantReadWrite(this.function);
-          break;
-      }
+    if (rest.s3Bucket && rest.s3Access) {
+      grantBucketAccess(this.function, rest.s3Bucket, rest.s3Access);
     }
 
-    props.httpApi.addRoutes({
-      path: props.routePath,
-      methods: props.methods,
+    rest.httpApi.addRoutes({
+      path: rest.routePath,
+      methods: rest.methods,
       integration: new apigwv2Integrations.HttpLambdaIntegration(
         `${id}Integration`,
         this.function,

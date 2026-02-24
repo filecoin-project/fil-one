@@ -9,7 +9,7 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as path from 'path';
 import { Construct } from 'constructs';
-import { ApiFunction } from '../constructs/api-function';
+import { AccessLevel, ApiFunction } from '../constructs/api-function';
 
 interface PlatformStackProps extends cdk.StackProps {
   uploadsTable: dynamodb.ITable;
@@ -113,7 +113,7 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.POST],
       environment: tableEnv,
       table: props.uploadsTable,
-      tableAccess: 'write',
+      tableAccess: AccessLevel.WRITE,
     });
 
     // ── Bucket CRUD ─────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.GET],
       environment: tableEnv,
       table: props.uploadsTable,
-      tableAccess: 'read',
+      tableAccess: AccessLevel.READ,
     });
 
     new ApiFunction(this, 'CreateBucket', {
@@ -134,7 +134,7 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.POST],
       environment: tableEnv,
       table: props.uploadsTable,
-      tableAccess: 'write',
+      tableAccess: AccessLevel.WRITE,
     });
 
     new ApiFunction(this, 'DeleteBucket', {
@@ -144,7 +144,7 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.DELETE],
       environment: tableEnv,
       table: props.uploadsTable,
-      tableAccess: 'readWrite',
+      tableAccess: AccessLevel.READ_WRITE,
     });
 
     // ── Object CRUD ─────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.GET],
       environment: tableEnv,
       table: props.uploadsTable,
-      tableAccess: 'read',
+      tableAccess: AccessLevel.READ,
     });
 
     new ApiFunction(this, 'UploadObject', {
@@ -165,9 +165,9 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.POST],
       environment: fileEnv,
       table: props.uploadsTable,
-      tableAccess: 'readWrite',
+      tableAccess: AccessLevel.READ_WRITE,
       s3Bucket: userFilesBucket,
-      s3Access: 'write',
+      s3Access: AccessLevel.WRITE,
     });
 
     new ApiFunction(this, 'DeleteObject', {
@@ -177,9 +177,9 @@ export class PlatformStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.DELETE],
       environment: fileEnv,
       table: props.uploadsTable,
-      tableAccess: 'readWrite',
+      tableAccess: AccessLevel.READ_WRITE,
       s3Bucket: userFilesBucket,
-      s3Access: 'readWrite',
+      s3Access: AccessLevel.READ_WRITE,
     });
 
     new ApiFunction(this, 'AuthCallback', {

@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpIcon,
   CloudArrowUpIcon,
   TrashIcon,
   DownloadSimpleIcon,
   FileIcon,
+  FolderIcon,
   CheckCircleIcon,
   PlusIcon,
   KeyIcon,
@@ -61,6 +63,40 @@ function objectDisplayName(key: string): string {
   return parts[parts.length - 1] ?? key
 }
 
+type BrowseEntry =
+  | { kind: 'folder'; name: string; prefix: string }
+  | { kind: 'object'; name: string; object: S3Object }
+
+/**
+ * Given a flat list of objects and a current prefix, returns the immediate
+ * child folders and files — like S3 console prefix browsing.
+ */
+function getEntriesAtPrefix(objects: S3Object[], prefix: string): BrowseEntry[] {
+  const folders = new Set<string>()
+  const files: BrowseEntry[] = []
+
+  for (const obj of objects) {
+    if (!obj.key.startsWith(prefix)) continue
+    const remainder = obj.key.slice(prefix.length)
+    const slashIdx = remainder.indexOf('/')
+    if (slashIdx === -1) {
+      // Direct file at this level
+      files.push({ kind: 'object', name: remainder, object: obj })
+    } else {
+      // There's a deeper path — extract the folder name
+      folders.add(remainder.slice(0, slashIdx))
+    }
+  }
+
+  const folderEntries: BrowseEntry[] = [...folders]
+    .sort()
+    .map((f) => ({ kind: 'folder', name: f, prefix: `${prefix}${f}/` }))
+
+  files.sort((a, b) => a.name.localeCompare(b.name))
+
+  return [...folderEntries, ...files]
+}
+
 /** Masks an access key ID: shows first 4 chars + ...XXXX */
 function maskAccessKeyId(id: string): string {
   if (id.length <= 4) return id
@@ -92,15 +128,32 @@ type UploadStep = 'select' | 'uploading' | 'done'
 
 export type BucketDetailPageProps = {
   bucketName: string
+  prefix?: string
 }
 
-export function BucketDetailPage({ bucketName }: BucketDetailPageProps) {
+export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) {
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   // Objects state
   const [objects, setObjects] = useState<S3Object[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Prefix-based folder navigation — driven by URL search param
+  const currentPrefix = prefix ?? ''
+
+  const setCurrentPrefix = useCallback(
+    (newPrefix: string) => {
+      navigate({
+        to: '/buckets/$bucketName',
+        params: { bucketName },
+        search: newPrefix ? { prefix: newPrefix } : {},
+        replace: true,
+      })
+    },
+    [navigate, bucketName],
+  )
 
   // Access keys state
   const [accessKeys] = useState<AccessKey[]>(MOCK_ACCESS_KEYS)
@@ -317,85 +370,151 @@ export function BucketDetailPage({ bucketName }: BucketDetailPageProps) {
                 </Button>
               </div>
             ) : (
-              <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 bg-white">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-zinc-200 bg-zinc-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                        Name
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                        Size
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                        Content Type
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                        Last Modified
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                        CID
-                      </th>
-                      <th className="px-4 py-3" aria-label="Actions" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {objects.map((obj) => (
-                      <tr
-                        key={obj.key}
-                        className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
-                      >
-                        <td
-                          className="px-4 py-3 font-medium text-zinc-900"
-                          title={obj.key}
+              <div className="mt-4">
+                {/* Prefix breadcrumb */}
+                <div className="mb-2 flex items-center gap-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPrefix('')}
+                    className={`hover:text-brand-600 ${currentPrefix === '' ? 'font-medium text-zinc-900' : 'text-brand-600'}`}
+                  >
+                    /
+                  </button>
+                  {currentPrefix.split('/').filter(Boolean).map((segment, idx, arr) => {
+                    const segmentPrefix = arr.slice(0, idx + 1).join('/') + '/'
+                    const isLast = idx === arr.length - 1
+                    return (
+                      <span key={segmentPrefix} className="flex items-center gap-1">
+                        <span className="text-zinc-400">/</span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPrefix(segmentPrefix)}
+                          className={`hover:text-brand-600 ${isLast ? 'font-medium text-zinc-900' : 'text-brand-600'}`}
                         >
-                          {objectDisplayName(obj.key)}
-                        </td>
-                        <td className="px-4 py-3 text-zinc-600">
-                          {formatBytes(obj.sizeBytes)}
-                        </td>
-                        <td className="px-4 py-3 text-zinc-600">
-                          {obj.contentType}
-                        </td>
-                        <td className="px-4 py-3 text-zinc-600">
-                          {new Date(obj.lastModified).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          {obj.cid ? (
-                            <span
-                              className="font-mono text-xs text-zinc-600"
-                              title={obj.cid}
-                            >
-                              {obj.cid.slice(0, 12)}...
-                            </span>
-                          ) : (
-                            <span className="text-zinc-400">—</span>
+                          {segment}
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+
+                {(() => {
+                  const entries = getEntriesAtPrefix(objects, currentPrefix)
+
+                  if (entries.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 bg-white px-6 py-16 text-center">
+                        <p className="text-sm text-zinc-500">No objects at this path</p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-zinc-200 bg-zinc-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                              Name
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                              Size
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                              Content Type
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                              Last Modified
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                              CID
+                            </th>
+                            <th className="px-4 py-3" aria-label="Actions" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entries.map((entry) =>
+                            entry.kind === 'folder' ? (
+                              <tr
+                                key={`folder:${entry.prefix}`}
+                                className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer"
+                                onClick={() => setCurrentPrefix(entry.prefix)}
+                              >
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2 font-medium text-zinc-900">
+                                    <FolderIcon size={16} className="shrink-0 text-zinc-400" aria-hidden="true" />
+                                    {entry.name}/
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-zinc-400">—</td>
+                                <td className="px-4 py-3 text-zinc-400">—</td>
+                                <td className="px-4 py-3 text-zinc-400">—</td>
+                                <td className="px-4 py-3 text-zinc-400">—</td>
+                                <td className="px-4 py-3" />
+                              </tr>
+                            ) : (
+                              <tr
+                                key={`object:${entry.object.key}`}
+                                className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                              >
+                                <td className="px-4 py-3">
+                                  <div
+                                    className="flex items-center gap-2 font-medium text-zinc-900"
+                                    title={entry.object.key}
+                                  >
+                                    <FileIcon size={16} className="shrink-0 text-zinc-400" aria-hidden="true" />
+                                    {entry.name}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-zinc-600">
+                                  {formatBytes(entry.object.sizeBytes)}
+                                </td>
+                                <td className="px-4 py-3 text-zinc-600">
+                                  {entry.object.contentType}
+                                </td>
+                                <td className="px-4 py-3 text-zinc-600">
+                                  {new Date(entry.object.lastModified).toLocaleDateString()}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {entry.object.cid ? (
+                                    <span
+                                      className="font-mono text-xs text-zinc-600"
+                                      title={entry.object.cid}
+                                    >
+                                      {entry.object.cid.slice(0, 12)}...
+                                    </span>
+                                  ) : (
+                                    <span className="text-zinc-400">—</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      aria-label={`Download ${entry.name}`}
+                                      onClick={() => handleDownloadObject(entry.object.key)}
+                                      className="text-zinc-400 hover:text-brand-600"
+                                    >
+                                      <DownloadSimpleIcon size={16} aria-hidden="true" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      aria-label={`Delete ${entry.name}`}
+                                      onClick={() => handleDeleteObject(entry.object.key)}
+                                      className="text-zinc-400 hover:text-red-500"
+                                    >
+                                      <TrashIcon size={16} aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ),
                           )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              aria-label={`Download ${objectDisplayName(obj.key)}`}
-                              onClick={() => handleDownloadObject(obj.key)}
-                              className="text-zinc-400 hover:text-brand-600"
-                            >
-                              <DownloadSimpleIcon size={16} aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Delete ${objectDisplayName(obj.key)}`}
-                              onClick={() => handleDeleteObject(obj.key)}
-                              className="text-zinc-400 hover:text-red-500"
-                            >
-                              <TrashIcon size={16} aria-hidden="true" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </TabPanel>
