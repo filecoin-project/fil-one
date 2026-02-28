@@ -99,7 +99,6 @@ export default $config({
       ...(domain && { domain }),
       indexPage: "index.html",
       errorPage: "redirect_to_index_page",
-      invalidation: { wait: true },
       transform: {
         cdn: (args: Record<string, any>) => {
           // Add API Gateway as an additional CloudFront origin
