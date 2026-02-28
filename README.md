@@ -36,8 +36,8 @@ When prompted:
 - SSO start URL: `https://d-9067ff87d6.awsapps.com/start`
 - SSO region: `us-east-1`
 - Account ID: `654654381893`
-- Role: `PowerUserAccess`
-- Default region: `us-east-2`
+- Role: `AdministratorAccess`
+- Default region: `us-east-2` - Or whatever region you want.
 - Output format: `json`
 
 **2. Log in and activate the profile**
@@ -85,12 +85,15 @@ npm install
 ```bash
 npx sst secret set Auth0ClientId <value> [--stage <stage>]
 npx sst secret set Auth0ClientSecret <value> [--stage <stage>]
+npx sst secret set Auth0MgmtClientId <value> [--stage <stage>]
+npx sst secret set Auth0MgmtClientSecret <value> [--stage <stage>]
 npx sst secret set StripeSecretKey <value> [--stage <stage>]
-npx sst secret set StripeWebhookSecret <value> [--stage <stage>]
 npx sst secret set StripePriceId <value> [--stage <stage>]
 ```
 
 Omit `--stage` to set for your personal dev stage (defaults to OS username).
+
+The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Machine (M2M) application** in Auth0 — see the [Auth0 M2M Setup](#auth0-machine-to-machine-m2m-application) section below.
 
 ## Commands
 
@@ -156,14 +159,33 @@ DNS is managed by a separate pipeline. After deploying, create a CNAME record po
 
 Auth0 credentials are managed as SST secrets (`Auth0ClientId`, `Auth0ClientSecret`). See the "Set SST secrets" step above.
 
+**Callback and logout URLs are configured automatically during deploy** — no manual Dashboard edits needed. The deploy-time setup Lambda adds the correct URLs for the deployed domain (custom domain or CloudFront).
+
 **Application settings** (Applications > your app > Settings):
-- **Allowed Callback URLs**: `{CLOUDFRONT_DOMAIN}/api/auth/callback`
-- **Allowed Logout URLs**: `{CLOUDFRONT_DOMAIN}/sign-in` — Auth0 rejects any `returnTo` URL not listed here.
 - Under **Advanced Settings > Grant Types**, ensure **Authorization Code** and **Refresh Token** are enabled.
 
 **API setup** (APIs > Create API):
 - **Identifier (audience)**: `console.filhyperspace.com` — this must match `AUTH0_AUDIENCE` in `sst.config.ts` and website env. It's what makes Auth0 issue a JWT access token (instead of an opaque one) and is the `aud` claim the middleware validates.
 - Under the API's **Machine to Machine Applications** tab, authorize your application so it can exchange tokens.
+
+### Auth0 Machine-to-Machine (M2M) Application
+
+The deploy automation uses an M2M application to update Auth0 settings programmatically.
+
+**One-time setup in Auth0 Dashboard:**
+
+1. Go to **Applications > Create Application**
+2. Choose **Machine to Machine Applications**
+3. Name it something like `Hyperspace Deploy Automation`
+4. Authorize it for the **Auth0 Management API** (`https://<tenant>.us.auth0.com/api/v2/`)
+5. Grant these scopes: `read:clients`, `update:clients`
+6. Copy the **Client ID** and **Client Secret**
+
+Set these as SST secrets:
+```bash
+npx sst secret set Auth0MgmtClientId <M2M-client-id> [--stage <stage>]
+npx sst secret set Auth0MgmtClientSecret <M2M-client-secret> [--stage <stage>]
+```
 
 ## Stripe (Billing)
 
@@ -188,16 +210,15 @@ Use **test mode** first. Switch to live mode for production.
 - View billing history / invoices
 - Cancel subscription
 
-### 3. Configure Webhooks (after first deploy)
+### 3. Webhooks (automated)
 
-**Developers > Webhooks > Add endpoint**:
-- URL: `https://console.filhyperspace.com/api/stripe/webhook`
-- Events: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.payment_succeeded`, `invoice.payment_failed`
-- Note the **Signing Secret** (`whsec_xxxxx`)
+**Webhook endpoints are created and managed automatically during deploy.** The deploy-time setup Lambda creates the Stripe webhook endpoint with the correct URL for the deployed domain and stores the signing secret in AWS SSM Parameter Store. No manual configuration needed.
+
+Events registered: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.payment_succeeded`, `invoice.payment_failed`
 
 ### 4. Secrets
 
-Stripe credentials are managed as SST secrets (`StripeSecretKey`, `StripeWebhookSecret`, `StripePriceId`). See the "Set SST secrets" step above.
+Stripe credentials are managed as SST secrets (`StripeSecretKey`, `StripePriceId`). See the "Set SST secrets" step above.
 
 The frontend needs the **publishable key** in its env:
 

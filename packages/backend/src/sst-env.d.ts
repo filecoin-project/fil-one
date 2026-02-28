@@ -24,11 +24,15 @@ declare module "sst" {
       value: string;
       type: "sst.Secret";
     };
-    StripeSecretKey: {
+    Auth0MgmtClientId: {
       value: string;
       type: "sst.Secret";
     };
-    StripeWebhookSecret: {
+    Auth0MgmtClientSecret: {
+      value: string;
+      type: "sst.Secret";
+    };
+    StripeSecretKey: {
       value: string;
       type: "sst.Secret";
     };

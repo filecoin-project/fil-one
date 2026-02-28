@@ -6,8 +6,11 @@ export default $config({
     const isProduction = stage === "production";
     const isStaging = stage === "staging";
 
-    // Region: us-east-2 for staging/production, us-west-2 for personal dev
-    const region = isProduction || isStaging ? "us-east-2" : "us-west-2";
+    // Region: us-east-2 for staging/production, AWS_REGION / profile default for personal dev
+    const region =
+      isProduction || isStaging
+        ? "us-east-2"
+        : process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-west-2";
 
     const awsProvider: Record<string, any> = { region };
 
@@ -32,8 +35,9 @@ export default $config({
     // ── Secrets (set via: npx sst secret set <Name> <value>) ─────────
     const auth0ClientId = new sst.Secret("Auth0ClientId");
     const auth0ClientSecret = new sst.Secret("Auth0ClientSecret");
+    const auth0MgmtClientId = new sst.Secret("Auth0MgmtClientId");
+    const auth0MgmtClientSecret = new sst.Secret("Auth0MgmtClientSecret");
     const stripeSecretKey = new sst.Secret("StripeSecretKey");
-    const stripeWebhookSecret = new sst.Secret("StripeWebhookSecret");
     const stripePriceId = new sst.Secret("StripePriceId");
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
@@ -141,8 +145,66 @@ export default $config({
               compress: true,
             },
           ];
+
+          // SPA fallback: route S3 403/404 to index.html
+          args.customErrorResponses = [
+            {
+              errorCode: 403,
+              responseCode: 200,
+              responsePagePath: "/index.html",
+            },
+            {
+              errorCode: 404,
+              responseCode: 200,
+              responsePagePath: "/index.html",
+            },
+          ];
         },
       },
+    });
+
+    // ── Deploy-time setup (Stripe webhook + Auth0 callbacks) ────────
+    const setupFn = new sst.aws.Function("SetupIntegrations", {
+      handler: "packages/backend/src/handlers/setup-integrations.handler",
+      link: [stripeSecretKey, auth0MgmtClientId, auth0MgmtClientSecret, auth0ClientId],
+      environment: {
+        AUTH0_DOMAIN: "dev-oar2nhqh58xf5pwf.us.auth0.com",
+      },
+      permissions: [
+        {
+          actions: ["ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"],
+          resources: [
+            $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/*`,
+          ],
+        },
+      ],
+      runtime: "nodejs20.x",
+      timeout: "30 seconds",
+    });
+
+    const setupResource = new aws.cloudformation.Stack("SetupStack", {
+      templateBody: $jsonStringify({
+        AWSTemplateFormatVersion: "2010-09-09",
+        Resources: {
+          Setup: {
+            Type: "Custom::HyperspaceSetup",
+            Properties: {
+              ServiceToken: setupFn.arn,
+              SiteUrl: site.url,
+              Stage: $app.stage,
+            },
+          },
+        },
+        Outputs: {
+          WebhookSecret: {
+            Value: { "Fn::GetAtt": ["Setup", "webhookSecret"] },
+          },
+        },
+      }),
+    });
+
+    const webhookSecret = setupResource.outputs.apply((outputs) => {
+      return outputs?.WebhookSecret ?? "";
     });
 
     // ── Shared function config ───────────────────────────────────────
@@ -153,7 +215,6 @@ export default $config({
       auth0ClientId,
       auth0ClientSecret,
       stripeSecretKey,
-      stripeWebhookSecret,
       stripePriceId,
     ];
 

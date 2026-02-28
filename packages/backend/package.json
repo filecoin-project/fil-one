@@ -9,6 +9,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-s3": "^3.996.0",
+    "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/s3-request-presigner": "^3.997.0",
     "@aws-sdk/util-dynamodb": "^3.0.0",
     "@hyperspace/shared": "*",

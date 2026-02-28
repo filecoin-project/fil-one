@@ -13,7 +13,7 @@ let cachedStripe: Stripe | null = null;
 export function getBillingSecrets(): BillingSecrets {
   return {
     STRIPE_SECRET_KEY: Resource.StripeSecretKey.value,
-    STRIPE_WEBHOOK_SECRET: Resource.StripeWebhookSecret.value,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET!,
     STRIPE_PRICE_ID: Resource.StripePriceId.value,
   };
 }
