@@ -16,3 +16,8 @@ packages/*/dist/
 
 # OS
 .DS_Store
+
+
+# Smart contract build artifacts
+packages/contracts/out/
+packages/contracts/cache/
