@@ -277,8 +277,8 @@ describe('authMiddleware', () => {
 
       expect(mockJwtVerify).toHaveBeenCalledWith(
         'my-token',
-        expect.anything(),
-        expect.anything(),
+        'mock-jwks',
+        { audience: process.env.AUTH0_AUDIENCE, issuer: `https://${process.env.AUTH0_DOMAIN}/` },
       );
     });
   });

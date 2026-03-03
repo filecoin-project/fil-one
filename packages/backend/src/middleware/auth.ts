@@ -84,7 +84,7 @@ function unauthorizedResponse(): APIGatewayProxyResultV2 {
 const dynamo = new DynamoDBClient({});
 
 async function resolveUserId(sub: string, email: string | undefined): Promise<string> {
-  const tableName = (Resource as any).UserInfoTable.name as string;
+  const tableName = Resource.UserInfoTable.name;
 
   // Look up existing mapping
   const result = await dynamo.send(
