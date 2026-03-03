@@ -32,13 +32,14 @@ export default $config({
     };
   },
   async run() {
-    // ── Secrets (set via: npx sst secret set <Name> <value>) ─────────
+    // ── Secrets (set via: pnpx sst secret set <Name> <value>) ─────────
     const auth0ClientId = new sst.Secret("Auth0ClientId");
     const auth0ClientSecret = new sst.Secret("Auth0ClientSecret");
     const auth0MgmtClientId = new sst.Secret("Auth0MgmtClientId");
     const auth0MgmtClientSecret = new sst.Secret("Auth0MgmtClientSecret");
     const stripeSecretKey = new sst.Secret("StripeSecretKey");
     const stripePriceId = new sst.Secret("StripePriceId");
+    const AWS_CACHING_DISABLED_POLICY = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad";
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
     const uploadsTable = new sst.aws.Dynamo("UploadsTable", {
@@ -104,7 +105,7 @@ export default $config({
         "/*": { bucket: websiteBucket },
         "/api/*": {
           url: api.url,
-          cachePolicy: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad", // CachingDisabled
+          cachePolicy: AWS_CACHING_DISABLED_POLICY, 
         },
       },
       ...(domainName && certArn

@@ -1,6 +1,6 @@
 # Hyperspace
 
-Full-stack prototype — npm workspaces monorepo deploying to AWS via [SST v3](https://sst.dev/).
+Full-stack prototype — pnpm workspaces monorepo deploying to AWS via [SST v3](https://sst.dev/).
 
 ## Structure
 
@@ -82,18 +82,18 @@ git submodule update --init --recursive
 **4. Install dependencies**
 
 ```bash
-npm install
+pnpm install
 ```
 
 **5. Set SST secrets (one-time per stage)**
 
 ```bash
-npx sst secret set Auth0ClientId <value> [--stage <stage>]
-npx sst secret set Auth0ClientSecret <value> [--stage <stage>]
-npx sst secret set Auth0MgmtClientId <value> [--stage <stage>]
-npx sst secret set Auth0MgmtClientSecret <value> [--stage <stage>]
-npx sst secret set StripeSecretKey <value> [--stage <stage>]
-npx sst secret set StripePriceId <value> [--stage <stage>]
+pnpx sst secret set Auth0ClientId <value> [--stage <stage>]
+pnpx sst secret set Auth0ClientSecret <value> [--stage <stage>]
+pnpx sst secret set Auth0MgmtClientId <value> [--stage <stage>]
+pnpx sst secret set Auth0MgmtClientSecret <value> [--stage <stage>]
+pnpx sst secret set StripeSecretKey <value> [--stage <stage>]
+pnpx sst secret set StripePriceId <value> [--stage <stage>]
 ```
 
 Omit `--stage` to set for your personal dev stage (defaults to OS username).
@@ -103,23 +103,23 @@ The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Mach
 ## Commands
 
 ```bash
-npm run dev              # SST live dev mode (live Lambda debugging)
-npm run deploy           # Deploy personal dev stack (uses OS username as stage)
-npm run deploy:staging   # Deploy to staging.filhyperspace.com
-npm run deploy:production # Deploy to console.filhyperspace.com
-npm run remove           # Remove your personal dev stack
-npm run typecheck        # tsc --noEmit across all packages
+pnpm run dev              # SST live dev mode (live Lambda debugging)
+pnpm run deploy           # Deploy personal dev stack (uses OS username as stage)
+pnpm run deploy:staging   # Deploy to staging.filhyperspace.com
+pnpm run deploy:production # Deploy to console.filhyperspace.com
+pnpm run remove           # Remove your personal dev stack
+pnpm run typecheck        # tsc --noEmit across all packages
 ```
 
 ```bash
 # Local website dev server (for frontend-only changes)
-cd packages/website && npm run dev
+cd packages/website && pnpm run dev
 ```
 
 ### Personal Dev Stack
 
 ```bash
-npx sst deploy
+pnpx sst deploy
 ```
 
 Uses your OS username as the stage name. No custom domain — outputs a CloudFront URL.
@@ -127,8 +127,8 @@ Uses your OS username as the stage name. No custom domain — outputs a CloudFro
 ### Staging / Production
 
 ```bash
-npx sst deploy --stage staging
-npx sst deploy --stage production
+pnpx sst deploy --stage staging
+pnpx sst deploy --stage production
 ```
 
 Custom domains require a pre-provisioned ACM certificate in us-east-1 and a DNS CNAME pointing to the CloudFront distribution (managed by a separate pipeline).
@@ -136,7 +136,7 @@ Custom domains require a pre-provisioned ACM certificate in us-east-1 and a DNS 
 ### Live Dev Mode
 
 ```bash
-npx sst dev
+pnpx sst dev
 ```
 
 Runs Lambda functions locally with live reload. Changes to handler code take effect immediately without redeploying.
@@ -188,8 +188,8 @@ The deploy automation uses an M2M application to update Auth0 settings programma
 
 Set these as SST secrets:
 ```bash
-npx sst secret set Auth0MgmtClientId <M2M-client-id> [--stage <stage>]
-npx sst secret set Auth0MgmtClientSecret <M2M-client-secret> [--stage <stage>]
+pnpx sst secret set Auth0MgmtClientId <M2M-client-id> [--stage <stage>]
+pnpx sst secret set Auth0MgmtClientSecret <M2M-client-secret> [--stage <stage>]
 ```
 
 ## Stripe (Billing)
