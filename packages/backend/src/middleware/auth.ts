@@ -5,7 +5,10 @@ import type {
   APIGatewayProxyStructuredResultV2,
   Context,
 } from 'aws-lambda';
+import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
+import { v4 as uuidv4 } from 'uuid';
+import { Resource } from 'sst';
 import type { UserInfo } from '../lib/user-context.js';
 import type { ErrorResponse } from '@hyperspace/shared';
 import { COOKIE_NAMES, TOKEN_MAX_AGE, makeCookieHeader, makeHintCookieHeader, ResponseBuilder } from '../lib/response-builder.js';
@@ -75,6 +78,69 @@ function unauthorizedResponse(): APIGatewayProxyResultV2 {
 }
 
 // ---------------------------------------------------------------------------
+// Sub → userId resolution via UserInfoTable
+// ---------------------------------------------------------------------------
+
+const dynamo = new DynamoDBClient({});
+
+async function resolveUserId(sub: string, email: string | undefined): Promise<string> {
+  const tableName = (Resource as any).UserInfoTable.name as string;
+
+  // Look up existing mapping
+  const result = await dynamo.send(
+    new GetItemCommand({
+      TableName: tableName,
+      Key: {
+        pk: { S: `SUB#${sub}` },
+        sk: { S: 'IDENTITY' },
+      },
+    }),
+  );
+
+  if (result.Item?.userId?.S) {
+    return result.Item.userId.S;
+  }
+
+  // New user — create both records atomically
+  const userId = uuidv4();
+  const now = new Date().toISOString();
+
+  await dynamo.send(
+    new TransactWriteItemsCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: tableName,
+            Item: {
+              pk: { S: `SUB#${sub}` },
+              sk: { S: 'IDENTITY' },
+              userId: { S: userId },
+              ...(email ? { email: { S: email } } : {}),
+              createdAt: { S: now },
+            },
+            ConditionExpression: 'attribute_not_exists(pk)',
+          },
+        },
+        {
+          Put: {
+            TableName: tableName,
+            Item: {
+              pk: { S: `USER#${userId}` },
+              sk: { S: 'PROFILE' },
+              sub: { S: sub },
+              ...(email ? { email: { S: email } } : {}),
+              createdAt: { S: now },
+            },
+          },
+        },
+      ],
+    }),
+  );
+
+  return userId;
+}
+
+// ---------------------------------------------------------------------------
 // Middleware factory
 // ---------------------------------------------------------------------------
 export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2> {
@@ -103,9 +169,12 @@ export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatew
     if (accessToken) {
       try {
         const { payload } = await jwtVerify(accessToken, jwks, { audience, issuer });
+        const sub = payload.sub!;
+        const email = payload.email as string | undefined;
+        const userId = await resolveUserId(sub, email);
         (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
-          sub: payload.sub!,
-          email: payload.email as string | undefined,
+          userId,
+          email,
         };
         return; // Valid — continue to handler
       } catch (err) {
@@ -142,9 +211,12 @@ export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatew
             refresh_token: tokens.refresh_token ?? refreshToken,
           } satisfies NewTokens;
           const refreshedPayload = decodeJwt(tokens.access_token);
+          const refreshedSub = refreshedPayload.sub!;
+          const refreshedEmail = refreshedPayload.email as string | undefined;
+          const refreshedUserId = await resolveUserId(refreshedSub, refreshedEmail);
           (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
-            sub: refreshedPayload.sub!,
-            email: refreshedPayload.email as string | undefined,
+            userId: refreshedUserId,
+            email: refreshedEmail,
           };
           console.warn('[auth] Token refresh succeeded');
           return; // Continue to handler

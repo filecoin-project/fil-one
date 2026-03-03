@@ -29,7 +29,7 @@ export function subscriptionGuardMiddleware(
     request: Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2, Error, Context>,
   ): Promise<APIGatewayProxyResultV2 | void> => {
     const event = request.event as AuthenticatedEvent;
-    const { sub } = getUserInfo(event);
+    const { userId } = getUserInfo(event);
     const tableName = Resource.BillingTable.name;
 
     // 1. Read billing record
@@ -37,7 +37,7 @@ export function subscriptionGuardMiddleware(
       new GetItemCommand({
         TableName: tableName,
         Key: {
-          pk: { S: `CUSTOMER#${sub}` },
+          pk: { S: `CUSTOMER#${userId}` },
           sk: { S: 'SUBSCRIPTION' },
         },
       }),
@@ -65,7 +65,7 @@ export function subscriptionGuardMiddleware(
           new UpdateItemCommand({
             TableName: tableName,
             Key: {
-              pk: { S: `CUSTOMER#${sub}` },
+              pk: { S: `CUSTOMER#${userId}` },
               sk: { S: 'SUBSCRIPTION' },
             },
             UpdateExpression: 'SET subscriptionStatus = :status, gracePeriodEndsAt = :grace, updatedAt = :now',
@@ -92,7 +92,7 @@ export function subscriptionGuardMiddleware(
           new UpdateItemCommand({
             TableName: tableName,
             Key: {
-              pk: { S: `CUSTOMER#${sub}` },
+              pk: { S: `CUSTOMER#${userId}` },
               sk: { S: 'SUBSCRIPTION' },
             },
             UpdateExpression: 'SET subscriptionStatus = :status, updatedAt = :now',
