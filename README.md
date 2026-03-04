@@ -108,6 +108,8 @@ npm run deploy           # Deploy personal dev stack (uses OS username as stage)
 npm run deploy:staging   # Deploy to staging.filhyperspace.com
 npm run deploy:production # Deploy to console.filhyperspace.com
 npm run remove           # Remove your personal dev stack
+npm run lint             # Lint all packages
+npm run lint:fix         # Lint and auto-fix where possible
 npm run typecheck        # tsc --noEmit across all packages
 ```
 
