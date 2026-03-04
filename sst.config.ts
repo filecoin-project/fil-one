@@ -158,7 +158,9 @@ export default $config({
           ],
         },
       ],
-      runtime: "nodejs22.x",
+      // TODO: Remove `as any` once SST adds nodejs24.x to its type definitions
+      // this PR was merged: https://github.com/anomalyco/sst/pull/6243#ref-commit-6fb1396
+      runtime: "nodejs24.x" as any,
       timeout: "30 seconds",
     });
 
@@ -208,7 +210,8 @@ export default $config({
           ...sharedEnv,
           ...extraEnv,
         },
-        runtime: "nodejs22.x",
+        // TODO: Remove `as any` once SST adds nodejs24.x to its type definitions
+      runtime: "nodejs24.x" as any,
         timeout: "10 seconds",
       });
     }
