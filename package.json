@@ -22,7 +22,7 @@
     "constructs": "^10.5.1",
     "sst": "^4.1.10"
   },
-  "packageManager": "pnpm@10",
+  "packageManager": "pnpm@10.6.2",
   "engines": {
     "node": ">=24"
   },
