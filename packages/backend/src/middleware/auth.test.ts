@@ -322,11 +322,8 @@ describe('authMiddleware', () => {
 
       await after(request);
 
-      expect(response.cookies).toHaveLength(4);
-      expect(response.cookies![0]).toContain('hs_access_token=new-at');
-      expect(response.cookies![1]).toContain('hs_id_token=new-it');
-      expect(response.cookies![2]).toContain('hs_refresh_token=new-rt');
-      expect(response.cookies![3]).toContain('hs_logged_in=1');
+      const expected = ['hs_access_token=new-at',  'hs_id_token=new-it', 'hs_refresh_token=new-rt', 'hs_logged_in=1']
+      expect(response.cookies).toStrictEqual(expected)
     });
 
     it('does not modify response when no newTokens', async () => {
