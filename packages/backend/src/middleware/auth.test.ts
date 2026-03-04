@@ -9,13 +9,14 @@ import type {
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
-import { EventBuilder } from '../test/event-builder.js';
+import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const MOCK_USER_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const MOCK_ORG_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const MOCK_SUB = 'auth0|abc123';
 const MOCK_EMAIL = 'user@example.com';
 
@@ -75,16 +76,6 @@ type AuthRequest = Request<
   Record<string, unknown>
 >;
 
-function makeRequest(event: APIGatewayProxyEventV2): AuthRequest {
-  return {
-    event,
-    context: {} as Context,
-    response: null,
-    error: null,
-    internal: {},
-  };
-}
-
 function getUserInfoFromEvent(event: APIGatewayProxyEventV2) {
   return (event as AuthenticatedEvent).requestContext.userInfo;
 }
@@ -102,18 +93,19 @@ describe('authMiddleware', () => {
   describe('before hook', () => {
     it('returns 401 when no cookies are present', async () => {
       const { before } = authMiddleware();
-      const request = makeRequest(new EventBuilder().build());
+      const request = buildMiddyRequest(buildEvent());
 
-      const result = await before!(request);
+      const result = await before(request);
 
       expect(result).toBeDefined();
-      const response = result as APIGatewayProxyStructuredResultV2;
+      const response = result!;
       expect(response.statusCode).toBe(401);
       expect(JSON.parse(response.body as string)).toEqual({ message: 'Unauthorized' });
     });
 
     it('resolves existing user from UserInfoTable on valid access token', async () => {
       const existingUserId = 'existing-user-uuid';
+      const existingOrgId = 'existing-org-uuid';
 
       mockJwtVerify.mockResolvedValue({
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
@@ -124,28 +116,32 @@ describe('authMiddleware', () => {
           pk: { S: `SUB#${MOCK_SUB}` },
           sk: { S: 'IDENTITY' },
           userId: { S: existingUserId },
+          orgId: { S: existingOrgId },
           email: { S: MOCK_EMAIL },
         },
       });
 
       const { before } = authMiddleware();
-      const event = new EventBuilder().withCookies([
-        `hs_access_token=valid-token`,
-        `hs_id_token=id-token`,
-        `hs_refresh_token=refresh-token`,
-      ]).build();
-      const request = makeRequest(event);
+      const event = buildEvent({
+        cookies: [
+          `hs_access_token=valid-token`,
+          `hs_id_token=id-token`,
+          `hs_refresh_token=refresh-token`,
+        ],
+      });
+      const request = buildMiddyRequest(event);
 
-      const result = await before!(request);
+      const result = await before(request);
 
       expect(result).toBeUndefined();
       const userInfo = getUserInfoFromEvent(event);
       expect(userInfo.userId).toBe(existingUserId);
+      expect(userInfo.orgId).toBe(existingOrgId);
       expect(userInfo.email).toBe(MOCK_EMAIL);
       expect(userInfo).not.toHaveProperty('sub');
     });
 
-    it('creates new user when no UserInfoTable record exists', async () => {
+    it('creates new user and org when no UserInfoTable record exists', async () => {
       mockJwtVerify.mockResolvedValue({
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
       });
@@ -154,26 +150,40 @@ describe('authMiddleware', () => {
       ddbMock.on(TransactWriteItemsCommand).resolves({});
 
       const { before } = authMiddleware();
-      const event = new EventBuilder().withCookies([`hs_access_token=valid-token`]).build();
-      const request = makeRequest(event);
+      const event = buildEvent({ cookies: [`hs_access_token=valid-token`] });
+      const request = buildMiddyRequest(event);
 
-      const result = await before!(request);
+      const result = await before(request);
 
       expect(result).toBeUndefined();
       const userInfo = getUserInfoFromEvent(event);
       expect(userInfo.userId).toBe(MOCK_USER_ID);
+      expect(userInfo.orgId).toBe(MOCK_ORG_ID);
       expect(userInfo.email).toBe(MOCK_EMAIL);
 
       const transactCalls = ddbMock.commandCalls(TransactWriteItemsCommand);
       expect(transactCalls).toHaveLength(1);
       const items = transactCalls[0].args[0].input.TransactItems!;
-      expect(items).toHaveLength(2);
+      expect(items).toHaveLength(4);
+      // SUB → identity mapping
       expect(items[0].Put!.Item!.pk.S).toBe(`SUB#${MOCK_SUB}`);
+      expect(items[0].Put!.Item!.orgId!.S).toBe(MOCK_ORG_ID);
+      // User profile
       expect(items[1].Put!.Item!.pk.S).toBe(`USER#${MOCK_USER_ID}`);
+      expect(items[1].Put!.Item!.orgId!.S).toBe(MOCK_ORG_ID);
+      // Org profile
+      expect(items[2].Put!.Item!.pk.S).toBe(`ORG#${MOCK_ORG_ID}`);
+      expect(items[2].Put!.Item!.sk.S).toBe('PROFILE');
+      expect(items[2].Put!.Item!.name!.S).toBe('example.com');
+      // Org membership
+      expect(items[3].Put!.Item!.pk.S).toBe(`ORG#${MOCK_ORG_ID}`);
+      expect(items[3].Put!.Item!.sk.S).toBe(`MEMBER#${MOCK_USER_ID}`);
+      expect(items[3].Put!.Item!.role!.S).toBe('admin');
     });
 
     it('refreshes tokens when access token is expired but refresh token is valid', async () => {
       const existingUserId = 'refreshed-user-uuid';
+      const existingOrgId = 'refreshed-org-uuid';
 
       mockJwtVerify.mockRejectedValue(new Error('token expired'));
 
@@ -196,21 +206,25 @@ describe('authMiddleware', () => {
           pk: { S: `SUB#${MOCK_SUB}` },
           sk: { S: 'IDENTITY' },
           userId: { S: existingUserId },
+          orgId: { S: existingOrgId },
         },
       });
 
       const { before } = authMiddleware();
-      const event = new EventBuilder().withCookies([
-        `hs_access_token=expired-token`,
-        `hs_refresh_token=valid-refresh`,
-      ]).build();
-      const request = makeRequest(event);
+      const event = buildEvent({
+        cookies: [
+          `hs_access_token=expired-token`,
+          `hs_refresh_token=valid-refresh`,
+        ],
+      });
+      const request = buildMiddyRequest(event);
 
-      const result = await before!(request);
+      const result = await before(request);
 
       expect(result).toBeUndefined();
       const userInfo = getUserInfoFromEvent(event);
       expect(userInfo.userId).toBe(existingUserId);
+      expect(userInfo.orgId).toBe(existingOrgId);
       expect(request.internal.newTokens).toEqual({
         access_token: 'new-access-token',
         id_token: 'new-id-token',
@@ -228,15 +242,17 @@ describe('authMiddleware', () => {
       });
 
       const { before } = authMiddleware();
-      const request = makeRequest(new EventBuilder().withCookies([
-        `hs_access_token=expired`,
-        `hs_refresh_token=bad-refresh`,
-      ]).build());
+      const request = buildMiddyRequest(buildEvent({
+        cookies: [
+          `hs_access_token=expired`,
+          `hs_refresh_token=bad-refresh`,
+        ],
+      }));
 
-      const result = await before!(request);
+      const result = await before(request);
 
       expect(result).toBeDefined();
-      expect((result as APIGatewayProxyStructuredResultV2).statusCode).toBe(401);
+      expect(result!.statusCode).toBe(401);
     });
 
     it('returns 401 when access token expired and refresh fetch throws', async () => {
@@ -244,15 +260,17 @@ describe('authMiddleware', () => {
       mockFetch.mockRejectedValue(new Error('network error'));
 
       const { before } = authMiddleware();
-      const request = makeRequest(new EventBuilder().withCookies([
-        `hs_access_token=expired`,
-        `hs_refresh_token=some-refresh`,
-      ]).build());
+      const request = buildMiddyRequest(buildEvent({
+        cookies: [
+          `hs_access_token=expired`,
+          `hs_refresh_token=some-refresh`,
+        ],
+      }));
 
-      const result = await before!(request);
+      const result = await before(request);
 
       expect(result).toBeDefined();
-      expect((result as APIGatewayProxyStructuredResultV2).statusCode).toBe(401);
+      expect(result!.statusCode).toBe(401);
     });
 
     it('parses cookies from event.cookies array correctly', async () => {
@@ -265,15 +283,16 @@ describe('authMiddleware', () => {
           pk: { S: `SUB#${MOCK_SUB}` },
           sk: { S: 'IDENTITY' },
           userId: { S: 'some-user' },
+          orgId: { S: 'some-org' },
         },
       });
 
       const { before } = authMiddleware();
-      const request = makeRequest(new EventBuilder().withCookies([
-        ' hs_access_token = my-token ',
-      ]).build());
+      const request = buildMiddyRequest(buildEvent({
+        cookies: [' hs_access_token = my-token '],
+      }));
 
-      await before!(request);
+      await before(request);
 
       expect(mockJwtVerify).toHaveBeenCalledWith(
         'my-token',
@@ -288,10 +307,10 @@ describe('authMiddleware', () => {
       const { after } = authMiddleware();
       const response: APIGatewayProxyStructuredResultV2 = { statusCode: 200, body: '{}' };
       const request: AuthRequest = {
-        event: new EventBuilder().build(),
+        event: buildEvent(),
         context: {} as Context,
         response,
-        error: null,
+        error: undefined,
         internal: {
           newTokens: {
             access_token: 'new-at',
@@ -301,7 +320,7 @@ describe('authMiddleware', () => {
         },
       };
 
-      await after!(request);
+      await after(request);
 
       expect(response.cookies).toHaveLength(4);
       expect(response.cookies![0]).toContain('hs_access_token=new-at');
@@ -314,14 +333,14 @@ describe('authMiddleware', () => {
       const { after } = authMiddleware();
       const response: APIGatewayProxyStructuredResultV2 = { statusCode: 200, body: '{}' };
       const request: AuthRequest = {
-        event: new EventBuilder().build(),
+        event: buildEvent(),
         context: {} as Context,
         response,
-        error: null,
+        error: undefined,
         internal: {},
       };
 
-      await after!(request);
+      await after(request);
 
       expect(response.cookies).toBeUndefined();
     });

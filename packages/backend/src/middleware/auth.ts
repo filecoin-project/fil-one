@@ -24,7 +24,7 @@ interface NewTokens {
   refresh_token: string;
 }
 
-interface AuthInternal extends Record<string, unknown> {
+export interface AuthInternal extends Record<string, unknown> {
   newTokens?: NewTokens;
 }
 
@@ -70,7 +70,7 @@ function parseCookies(cookieArray: string[] | undefined): Record<string, string>
   );
 }
 
-function unauthorizedResponse(): APIGatewayProxyResultV2 {
+function unauthorizedResponse(): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder()
     .status(401)
     .body<ErrorResponse>({ message: 'Unauthorized' })
@@ -78,12 +78,17 @@ function unauthorizedResponse(): APIGatewayProxyResultV2 {
 }
 
 // ---------------------------------------------------------------------------
-// Sub → userId resolution via UserInfoTable
+// Sub → userId + orgId resolution via UserInfoTable
 // ---------------------------------------------------------------------------
+
+interface ResolvedIdentity {
+  userId: string;
+  orgId: string;
+}
 
 const dynamo = new DynamoDBClient({});
 
-async function resolveUserId(sub: string, email: string | undefined): Promise<string> {
+async function resolveUserAndOrg(sub: string, email: string | undefined): Promise<ResolvedIdentity> {
   const tableName = Resource.UserInfoTable.name;
 
   // Look up existing mapping
@@ -97,12 +102,13 @@ async function resolveUserId(sub: string, email: string | undefined): Promise<st
     }),
   );
 
-  if (result.Item?.userId?.S) {
-    return result.Item.userId.S;
+  if (result.Item?.userId?.S && result.Item?.orgId?.S) {
+    return { userId: result.Item.userId.S, orgId: result.Item.orgId.S };
   }
 
-  // New user — create both records atomically
+  // New user — create user, org, and membership records atomically
   const userId = uuidv4();
+  const orgId = uuidv4();
   const now = new Date().toISOString();
 
   await dynamo.send(
@@ -115,6 +121,7 @@ async function resolveUserId(sub: string, email: string | undefined): Promise<st
               pk: { S: `SUB#${sub}` },
               sk: { S: 'IDENTITY' },
               userId: { S: userId },
+              orgId: { S: orgId },
               ...(email ? { email: { S: email } } : {}),
               createdAt: { S: now },
             },
@@ -128,8 +135,33 @@ async function resolveUserId(sub: string, email: string | undefined): Promise<st
               pk: { S: `USER#${userId}` },
               sk: { S: 'PROFILE' },
               sub: { S: sub },
+              orgId: { S: orgId },
               ...(email ? { email: { S: email } } : {}),
               createdAt: { S: now },
+            },
+          },
+        },
+        {
+          Put: {
+            TableName: tableName,
+            Item: {
+              pk: { S: `ORG#${orgId}` },
+              sk: { S: 'PROFILE' },
+              ...(email ? { name: { S: email.split('@')[1] ?? 'My Organization' } } : { name: { S: 'My Organization' } }),
+              createdBy: { S: userId },
+              createdAt: { S: now },
+            },
+          },
+        },
+        {
+          Put: {
+            TableName: tableName,
+            Item: {
+              pk: { S: `ORG#${orgId}` },
+              sk: { S: `MEMBER#${userId}` },
+              role: { S: 'admin' },
+              ...(email ? { email: { S: email } } : {}),
+              joinedAt: { S: now },
             },
           },
         },
@@ -137,16 +169,16 @@ async function resolveUserId(sub: string, email: string | undefined): Promise<st
     }),
   );
 
-  return userId;
+  return { userId, orgId };
 }
 
 // ---------------------------------------------------------------------------
 // Middleware factory
 // ---------------------------------------------------------------------------
-export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2> {
+export function authMiddleware() {
   const before = async (
     request: AuthMiddlewareRequest,
-  ): Promise<APIGatewayProxyResultV2 | void> => {
+  ): Promise<APIGatewayProxyStructuredResultV2 | void> => {
     const { event } = request;
     const cookies = parseCookies(event.cookies);
 
@@ -171,9 +203,10 @@ export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatew
         const { payload } = await jwtVerify(accessToken, jwks, { audience, issuer });
         const sub = payload.sub!;
         const email = payload.email as string | undefined;
-        const userId = await resolveUserId(sub, email);
+        const { userId, orgId } = await resolveUserAndOrg(sub, email);
         (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
           userId,
+          orgId,
           email,
         };
         return; // Valid — continue to handler
@@ -213,9 +246,10 @@ export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatew
           const refreshedPayload = decodeJwt(tokens.access_token);
           const refreshedSub = refreshedPayload.sub!;
           const refreshedEmail = refreshedPayload.email as string | undefined;
-          const refreshedUserId = await resolveUserId(refreshedSub, refreshedEmail);
+          const { userId: refreshedUserId, orgId: refreshedOrgId } = await resolveUserAndOrg(refreshedSub, refreshedEmail);
           (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
             userId: refreshedUserId,
+            orgId: refreshedOrgId,
             email: refreshedEmail,
           };
           console.warn('[auth] Token refresh succeeded');
@@ -248,5 +282,5 @@ export function authMiddleware(): MiddlewareObj<APIGatewayProxyEventV2, APIGatew
     ];
   };
 
-  return { before, after };
+  return { before, after } satisfies MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2>;
 }

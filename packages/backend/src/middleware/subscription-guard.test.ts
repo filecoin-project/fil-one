@@ -1,16 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Request } from '@middy/core';
-import type {
-  APIGatewayProxyEventV2,
-  APIGatewayProxyResultV2,
-  APIGatewayProxyStructuredResultV2,
-  Context,
-} from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
-import { EventBuilder } from '../test/event-builder.js';
+import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -35,24 +28,6 @@ import { SubscriptionStatus } from '@hyperspace/shared';
 // Helpers
 // ---------------------------------------------------------------------------
 
-type GuardRequest = Request<
-  APIGatewayProxyEventV2,
-  APIGatewayProxyResultV2,
-  Error,
-  Context,
-  Record<string, unknown>
->;
-
-function makeRequest(event: APIGatewayProxyEventV2): GuardRequest {
-  return {
-    event,
-    context: {} as Context,
-    response: null,
-    error: null,
-    internal: {},
-  };
-}
-
 function billingItem(fields: Parameters<typeof marshall>[0]) {
   return { Item: marshall(fields, { removeUndefinedValues: true }) };
 }
@@ -73,7 +48,7 @@ describe('subscriptionGuardMiddleware', () => {
     ddbMock.on(GetItemCommand).resolves({ Item: undefined });
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Write);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeUndefined();
   });
@@ -86,7 +61,7 @@ describe('subscriptionGuardMiddleware', () => {
     }));
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Write);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeUndefined();
   });
@@ -101,7 +76,7 @@ describe('subscriptionGuardMiddleware', () => {
     }));
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Write);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeUndefined();
   });
@@ -118,7 +93,7 @@ describe('subscriptionGuardMiddleware', () => {
     ddbMock.on(UpdateItemCommand).resolves({});
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Read);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     // Read access during grace period → allowed
     expect(result).toBeUndefined();
@@ -140,10 +115,10 @@ describe('subscriptionGuardMiddleware', () => {
     }));
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Write);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeDefined();
-    const response = result as APIGatewayProxyStructuredResultV2;
+    const response = result!;
     expect(response.statusCode).toBe(403);
     const body = JSON.parse(response.body as string);
     expect(body.code).toBe('GRACE_PERIOD_WRITE_BLOCKED');
@@ -159,7 +134,7 @@ describe('subscriptionGuardMiddleware', () => {
     }));
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Read);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeUndefined();
   });
@@ -175,10 +150,10 @@ describe('subscriptionGuardMiddleware', () => {
     ddbMock.on(UpdateItemCommand).resolves({});
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Read);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeDefined();
-    const response = result as APIGatewayProxyStructuredResultV2;
+    const response = result!;
     expect(response.statusCode).toBe(403);
     const body = JSON.parse(response.body as string);
     expect(body.code).toBe('SUBSCRIPTION_CANCELED');
@@ -197,7 +172,7 @@ describe('subscriptionGuardMiddleware', () => {
     }));
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Write);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeUndefined();
   });
@@ -210,10 +185,10 @@ describe('subscriptionGuardMiddleware', () => {
     }));
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Read);
-    const result = await before!(makeRequest(new EventBuilder().withUserId(USER_ID).build()));
+    const result = await before(buildMiddyRequest(buildEvent({ userInfo: { userId: USER_ID, orgId: 'test-org-uuid' } })));
 
     expect(result).toBeDefined();
-    const response = result as APIGatewayProxyStructuredResultV2;
+    const response = result!;
     expect(response.statusCode).toBe(403);
     const body = JSON.parse(response.body as string);
     expect(body.code).toBe('SUBSCRIPTION_CANCELED');

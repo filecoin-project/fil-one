@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import { EventBuilder } from '../test/event-builder.js';
-import { ContextBuilder } from '../test/context-builder.js';
+import { buildEvent, buildContext } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -35,7 +33,7 @@ import { handler } from './auth-callback.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const stubContext = new ContextBuilder().withFunctionName('auth-callback').build();
+const stubContext = buildContext({ functionName: 'auth-callback' });
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -52,22 +50,22 @@ describe('auth-callback handler', () => {
 
   describe('when Auth0 returns an error', () => {
     it('redirects to sign-in with the error description', async () => {
-      const event = new EventBuilder()
-        .withQueryStringParameters({ error: 'access_denied', error_description: 'User cancelled' })
-        .build();
+      const event = buildEvent({
+        queryStringParameters: { error: 'access_denied', error_description: 'User cancelled' },
+      });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
       expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=User%20cancelled');
     });
 
     it('redirects to sign-in with the error code when no description', async () => {
-      const event = new EventBuilder()
-        .withQueryStringParameters({ error: 'access_denied' })
-        .build();
+      const event = buildEvent({
+        queryStringParameters: { error: 'access_denied' },
+      });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
       expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=access_denied');
@@ -76,9 +74,9 @@ describe('auth-callback handler', () => {
 
   describe('when no code is present', () => {
     it('redirects to sign-in with a generic error', async () => {
-      const event = new EventBuilder().build();
+      const event = buildEvent();
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
       expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=Authentication%20failed');
@@ -97,11 +95,9 @@ describe('auth-callback handler', () => {
         text: async () => 'Bad request',
       });
 
-      const event = new EventBuilder()
-        .withQueryStringParameters({ code: 'auth-code-123' })
-        .build();
+      const event = buildEvent({ queryStringParameters: { code: 'auth-code-123' } });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
       expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=Token%20exchange%20failed');
@@ -127,20 +123,16 @@ describe('auth-callback handler', () => {
     });
 
     it('redirects to /dashboard', async () => {
-      const event = new EventBuilder()
-        .withQueryStringParameters({ code: 'auth-code-123' })
-        .build();
+      const event = buildEvent({ queryStringParameters: { code: 'auth-code-123' } });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
       expect(result.headers!['Location']).toBe('https://app.example.com/dashboard');
     });
 
     it('sends the correct token request to Auth0', async () => {
-      const event = new EventBuilder()
-        .withQueryStringParameters({ code: 'auth-code-123' })
-        .build();
+      const event = buildEvent({ queryStringParameters: { code: 'auth-code-123' } });
 
       await handler(event, stubContext);
 
@@ -162,11 +154,9 @@ describe('auth-callback handler', () => {
     });
 
     it('sets access, id, refresh, and logged_in cookies', async () => {
-      const event = new EventBuilder()
-        .withQueryStringParameters({ code: 'auth-code-123' })
-        .build();
+      const event = buildEvent({ queryStringParameters: { code: 'auth-code-123' } });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.cookies).toHaveLength(4);
       expect(result.cookies![0]).toContain('hs_access_token=new-access-token');
@@ -184,11 +174,9 @@ describe('auth-callback handler', () => {
         }),
       });
 
-      const event = new EventBuilder()
-        .withQueryStringParameters({ code: 'auth-code-123' })
-        .build();
+      const event = buildEvent({ queryStringParameters: { code: 'auth-code-123' } });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.cookies).toHaveLength(3);
       expect(result.cookies![0]).toContain('hs_access_token=at');
@@ -197,11 +185,9 @@ describe('auth-callback handler', () => {
     });
 
     it('sets HttpOnly on token cookies but not on logged_in hint cookie', async () => {
-      const event = new EventBuilder()
-        .withQueryStringParameters({ code: 'auth-code-123' })
-        .build();
+      const event = buildEvent({ queryStringParameters: { code: 'auth-code-123' } });
 
-      const result = (await handler(event, stubContext)) as APIGatewayProxyStructuredResultV2;
+      const result = await handler(event, stubContext);
 
       expect(result.cookies![0]).toContain('HttpOnly');
       expect(result.cookies![1]).toContain('HttpOnly');

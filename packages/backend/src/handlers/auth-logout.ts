@@ -1,13 +1,13 @@
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
 import { COOKIE_NAMES, makeClearCookieHeader } from '../lib/response-builder.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 async function baseHandler(
   _event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyResultV2> {
+): Promise<APIGatewayProxyStructuredResultV2> {
   const websiteUrl = process.env.WEBSITE_URL!;
   const domain = process.env.AUTH0_DOMAIN!;
   const secrets = getAuthSecrets();

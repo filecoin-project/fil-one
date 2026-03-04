@@ -1,7 +1,7 @@
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import type { MiddlewareObj, Request } from '@middy/core';
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from 'aws-lambda';
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, APIGatewayProxyStructuredResultV2, Context } from 'aws-lambda';
 import { SubscriptionStatus } from '@hyperspace/shared';
 import { Resource } from "sst";
 import { ResponseBuilder } from '../lib/response-builder.js';
@@ -24,10 +24,10 @@ function addDays(date: Date, days: number): Date {
 
 export function subscriptionGuardMiddleware(
   accessLevel: AccessLevel,
-): MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2> {
+) {
   const before = async (
     request: Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2, Error, Context>,
-  ): Promise<APIGatewayProxyResultV2 | void> => {
+  ): Promise<APIGatewayProxyStructuredResultV2 | void> => {
     const event = request.event as AuthenticatedEvent;
     const { userId } = getUserInfo(event);
     const tableName = Resource.BillingTable.name;
@@ -130,5 +130,5 @@ export function subscriptionGuardMiddleware(
     // Unknown status → allow (fail open for safety)
   };
 
-  return { before };
+  return { before } satisfies MiddlewareObj<APIGatewayProxyEventV2, APIGatewayProxyResultV2>;
 }
