@@ -16,7 +16,7 @@
     "lint:fix": "oxlint --fix",
     "refresh": "sst refresh",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm --filter @hyperspace/backend test"
+    "test": "pnpm lint && pnpm --filter @hyperspace/backend test"
   },
   "devDependencies": {
     "@pulumi/aws": "^7.21.0",
