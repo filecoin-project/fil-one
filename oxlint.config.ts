@@ -3,6 +3,7 @@ import { defineConfig } from 'oxlint';
 export default defineConfig({
   plugins: ['typescript'],
   rules: {
+    'typescript/no-explicit-any': 'error',
     'typescript/no-floating-promises': 'error',
   },
   options: {
