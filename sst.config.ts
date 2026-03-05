@@ -39,6 +39,7 @@ export default $config({
     const auth0MgmtClientSecret = new sst.Secret("Auth0MgmtClientSecret");
     const stripeSecretKey = new sst.Secret("StripeSecretKey");
     const stripePriceId = new sst.Secret("StripePriceId");
+    const stripeWebhookSecret = new sst.Secret("StripeWebhookSecret");
     const AWS_CACHING_DISABLED_POLICY = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad";
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
@@ -190,6 +191,7 @@ export default $config({
       auth0ClientSecret,
       stripeSecretKey,
       stripePriceId,
+      stripeWebhookSecret,
     ];
 
     const sharedEnv: Record<string, string> = {

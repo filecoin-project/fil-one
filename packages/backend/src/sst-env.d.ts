@@ -40,5 +40,9 @@ declare module "sst" {
       value: string;
       type: "sst.Secret";
     };
+    StripeWebhookSecret: {
+      value: string;
+      type: "sst.Secret";
+    };
   }
 }
