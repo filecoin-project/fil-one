@@ -40,5 +40,9 @@ declare module "sst" {
       value: string;
       type: "sst.Secret";
     };
+    AuroraBackofficeToken: {
+      value: string;
+      type: "sst.Secret";
+    };
   }
 }

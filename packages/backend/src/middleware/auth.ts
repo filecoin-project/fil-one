@@ -5,7 +5,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
   Context,
 } from 'aws-lambda';
-import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { v4 as uuidv4 } from 'uuid';
 import { Resource } from 'sst';
@@ -13,6 +13,7 @@ import type { UserInfo } from '../lib/user-context.js';
 import type { ErrorResponse } from '@hyperspace/shared';
 import { COOKIE_NAMES, TOKEN_MAX_AGE, makeCookieHeader, makeHintCookieHeader, ResponseBuilder } from '../lib/response-builder.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
+import { createAuroraTenant } from '../lib/aurora-backoffice.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,6 +110,8 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
   // New user — create user, org, and membership records atomically
   const userId = uuidv4();
   const orgId = uuidv4();
+  // TODO: Improve the org display name (e.g. use the user's organization name from Auth0)
+  const displayName = email ? `${email}'s organization` : orgId;
   const now = new Date().toISOString();
 
   await dynamo.send(
@@ -166,6 +169,22 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
           },
         },
       ],
+    }),
+  );
+
+  const { auroraTenantId } = await createAuroraTenant({ orgId, displayName });
+
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: tableName,
+      Key: {
+        pk: { S: `ORG#${orgId}` },
+        sk: { S: 'PROFILE' },
+      },
+      UpdateExpression: 'SET auroraTenantId = :tid',
+      ExpressionAttributeValues: {
+        ':tid': { S: auroraTenantId },
+      },
     }),
   );
 

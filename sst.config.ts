@@ -39,6 +39,7 @@ export default $config({
     const auth0MgmtClientSecret = new sst.Secret("Auth0MgmtClientSecret");
     const stripeSecretKey = new sst.Secret("StripeSecretKey");
     const stripePriceId = new sst.Secret("StripePriceId");
+    const auroraBackofficeToken = new sst.Secret("AuroraBackofficeToken");
     const AWS_CACHING_DISABLED_POLICY = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad";
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
@@ -75,6 +76,7 @@ export default $config({
 
     // ── Stage-aware domain config ────────────────────────────────────
     const stage = $app.stage;
+    const isProduction = stage === "production";
 
     let domainName: string | undefined;
     let certArn: string | undefined;
@@ -190,11 +192,17 @@ export default $config({
       auth0ClientSecret,
       stripeSecretKey,
       stripePriceId,
+      auroraBackofficeToken,
     ];
 
     const sharedEnv: Record<string, string> = {
       AUTH0_DOMAIN: "dev-oar2nhqh58xf5pwf.us.auth0.com",
       AUTH0_AUDIENCE: "console.filhyperspace.com",
+      AURORA_BACKOFFICE_URL: isProduction
+        ? "TODO"
+        : "https://backoffice.dev.aur.lu/api/v1",
+      AURORA_PARTNER_ID: isProduction ? "TODO" : "ff",
+      AURORA_REGION_ID: isProduction ? "TODO" : "ff",
     };
 
     function addRoute(

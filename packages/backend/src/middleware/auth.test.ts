@@ -7,7 +7,7 @@ import type {
   Context,
 } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 import { expectErrorResponse } from '../test/assert-helpers.js';
@@ -18,6 +18,7 @@ import { expectErrorResponse } from '../test/assert-helpers.js';
 
 const MOCK_USER_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const MOCK_ORG_ID = '11111111-2222-3333-4444-555555555555';
+const MOCK_AURORA_TENANT_ID = 'aurora-tenant-999';
 const MOCK_SUB = 'auth0|abc123';
 const MOCK_EMAIL = 'user@example.com';
 
@@ -36,6 +37,7 @@ vi.mock('sst', () => ({
     UserInfoTable: { name: 'UserInfoTable' },
     Auth0ClientId: { value: 'test-client-id' },
     Auth0ClientSecret: { value: 'test-client-secret' },
+    AuroraBackofficeToken: { value: 'test-aurora-token' },
   },
 }));
 
@@ -54,6 +56,11 @@ vi.mock('jose', () => ({
   jwtVerify: (token: unknown, jwks: unknown, opts: unknown) => mockJwtVerify(token, jwks, opts),
   decodeJwt: (token: unknown) => mockDecodeJwt(token),
   createRemoteJWKSet: (url: unknown) => mockCreateRemoteJWKSet(url),
+}));
+
+const mockCreateAuroraTenant = vi.fn();
+vi.mock('../lib/aurora-backoffice.js', () => ({
+  createAuroraTenant: (...args: unknown[]) => mockCreateAuroraTenant(...args),
 }));
 
 const mockFetch = vi.fn();
@@ -140,6 +147,7 @@ describe('authMiddleware', () => {
         orgId: existingOrgId,
         email: MOCK_EMAIL,
       });
+      expect(mockCreateAuroraTenant).not.toHaveBeenCalled();
     });
 
     it('creates new user and org when no UserInfoTable record exists', async () => {
@@ -149,6 +157,8 @@ describe('authMiddleware', () => {
 
       ddbMock.on(GetItemCommand).resolves({ Item: undefined });
       ddbMock.on(TransactWriteItemsCommand).resolves({});
+      ddbMock.on(UpdateItemCommand).resolves({});
+      mockCreateAuroraTenant.mockResolvedValue({ auroraTenantId: MOCK_AURORA_TENANT_ID });
 
       const { before } = authMiddleware();
       const event = buildEvent({ cookies: [`hs_access_token=valid-token`] });
@@ -161,6 +171,25 @@ describe('authMiddleware', () => {
         userId: MOCK_USER_ID,
         orgId: MOCK_ORG_ID,
         email: MOCK_EMAIL,
+      });
+
+      expect(mockCreateAuroraTenant).toHaveBeenCalledWith({
+        orgId: MOCK_ORG_ID,
+        displayName: `${MOCK_EMAIL}'s organization`,
+      });
+
+      const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
+      expect(updateCalls).toHaveLength(1);
+      expect(updateCalls[0].args[0].input).toStrictEqual({
+        TableName: 'UserInfoTable',
+        Key: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+        },
+        UpdateExpression: 'SET auroraTenantId = :tid',
+        ExpressionAttributeValues: {
+          ':tid': { S: MOCK_AURORA_TENANT_ID },
+        },
       });
 
       const transactCalls = ddbMock.commandCalls(TransactWriteItemsCommand);
