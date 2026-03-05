@@ -8,6 +8,7 @@ export default defineConfig({
   },
   options: {
     typeAware: true,
+    typeCheck: true, 
   },
   ignorePatterns: ['.sst', 'packages/ui', '**/dist', '**/sst-env.d.ts'],
 });
