@@ -40,6 +40,7 @@ export async function handler(
   }
 
   // 3. Idempotency — atomic claim-or-skip
+  const ttl = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // 30 days
   const idempotencyKey = { pk: { S: `WEBHOOK#${stripeEvent.id}` }, sk: { S: 'EVENT' } };
   try {
     await dynamo.send(
@@ -50,14 +51,14 @@ export async function handler(
           sk: 'EVENT',
           eventType: stripeEvent.type,
           processedAt: new Date().toISOString(),
-          ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+          ttl,
         }),
         ConditionExpression: 'attribute_not_exists(pk)',
       }),
     );
   } catch (err) {
     if ((err as { name?: string }).name === 'ConditionalCheckFailedException') {
-      console.log('[stripe-webhook] Already processed event:', stripeEvent.id);
+      console.warn('[stripe-webhook] Already processed event:', stripeEvent.id);
       return { statusCode: 200, body: JSON.stringify({ received: true }) };
     }
     console.error('[stripe-webhook] Idempotency check failed:', (err as Error).message);
