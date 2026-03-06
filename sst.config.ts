@@ -217,7 +217,7 @@ export default $config({
       method: string,
       routePath: string,
       handler: string,
-      extraEnv?: Record<string, string>,
+      extraEnv?: Record<string, $util.Input<string>>,
     ) {
       api.route(`${method} ${routePath}`, {
         handler: `packages/backend/src/handlers/${handler}.handler`,
