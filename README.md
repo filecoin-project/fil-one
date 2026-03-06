@@ -7,6 +7,7 @@ Full-stack prototype — pnpm workspaces monorepo deploying to AWS via [SST v3](
 ```
 hyperspace/
 ├── sst.config.ts  # SST v3 infrastructure (replaces CDK stacks)
+├── contracts/     # Foundry smart contracts
 ├── packages/
 │   ├── shared/     # TypeScript interfaces shared between website and backend
 │   ├── backend/    # Lambda handlers (upload → DynamoDB)
@@ -111,6 +112,8 @@ pnpm run deploy           # Deploy personal dev stack (uses OS username as stage
 pnpm run deploy:staging   # Deploy to staging.filhyperspace.com
 pnpm run deploy:production # Deploy to console.filhyperspace.com
 pnpm run remove           # Remove your personal dev stack
+pnpm run lint             # Lint all packages
+pnpm run lint:fix         # Lint and auto-fix where possible
 pnpm run typecheck        # tsc --noEmit across all packages
 ```
 
@@ -287,3 +290,57 @@ The full fork at `joemocode-business/filecoin-foundation` tracks the upstream `F
 ```
 
 > **Note**: Several components in `packages/ui` use Next.js-specific APIs (`next/navigation`, `next/image`) or `nuqs` and are not usable as-is in this Vite app. These include `Navigation/*`, `Network/*`, and `Search/Search`. They will be adapted for React Router as needed.
+
+## Contracts (`contracts/`)
+
+Foundry project for EVM smart contracts. 
+
+**Prerequisites** — install Foundry if you haven't already:
+
+```bash
+curl -L https://foundry.paradigm.xyz | bash && foundryup
+```
+
+### Install / Update Dependencies
+
+```bash
+forge install                             # install from foundry.lock
+forge update                              # update all dependencies
+forge update contracts/lib/forge-std      # update a specific dependency
+```
+
+### Build
+
+```bash
+forge build
+```
+
+### Test
+
+```bash
+forge test
+```
+
+### Format
+
+```bash
+forge fmt
+```
+
+### Gas Snapshots
+
+```bash
+forge snapshot
+```
+
+### Anvil (local node)
+
+```bash
+anvil
+```
+
+### Deploy
+
+```bash
+forge script contracts/script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```
