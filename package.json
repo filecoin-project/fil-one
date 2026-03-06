@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "sst dev",
-    "build": "pnpm --filter @hyperspace/shared build && pnpm --filter @hyperspace/backend build && pnpm --filter @hyperspace/website build",
+    "build": "pnpm -r -F '!@hyperspace/ui' run build",
     "deploy": "pnpm build && sst deploy",
     "deploy:staging": "pnpm build && sst deploy --stage staging",
     "deploy:production": "pnpm build && sst deploy --stage production",
