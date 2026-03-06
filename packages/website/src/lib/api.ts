@@ -59,20 +59,19 @@ export async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const method = options.method?.toUpperCase() ?? 'GET';
-  const csrfHeaders: Record<string, string> = {};
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (method !== 'GET' && method !== 'HEAD') {
     const token = getCsrfToken();
-    if (token) csrfHeaders['X-CSRF-Token'] = token;
+    if (token) headers.set('X-CSRF-Token', token);
   }
 
   const response = await fetch(`${API_URL}/api${path}`, {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...csrfHeaders,
-      ...options.headers,
-    },
+    headers,
   });
 
   if (response.status === 401) {
