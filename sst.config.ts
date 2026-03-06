@@ -203,7 +203,7 @@ export default $config({
       routePath: string,
       handler: string,
       extraEnv?: Record<string, $util.Input<string>>,
-      permissions?: { actions: string[]; resources: any[] }[],
+      permissions?: { actions: string[]; resources: $util.Input<string>[] }[],
     ) {
       api.route(`${method} ${routePath}`, {
         handler: `packages/backend/src/handlers/${handler}.handler`,
