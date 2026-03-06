@@ -5,7 +5,8 @@ import type {
   APIGatewayProxyStructuredResultV2,
   Context,
 } from 'aws-lambda';
-import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
+import { SendMessageCommand } from '@aws-sdk/client-sqs';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { v4 as uuidv4 } from 'uuid';
 import { Resource } from 'sst';
@@ -13,7 +14,8 @@ import type { UserInfo } from '../lib/user-context.js';
 import type { ErrorResponse } from '@hyperspace/shared';
 import { COOKIE_NAMES, TOKEN_MAX_AGE, makeCookieHeader, makeHintCookieHeader, ResponseBuilder } from '../lib/response-builder.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
-import { createAuroraTenant } from '../lib/aurora-backoffice.js';
+import { SetupStatus } from '../lib/aurora-tenant-setup.js';
+import { sqsClient } from '../lib/sqs-client.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -151,6 +153,7 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
               pk: { S: `ORG#${orgId}` },
               sk: { S: 'PROFILE' },
               ...(email ? { name: { S: email.split('@')[1] ?? 'My Organization' } } : { name: { S: 'My Organization' } }),
+              setupStatus: { S: SetupStatus.HYPERSPACE_ORG_CREATED },
               createdBy: { S: userId },
               createdAt: { S: now },
             },
@@ -172,19 +175,12 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
     }),
   );
 
-  const { auroraTenantId } = await createAuroraTenant({ orgId, displayName });
-
-  await dynamo.send(
-    new UpdateItemCommand({
-      TableName: tableName,
-      Key: {
-        pk: { S: `ORG#${orgId}` },
-        sk: { S: 'PROFILE' },
-      },
-      UpdateExpression: 'SET auroraTenantId = :tid',
-      ExpressionAttributeValues: {
-        ':tid': { S: auroraTenantId },
-      },
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: Resource.AuroraTenantSetupQueue.url,
+      MessageBody: JSON.stringify({ orgId, displayName }),
+      MessageGroupId: orgId,
+      MessageDeduplicationId: orgId,
     }),
   );
 

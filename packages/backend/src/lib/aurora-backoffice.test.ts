@@ -11,18 +11,20 @@ vi.mock('./auth-secrets.js', () => ({
 }));
 
 const mockPostTenants = vi.fn((_options: Record<string, unknown>) => ({}));
+const mockPostSetup = vi.fn((_options: Record<string, unknown>) => ({}));
 const mockCreateClient = vi.fn((_config: Record<string, unknown>) => 'mock-aurora-client');
 
 vi.mock('@hyperspace/aurora-backoffice-client', () => ({
   createClient: (config: Record<string, unknown>) => mockCreateClient(config),
   postPartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockPostTenants(options),
+  postPartnersByPartnerIdTenantsByTenantIdSetup: (options: Record<string, unknown>) => mockPostSetup(options),
 }));
 
 process.env.AURORA_BACKOFFICE_URL = 'https://api.backoffice.test.example.com/api/v1';
 process.env.AURORA_PARTNER_ID = 'test-partner';
 process.env.AURORA_REGION_ID = 'test-region';
 
-import { createAuroraTenant } from './aurora-backoffice.js';
+import { createAuroraTenant, setupAuroraTenant } from './aurora-backoffice.js';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -69,5 +71,69 @@ describe('createAuroraTenant', () => {
     await expect(
       createAuroraTenant({ orgId: 'org-456', displayName: 'Failing Org' }),
     ).rejects.toThrow('Aurora tenant creation failed for org org-456');
+  });
+});
+
+describe('setupAuroraTenant', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns id and lastSetupStep on success', async () => {
+    mockPostSetup.mockResolvedValue({
+      data: { id: 'tenant-123', lastSetupStep: 'FINISHED' },
+      error: undefined,
+    });
+
+    const result = await setupAuroraTenant({ tenantId: 'tenant-123' });
+
+    expect(result).toStrictEqual({ id: 'tenant-123', lastSetupStep: 'FINISHED' });
+  });
+
+  it('returns a non-FINISHED lastSetupStep value', async () => {
+    mockPostSetup.mockResolvedValue({
+      data: { id: 'tenant-123', lastSetupStep: 'WARM_TIER_ADDED' },
+      error: undefined,
+    });
+
+    const result = await setupAuroraTenant({ tenantId: 'tenant-123' });
+
+    expect(result).toStrictEqual({ id: 'tenant-123', lastSetupStep: 'WARM_TIER_ADDED' });
+  });
+
+  it('calls postPartnersByPartnerIdTenantsByTenantIdSetup with correct parameters', async () => {
+    mockPostSetup.mockResolvedValue({
+      data: { id: 'tenant-123', lastSetupStep: 'FINISHED' },
+      error: undefined,
+    });
+
+    await setupAuroraTenant({ tenantId: 'tenant-123' });
+
+    expect(mockCreateClient).toHaveBeenCalledWith({
+      baseUrl: 'https://api.backoffice.test.example.com/api/v1',
+      headers: { 'X-Api-Key': 'test-aurora-token' },
+    });
+
+    expect(mockPostSetup).toHaveBeenCalledWith({
+      client: 'mock-aurora-client',
+      path: { partnerId: 'test-partner', tenantId: 'tenant-123' },
+      throwOnError: false,
+    });
+  });
+
+  it('throws when the Aurora API returns an error', async () => {
+    mockPostSetup.mockResolvedValue({ data: undefined, error: { message: 'Setup failed' } });
+
+    await expect(
+      setupAuroraTenant({ tenantId: 'tenant-456' }),
+    ).rejects.toThrow('Aurora tenant setup failed for tenant tenant-456');
+  });
+
+  it('throws when the Aurora API returns no data', async () => {
+    mockPostSetup.mockResolvedValue({ data: undefined, error: undefined });
+
+    await expect(
+      setupAuroraTenant({ tenantId: 'tenant-789' }),
+    ).rejects.toThrow('Aurora API did not return setup data for tenant tenant-789');
   });
 });

@@ -1,3 +1,4 @@
+export type { MeResponse } from './api/me.js';
 export type { UploadRequest, UploadResponse } from './api/upload.js';
 export type { ErrorResponse } from './api/coreInterfaces.js';
 

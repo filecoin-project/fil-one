@@ -241,15 +241,15 @@ VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxxxx
 
 ## Aurora Back Office API Client
 
-The backend package includes a generated TypeScript client for the Aurora Back
-Office API, located in `packages/backend/src/aurora-backoffice-client/`.
+The project includes a generated TypeScript client for the Aurora Back Office
+API, located in `packages/aurora-backoffice-client/`.
 
 **Regenerating the client** (after API changes):
 
 1. Download the updated Swagger spec from
    https://backoffice.dev.aur.lu/ff/docs/backoffice-api (open the page, then
    save the JSON loaded by the page)
-2. Replace `packages/backend/src/aurora-backoffice-client/aurora-backoffice.swagger.json`
+2. Replace `packages/aurora-backoffice-client/aurora-backoffice.swagger.json`
    with the downloaded file
 3. Run:
    ```bash

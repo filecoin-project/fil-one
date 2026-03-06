@@ -2,7 +2,7 @@
 
 ## Decision
 
-Use `@hey-api/openapi-ts` with `@hey-api/client-fetch` to generate a typed API client from the OpenAPI spec.
+Use `@hey-api/openapi-ts` to generate a typed API client (with a built-in fetch-based client) from the OpenAPI spec.
 
 ## Rationale
 
@@ -12,7 +12,7 @@ Hey API generates named, exported functions with explicit type signatures — fa
 
 ### Lightweight for Lambda
 
-The `@hey-api/client-fetch` plugin is a thin wrapper over the native Fetch API (available in Node.js 20+), with no heavy dependencies like Axios. Combined with esbuild tree-shaking, bundle impact is minimal.
+The generated client is a thin wrapper over the native Fetch API (available in Node.js 20+), with no heavy dependencies like Axios. Combined with esbuild tree-shaking, bundle impact is minimal.
 
 ### Batteries-included codegen
 

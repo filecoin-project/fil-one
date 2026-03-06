@@ -68,6 +68,17 @@ export default $config({
       primaryIndex: { hashKey: "pk", rangeKey: "sk" },
     });
 
+    // ── SQS Queues ─────────────────────────────────────────────────
+    const tenantSetupDlq = new sst.aws.Queue("AuroraTenantSetupDlq", {
+      fifo: true,
+    });
+
+    const tenantSetupQueue = new sst.aws.Queue("AuroraTenantSetupQueue", {
+      fifo: true,
+      dlq: tenantSetupDlq.arn,
+      visibilityTimeout: "60 seconds",
+    });
+
     // ── S3 Bucket for user file storage ──────────────────────────────
     const userFilesBucket = new sst.aws.Bucket("UserFilesBucket");
 
@@ -189,6 +200,7 @@ export default $config({
       billingTable,
       userInfoTable,
       userFilesBucket,
+      tenantSetupQueue,
       auth0ClientId,
       auth0ClientSecret,
       stripeSecretKey,
@@ -249,6 +261,9 @@ export default $config({
       WEBSITE_URL: siteUrl,
     });
 
+    // ── Me route ───────────────────────────────────────────────────
+    addRoute("GET", "/api/me", "get-me");
+
     // ── Billing routes ───────────────────────────────────────────────
     addRoute("GET", "/api/billing", "get-billing");
     addRoute("POST", "/api/billing/setup-intent", "create-setup-intent");
@@ -257,6 +272,37 @@ export default $config({
       WEBSITE_URL: siteUrl,
     });
     addRoute("POST", "/api/stripe/webhook", "stripe-webhook");
+
+    // ── Tenant setup consumer ──────────────────────────────────────
+    tenantSetupQueue.subscribe(
+      {
+        handler: "packages/backend/src/handlers/aurora-tenant-setup.handler",
+        link: [userInfoTable, auroraBackofficeToken],
+        environment: {
+          AURORA_BACKOFFICE_URL: sharedEnv.AURORA_BACKOFFICE_URL,
+          AURORA_PARTNER_ID: sharedEnv.AURORA_PARTNER_ID,
+          AURORA_REGION_ID: sharedEnv.AURORA_REGION_ID,
+        },
+        // eslint-disable-next-line typescript/no-explicit-any
+        runtime: "nodejs24.x" as any,
+        timeout: "60 seconds",
+      },
+      { batch: { size: 1 } },
+    );
+
+    // ── CloudWatch alarm on DLQ ──────────────────────────────────
+    new aws.cloudwatch.MetricAlarm("AuroraTenantSetupDlqAlarm", {
+      alarmDescription: "Messages in tenant-setup DLQ — failed tenant setup needs investigation",
+      namespace: "AWS/SQS",
+      metricName: "ApproximateNumberOfMessagesVisible",
+      dimensions: { QueueName: tenantSetupDlq.nodes.queue.name },
+      statistic: "Maximum",
+      period: 60,
+      evaluationPeriods: 1,
+      threshold: 1,
+      comparisonOperator: "GreaterThanOrEqualToThreshold",
+      treatMissingData: "notBreaching",
+    });
 
     return {
       url: siteUrl,

@@ -7,7 +7,8 @@ import type {
   Context,
 } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 import { expectErrorResponse } from '../test/assert-helpers.js';
@@ -18,9 +19,9 @@ import { expectErrorResponse } from '../test/assert-helpers.js';
 
 const MOCK_USER_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const MOCK_ORG_ID = '11111111-2222-3333-4444-555555555555';
-const MOCK_AURORA_TENANT_ID = 'aurora-tenant-999';
 const MOCK_SUB = 'auth0|abc123';
 const MOCK_EMAIL = 'user@example.com';
+const MOCK_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/123/setup-queue';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test
@@ -38,6 +39,7 @@ vi.mock('sst', () => ({
     Auth0ClientId: { value: 'test-client-id' },
     Auth0ClientSecret: { value: 'test-client-secret' },
     AuroraBackofficeToken: { value: 'test-aurora-token' },
+    AuroraTenantSetupQueue: { url: 'https://sqs.us-east-1.amazonaws.com/123/setup-queue' },
   },
 }));
 
@@ -58,15 +60,11 @@ vi.mock('jose', () => ({
   createRemoteJWKSet: (url: unknown) => mockCreateRemoteJWKSet(url),
 }));
 
-const mockCreateAuroraTenant = vi.fn();
-vi.mock('../lib/aurora-backoffice.js', () => ({
-  createAuroraTenant: (...args: unknown[]) => mockCreateAuroraTenant(...args),
-}));
-
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 const ddbMock = mockClient(DynamoDBClient);
+const sqsMock = mockClient(SQSClient);
 
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
@@ -98,6 +96,7 @@ describe('authMiddleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
+    sqsMock.reset();
     uuidCallCount = 0;
   });
 
@@ -147,7 +146,7 @@ describe('authMiddleware', () => {
         orgId: existingOrgId,
         email: MOCK_EMAIL,
       });
-      expect(mockCreateAuroraTenant).not.toHaveBeenCalled();
+      expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
     });
 
     it('creates new user and org when no UserInfoTable record exists', async () => {
@@ -157,8 +156,7 @@ describe('authMiddleware', () => {
 
       ddbMock.on(GetItemCommand).resolves({ Item: undefined });
       ddbMock.on(TransactWriteItemsCommand).resolves({});
-      ddbMock.on(UpdateItemCommand).resolves({});
-      mockCreateAuroraTenant.mockResolvedValue({ auroraTenantId: MOCK_AURORA_TENANT_ID });
+      sqsMock.on(SendMessageCommand).resolves({});
 
       const { before } = authMiddleware();
       const event = buildEvent({ cookies: [`hs_access_token=valid-token`] });
@@ -173,23 +171,13 @@ describe('authMiddleware', () => {
         email: MOCK_EMAIL,
       });
 
-      expect(mockCreateAuroraTenant).toHaveBeenCalledWith({
-        orgId: MOCK_ORG_ID,
-        displayName: `${MOCK_EMAIL}'s organization`,
-      });
-
-      const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
-      expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0].args[0].input).toStrictEqual({
-        TableName: 'UserInfoTable',
-        Key: {
-          pk: { S: `ORG#${MOCK_ORG_ID}` },
-          sk: { S: 'PROFILE' },
-        },
-        UpdateExpression: 'SET auroraTenantId = :tid',
-        ExpressionAttributeValues: {
-          ':tid': { S: MOCK_AURORA_TENANT_ID },
-        },
+      const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
+      expect(sqsCalls).toHaveLength(1);
+      expect(sqsCalls[0].args[0].input).toStrictEqual({
+        QueueUrl: MOCK_QUEUE_URL,
+        MessageBody: JSON.stringify({ orgId: MOCK_ORG_ID, displayName: `${MOCK_EMAIL}'s organization` }),
+        MessageGroupId: MOCK_ORG_ID,
+        MessageDeduplicationId: MOCK_ORG_ID,
       });
 
       const transactCalls = ddbMock.commandCalls(TransactWriteItemsCommand);
@@ -232,6 +220,7 @@ describe('authMiddleware', () => {
               pk: { S: `ORG#${MOCK_ORG_ID}` },
               sk: { S: 'PROFILE' },
               name: { S: 'example.com' },
+              setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
               createdBy: { S: MOCK_USER_ID },
               createdAt: { S: expect.any(String) },
             },
