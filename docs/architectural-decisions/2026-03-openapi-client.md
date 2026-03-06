@@ -1,4 +1,7 @@
-# OpenAPI Client + Auto-Generated Typings
+# ADR: OpenAPI Client + Auto-Generated Typings
+
+**Status:** Accepted
+**Date:** 2026-03-05
 
 ## Decision
 
