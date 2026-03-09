@@ -22,7 +22,7 @@ vi.mock('./aurora-backoffice.js', () => ({
 
 const ddbMock = mockClient(DynamoDBClient);
 
-import { processTenantSetup, SetupStatus } from './aurora-tenant-setup.js';
+import { processTenantSetup, OrgSetupStatus } from './aurora-tenant-setup.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,7 +50,7 @@ describe('processTenantSetup', () => {
 
   it('is a no-op when setupStatus is AURORA_TENANT_SETUP_COMPLETE', async () => {
     ddbMock.on(GetItemCommand).resolves(
-      orgProfileItem({ setupStatus: { S: SetupStatus.AURORA_TENANT_SETUP_COMPLETE } }),
+      orgProfileItem({ setupStatus: { S: OrgSetupStatus.AURORA_TENANT_SETUP_COMPLETE } }),
     );
 
     await processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' });
@@ -62,7 +62,7 @@ describe('processTenantSetup', () => {
 
   it('creates tenant and runs setup when status is HYPERSPACE_ORG_CREATED', async () => {
     ddbMock.on(GetItemCommand).resolves(
-      orgProfileItem({ setupStatus: { S: SetupStatus.HYPERSPACE_ORG_CREATED } }),
+      orgProfileItem({ setupStatus: { S: OrgSetupStatus.HYPERSPACE_ORG_CREATED } }),
     );
     ddbMock.on(UpdateItemCommand).resolves({});
     mockCreateAuroraTenant.mockResolvedValue({ auroraTenantId: 'aurora-t-1' });
@@ -88,8 +88,8 @@ describe('processTenantSetup', () => {
       ConditionExpression: 'attribute_not_exists(setupStatus) OR setupStatus = :expected',
       ExpressionAttributeValues: {
         ':tid': { S: 'aurora-t-1' },
-        ':status': { S: SetupStatus.AURORA_TENANT_CREATED },
-        ':expected': { S: SetupStatus.HYPERSPACE_ORG_CREATED },
+        ':status': { S: OrgSetupStatus.AURORA_TENANT_CREATED },
+        ':expected': { S: OrgSetupStatus.HYPERSPACE_ORG_CREATED },
         ':now': { S: expect.any(String) },
       },
     });
@@ -101,8 +101,8 @@ describe('processTenantSetup', () => {
       UpdateExpression: 'SET setupStatus = :status, updatedAt = :now',
       ConditionExpression: 'setupStatus = :expected',
       ExpressionAttributeValues: {
-        ':status': { S: SetupStatus.AURORA_TENANT_SETUP_COMPLETE },
-        ':expected': { S: SetupStatus.AURORA_TENANT_CREATED },
+        ':status': { S: OrgSetupStatus.AURORA_TENANT_SETUP_COMPLETE },
+        ':expected': { S: OrgSetupStatus.AURORA_TENANT_CREATED },
         ':now': { S: expect.any(String) },
       },
     });
@@ -111,7 +111,7 @@ describe('processTenantSetup', () => {
   it('runs only setup when status is AURORA_TENANT_CREATED', async () => {
     ddbMock.on(GetItemCommand).resolves(
       orgProfileItem({
-        setupStatus: { S: SetupStatus.AURORA_TENANT_CREATED },
+        setupStatus: { S: OrgSetupStatus.AURORA_TENANT_CREATED },
         auroraTenantId: { S: 'aurora-t-2' },
       }),
     );
@@ -126,14 +126,14 @@ describe('processTenantSetup', () => {
     const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0].args[0].input.ExpressionAttributeValues![':status']).toStrictEqual({
-      S: SetupStatus.AURORA_TENANT_SETUP_COMPLETE,
+      S: OrgSetupStatus.AURORA_TENANT_SETUP_COMPLETE,
     });
   });
 
   it('throws when setup lastSetupStep is not FINISHED', async () => {
     ddbMock.on(GetItemCommand).resolves(
       orgProfileItem({
-        setupStatus: { S: SetupStatus.AURORA_TENANT_CREATED },
+        setupStatus: { S: OrgSetupStatus.AURORA_TENANT_CREATED },
         auroraTenantId: { S: 'aurora-t-3' },
       }),
     );
