@@ -221,7 +221,6 @@ export default $config({
       auth0ClientSecret,
       stripeSecretKey,
       stripePriceId,
-      auroraBackofficeToken,
     ];
 
     const sharedEnv: Record<string, string> = {
