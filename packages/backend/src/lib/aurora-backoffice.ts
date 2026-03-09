@@ -86,6 +86,8 @@ async function findAuroraTenantByOrgId({
   const { data, error } = await getPartnersByPartnerIdTenants({
     client,
     path: { partnerId },
+    // TODO: paginate through all pages instead of assuming ≤1000 tenants
+    query: { pageSize: 1000 },
     throwOnError: false,
   });
 
