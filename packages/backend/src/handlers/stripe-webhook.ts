@@ -148,11 +148,12 @@ async function updateBillingRecord(tableName: string, userId: string, subscripti
         pk: { S: `CUSTOMER#${userId}` },
         sk: { S: 'SUBSCRIPTION' },
       },
-      UpdateExpression: 'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, updatedAt = :now REMOVE gracePeriodEndsAt, canceledAt',
+      UpdateExpression: 'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, currentPeriodStart = :periodStart, updatedAt = :now REMOVE gracePeriodEndsAt, canceledAt',
       ExpressionAttributeValues: {
         ':subId': { S: subscription.id },
         ':status': { S: subscription.status },
         ':periodEnd': { S: new Date((subscription.items.data[0]?.current_period_end ?? 0) * 1000).toISOString() },
+        ':periodStart': { S: new Date((subscription.items.data[0]?.current_period_start ?? 0) * 1000).toISOString() },
         ':now': { S: new Date().toISOString() },
       },
     }),

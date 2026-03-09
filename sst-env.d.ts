@@ -46,6 +46,22 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "AuroraApiKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "AuroraBaseUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "PartnerId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "StripeMeterEventName": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "StripePriceId": {
       "type": "sst.sst.Secret"
       "value": string
@@ -53,6 +69,14 @@ declare module "sst" {
     "StripeSecretKey": {
       "type": "sst.sst.Secret"
       "value": string
+    }
+    "UsageReportingOrchestrator": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "UsageReportingWorker": {
+      "name": string
+      "type": "sst.aws.Function"
     }
     "UploadsTable": {
       "name": string
