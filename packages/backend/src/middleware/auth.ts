@@ -100,7 +100,7 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
   const userId = uuidv4();
   const orgId = uuidv4();
   // TODO: Improve the org display name (e.g. use the user's organization name from Auth0)
-  const displayName = email ? `${email}'s organization` : orgId;
+  const orgName = (email && email.split('@')[1]) ?? 'My Organization';
   const now = new Date().toISOString();
 
   await dynamo.send(
@@ -139,7 +139,7 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
             Item: {
               pk: { S: `ORG#${orgId}` },
               sk: { S: 'PROFILE' },
-              ...(email ? { name: { S: email.split('@')[1] ?? 'My Organization' } } : { name: { S: 'My Organization' } }),
+              name: { S: orgName },
               setupStatus: { S: SetupStatus.HYPERSPACE_ORG_CREATED },
               createdBy: { S: userId },
               createdAt: { S: now },
@@ -165,7 +165,7 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
   await sqsClient.send(
     new SendMessageCommand({
       QueueUrl: Resource.AuroraTenantSetupQueue.url,
-      MessageBody: JSON.stringify({ orgId, displayName }),
+      MessageBody: JSON.stringify({ orgId, orgName }),
       MessageGroupId: orgId,
       MessageDeduplicationId: orgId,
     }),

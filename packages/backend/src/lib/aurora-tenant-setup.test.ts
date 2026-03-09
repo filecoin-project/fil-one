@@ -53,7 +53,7 @@ describe('processTenantSetup', () => {
       orgProfileItem({ setupStatus: { S: SetupStatus.AURORA_TENANT_SETUP_COMPLETE } }),
     );
 
-    await processTenantSetup({ orgId: 'org-1', displayName: 'Test Org' });
+    await processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' });
 
     expect(mockCreateAuroraTenant).not.toHaveBeenCalled();
     expect(mockSetupAuroraTenant).not.toHaveBeenCalled();
@@ -68,7 +68,7 @@ describe('processTenantSetup', () => {
     mockCreateAuroraTenant.mockResolvedValue({ auroraTenantId: 'aurora-t-1' });
     mockSetupAuroraTenant.mockResolvedValue({ id: 'aurora-t-1', lastSetupStep: 'FINISHED' });
 
-    await processTenantSetup({ orgId: 'org-1', displayName: 'Test Org' });
+    await processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' });
 
     expect(mockCreateAuroraTenant).toHaveBeenCalledWith({
       orgId: 'org-1',
@@ -118,7 +118,7 @@ describe('processTenantSetup', () => {
     ddbMock.on(UpdateItemCommand).resolves({});
     mockSetupAuroraTenant.mockResolvedValue({ id: 'aurora-t-2', lastSetupStep: 'FINISHED' });
 
-    await processTenantSetup({ orgId: 'org-1', displayName: 'Test Org' });
+    await processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' });
 
     expect(mockCreateAuroraTenant).not.toHaveBeenCalled();
     expect(mockSetupAuroraTenant).toHaveBeenCalledWith({ tenantId: 'aurora-t-2' });
@@ -140,7 +140,7 @@ describe('processTenantSetup', () => {
     mockSetupAuroraTenant.mockResolvedValue({ id: 'aurora-t-3', lastSetupStep: 'WARM_TIER_ADDED' });
 
     await expect(
-      processTenantSetup({ orgId: 'org-1', displayName: 'Test Org' }),
+      processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' }),
     ).rejects.toThrow('Aurora tenant setup not finished for org org-1: lastSetupStep=WARM_TIER_ADDED');
   });
 
@@ -148,7 +148,7 @@ describe('processTenantSetup', () => {
     ddbMock.on(GetItemCommand).resolves({ Item: undefined });
 
     await expect(
-      processTenantSetup({ orgId: 'org-missing', displayName: 'Missing Org' }),
+      processTenantSetup({ orgId: 'org-missing', orgName: 'Missing Org' }),
     ).rejects.toThrow('Org profile not found for org org-missing');
   });
 });

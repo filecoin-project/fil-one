@@ -10,13 +10,13 @@ export const SetupStatus = {
 
 export interface AuroraTenantSetupMessage {
   orgId: string;
-  displayName: string;
+  orgName: string;
 }
 
 const dynamo = new DynamoDBClient({});
 
 export async function processTenantSetup(message: AuroraTenantSetupMessage): Promise<void> {
-  const { orgId, displayName } = message;
+  const { orgId, orgName } = message;
   const key = { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } };
 
   const { Item } = await dynamo.send(
@@ -34,7 +34,7 @@ export async function processTenantSetup(message: AuroraTenantSetupMessage): Pro
       return;
 
     case SetupStatus.HYPERSPACE_ORG_CREATED: {
-      const auroraTenantId = await createTenant(orgId, displayName, key);
+      const auroraTenantId = await createTenant(orgId, orgName, key);
       await runSetup(orgId, auroraTenantId, key);
       return;
     }

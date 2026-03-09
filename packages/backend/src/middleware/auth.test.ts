@@ -175,7 +175,7 @@ describe('authMiddleware', () => {
       expect(sqsCalls).toHaveLength(1);
       expect(sqsCalls[0].args[0].input).toStrictEqual({
         QueueUrl: MOCK_QUEUE_URL,
-        MessageBody: JSON.stringify({ orgId: MOCK_ORG_ID, displayName: `${MOCK_EMAIL}'s organization` }),
+        MessageBody: JSON.stringify({ orgId: MOCK_ORG_ID, orgName: 'example.com' }),
         MessageGroupId: MOCK_ORG_ID,
         MessageDeduplicationId: MOCK_ORG_ID,
       });

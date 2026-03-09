@@ -52,7 +52,7 @@ describe('aurora-tenant-setup-consumer handler', () => {
 
   it('delegates to processTenantSetup with parsed message body', async () => {
     mockProcessTenantSetup.mockResolvedValue(undefined);
-    const message = { orgId: 'org-1', displayName: 'Test Org' };
+    const message = { orgId: 'org-1', orgName: 'Test Org' };
 
     await handler(buildSQSEvent(message), buildContext());
 
@@ -63,7 +63,7 @@ describe('aurora-tenant-setup-consumer handler', () => {
     mockProcessTenantSetup.mockRejectedValue(new Error('setup failed'));
 
     await expect(
-      handler(buildSQSEvent({ orgId: 'org-1', displayName: 'Test Org' }), buildContext()),
+      handler(buildSQSEvent({ orgId: 'org-1', orgName: 'Test Org' }), buildContext()),
     ).rejects.toThrow('setup failed');
   });
 });
