@@ -313,6 +313,7 @@ export default $config({
     );
 
     // ── CloudWatch alarm on DLQ ──────────────────────────────────
+    // TODO: Rework this alarm to trigger alert in Grafana IRM
     new aws.cloudwatch.MetricAlarm("AuroraTenantSetupDlqAlarm", {
       alarmDescription: "Messages in tenant-setup DLQ — failed tenant setup needs investigation",
       namespace: "AWS/SQS",
