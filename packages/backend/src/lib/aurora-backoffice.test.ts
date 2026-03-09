@@ -11,12 +11,14 @@ vi.mock('./auth-secrets.js', () => ({
 }));
 
 const mockPostTenants = vi.fn((_options: Record<string, unknown>) => ({}));
+const mockGetTenants = vi.fn((_options: Record<string, unknown>) => ({}));
 const mockPostSetup = vi.fn((_options: Record<string, unknown>) => ({}));
 const mockCreateClient = vi.fn((_config: Record<string, unknown>) => 'mock-aurora-client');
 
 vi.mock('@hyperspace/aurora-backoffice-client', () => ({
   createClient: (config: Record<string, unknown>) => mockCreateClient(config),
   postPartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockPostTenants(options),
+  getPartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockGetTenants(options),
   postPartnersByPartnerIdTenantsByTenantIdSetup: (options: Record<string, unknown>) => mockPostSetup(options),
 }));
 
@@ -71,6 +73,43 @@ describe('createAuroraTenant', () => {
     await expect(
       createAuroraTenant({ orgId: 'org-456', displayName: 'Failing Org' }),
     ).rejects.toThrow('Aurora tenant creation failed for org org-456');
+  });
+
+  it('looks up existing tenant on 409 Conflict', async () => {
+    mockPostTenants.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Org already exists' },
+      response: { status: 409 },
+    });
+    mockGetTenants.mockResolvedValue({
+      data: {
+        tenants: [
+          { id: 'existing-tenant-id', name: 'org-123' },
+          { id: 'other-tenant', name: 'org-other' },
+        ],
+      },
+      error: undefined,
+    });
+
+    const result = await createAuroraTenant({ orgId: 'org-123', displayName: 'My Org' });
+
+    expect(result).toStrictEqual({ auroraTenantId: 'existing-tenant-id' });
+  });
+
+  it('throws when 409 but tenant not found in list', async () => {
+    mockPostTenants.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Org already exists' },
+      response: { status: 409 },
+    });
+    mockGetTenants.mockResolvedValue({
+      data: { tenants: [{ id: 'other-tenant', name: 'org-other' }] },
+      error: undefined,
+    });
+
+    await expect(
+      createAuroraTenant({ orgId: 'org-123', displayName: 'My Org' }),
+    ).rejects.toThrow('Aurora tenant already exists for org org-123 but lookup failed');
   });
 });
 

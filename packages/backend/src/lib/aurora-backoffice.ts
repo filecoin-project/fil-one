@@ -1,5 +1,6 @@
 import {
   createClient,
+  getPartnersByPartnerIdTenants,
   postPartnersByPartnerIdTenants,
   postPartnersByPartnerIdTenantsByTenantIdSetup,
 } from "@hyperspace/aurora-backoffice-client";
@@ -30,7 +31,7 @@ export async function createAuroraTenant({
     },
   });
 
-  const { data, error } = await postPartnersByPartnerIdTenants({
+  const { data, error, response } = await postPartnersByPartnerIdTenants({
     client,
     path: { partnerId },
     body: {
@@ -42,6 +43,17 @@ export async function createAuroraTenant({
   });
 
   if (error) {
+    const status = response?.status;
+    if (status === 409) {
+      console.log(`Aurora tenant already exists for org ${orgId}, looking up existing tenant`);
+      try {
+        return await findAuroraTenantByOrgId({ client, partnerId, orgId });
+      } catch (cause) {
+        throw new Error(`Aurora tenant already exists for org ${orgId} but lookup failed`, {
+          cause,
+        });
+      }
+    }
     console.error("Failed to create Aurora tenant:", error);
     throw new Error(`Aurora tenant creation failed for org ${orgId}`, { cause: error });
   }
@@ -53,6 +65,34 @@ export async function createAuroraTenant({
 
   console.log(`Aurora tenant created for org ${orgId}:`, JSON.stringify(data));
   return { auroraTenantId };
+}
+
+async function findAuroraTenantByOrgId({
+  client,
+  partnerId,
+  orgId,
+}: {
+  client: ReturnType<typeof createClient>;
+  partnerId: string;
+  orgId: string;
+}): Promise<CreateAuroraTenantResult> {
+  const { data, error } = await getPartnersByPartnerIdTenants({
+    client,
+    path: { partnerId },
+    throwOnError: false,
+  });
+
+  if (error) {
+    throw new Error(`Failed to list Aurora tenants for partner ${partnerId}`, { cause: error });
+  }
+
+  const tenant = data?.tenants?.find((t) => t.name === orgId);
+  if (!tenant?.id) {
+    throw new Error(`Aurora tenant not found for org ${orgId}`);
+  }
+
+  console.log(`Found Aurora tenant for org ${orgId}:`, JSON.stringify(tenant));
+  return { auroraTenantId: tenant.id };
 }
 
 export interface SetupAuroraTenantOptions {
