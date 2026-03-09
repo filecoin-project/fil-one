@@ -34,7 +34,8 @@ export async function processTenantSetup(message: AuroraTenantSetupMessage): Pro
     case SetupStatus.AURORA_TENANT_SETUP_COMPLETE:
       return;
 
-    case SetupStatus.HYPERSPACE_ORG_CREATED: {
+    case SetupStatus.HYPERSPACE_ORG_CREATED:
+    case undefined: {
       const auroraTenantId = await createTenant(orgId, orgName, key);
       await runSetup(orgId, auroraTenantId, key);
       return;
@@ -64,7 +65,7 @@ async function createTenant(
       TableName: Resource.UserInfoTable.name,
       Key: key,
       UpdateExpression: 'SET auroraTenantId = :tid, setupStatus = :status, updatedAt = :now',
-      ConditionExpression: 'setupStatus = :expected',
+      ConditionExpression: 'attribute_not_exists(setupStatus) OR setupStatus = :expected',
       ExpressionAttributeValues: {
         ':tid': { S: auroraTenantId },
         ':status': { S: SetupStatus.AURORA_TENANT_CREATED },

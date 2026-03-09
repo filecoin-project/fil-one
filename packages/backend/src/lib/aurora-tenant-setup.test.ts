@@ -85,7 +85,7 @@ describe('processTenantSetup', () => {
       TableName: 'UserInfoTable',
       Key: { pk: { S: 'ORG#org-1' }, sk: { S: 'PROFILE' } },
       UpdateExpression: 'SET auroraTenantId = :tid, setupStatus = :status, updatedAt = :now',
-      ConditionExpression: 'setupStatus = :expected',
+      ConditionExpression: 'attribute_not_exists(setupStatus) OR setupStatus = :expected',
       ExpressionAttributeValues: {
         ':tid': { S: 'aurora-t-1' },
         ':status': { S: SetupStatus.AURORA_TENANT_CREATED },
@@ -142,6 +142,21 @@ describe('processTenantSetup', () => {
     await expect(
       processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' }),
     ).rejects.toThrow('Aurora tenant setup not finished for org org-1: lastSetupStep=WARM_TIER_ADDED');
+  });
+
+  it('creates tenant and runs setup when setupStatus is undefined (pre-existing org)', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileItem({}));
+    ddbMock.on(UpdateItemCommand).resolves({});
+    mockCreateAuroraTenant.mockResolvedValue({ auroraTenantId: 'aurora-t-new' });
+    mockSetupAuroraTenant.mockResolvedValue({ id: 'aurora-t-new', lastSetupStep: 'FINISHED' });
+
+    await processTenantSetup({ orgId: 'org-1', orgName: 'Test Org' });
+
+    expect(mockCreateAuroraTenant).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      displayName: 'Test Org',
+    });
+    expect(mockSetupAuroraTenant).toHaveBeenCalledWith({ tenantId: 'aurora-t-new' });
   });
 
   it('throws when org profile is not found', async () => {
