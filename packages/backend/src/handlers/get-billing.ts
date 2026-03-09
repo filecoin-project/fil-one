@@ -3,7 +3,7 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
-import { PlanId, SubscriptionStatus } from '@hyperspace/shared';
+import { PlanId, SubscriptionStatus, TIB_BYTES } from '@hyperspace/shared';
 import type { BillingInfo, UsageInfo } from '@hyperspace/shared';
 import { Resource } from "sst";
 import { getStripeClient } from '../lib/stripe-client.js';
@@ -15,7 +15,6 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 const dynamo = new DynamoDBClient({});
 
-const TIB_BYTES = 1099511627776;
 const PRICE_PER_TIB_CENTS = 499;
 const TRIAL_STORAGE_LIMIT_BYTES = TIB_BYTES; // 1 TiB
 

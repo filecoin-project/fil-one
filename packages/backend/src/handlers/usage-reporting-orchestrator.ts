@@ -1,4 +1,4 @@
-import { DynamoDBClient, ScanCommand, BatchGetItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, ScanCommand, BatchGetItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { Resource } from 'sst';
@@ -24,7 +24,7 @@ export async function handler(): Promise<void> {
 
   // Step 1: Scan for active/trialing subscriptions
   const records: SubscriptionRecord[] = [];
-  let lastEvaluatedKey: Record<string, any> | undefined;
+  let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
 
   do {
     const result = await dynamo.send(

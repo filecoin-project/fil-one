@@ -1,6 +1,5 @@
+import { TIB_BYTES } from '@hyperspace/shared';
 import type { StorageSample } from './aurora-analytics-client.js';
-
-export const TIB_BYTES = 1_099_511_627_776;
 
 export interface UsageCalculationResult {
   averageBytesUsed: number;

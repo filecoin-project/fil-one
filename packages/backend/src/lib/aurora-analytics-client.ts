@@ -1,5 +1,6 @@
 import fetchRetry from 'fetch-retry';
 
+// TODO: Replace with @hyperspace/aurora-backoffice-client
 export interface StorageApiConfig {
   baseUrl: string;
   apiKey: string;
