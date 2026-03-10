@@ -25,9 +25,9 @@
     "aws-cdk-lib": "^2.241.0",
     "constructs": "^10.5.1",
     "oxfmt": "^0.36.0",
-    "oxlint": "^1.51.0",
+    "oxlint": "^1.52.0",
     "oxlint-tsgolint": "^0.16.0",
-    "sst": "^4.1.10"
+    "sst": "^4.2.4"
   },
   "engines": {
     "node": ">=24"

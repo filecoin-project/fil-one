@@ -98,6 +98,8 @@ describe('GET /api/me handler', () => {
         Item: {
           pk: { S: `ORG#${MOCK_ORG_ID}` },
           sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
           setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
         },
       });
@@ -108,6 +110,8 @@ describe('GET /api/me handler', () => {
       statusCode: 200,
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
         email: MOCK_EMAIL,
         auroraTenantReady: true,
       }),
@@ -124,6 +128,8 @@ describe('GET /api/me handler', () => {
         Item: {
           pk: { S: `ORG#${MOCK_ORG_ID}` },
           sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
           setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
         },
       });
@@ -134,6 +140,8 @@ describe('GET /api/me handler', () => {
       statusCode: 200,
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
         email: MOCK_EMAIL,
         auroraTenantReady: false,
       }),
@@ -150,6 +158,8 @@ describe('GET /api/me handler', () => {
         Item: {
           pk: { S: `ORG#${MOCK_ORG_ID}` },
           sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
         },
       });
 
@@ -159,6 +169,8 @@ describe('GET /api/me handler', () => {
       statusCode: 200,
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
         email: MOCK_EMAIL,
         auroraTenantReady: false,
       }),

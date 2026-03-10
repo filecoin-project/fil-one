@@ -1,4 +1,4 @@
-import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { GetItemCommand } from '@aws-sdk/client-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
@@ -10,13 +10,13 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
-
-const dynamo = new DynamoDBClient({});
+import { suggestOrgName } from '../lib/suggest-org-name.js';
+import { getDynamoClient } from '../lib/ddb-client.js';
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
-  const { orgId, email } = getUserInfo(event);
+  const { userId, orgId, email } = getUserInfo(event);
 
-  const { Item } = await dynamo.send(
+  const { Item } = await getDynamoClient().send(
     new GetItemCommand({
       TableName: Resource.UserInfoTable.name,
       Key: {
@@ -27,12 +27,21 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   );
 
   const setupStatus = Item?.setupStatus?.S;
+  const orgName = Item?.name?.S ?? '';
+  const orgConfirmed = Item?.orgConfirmed?.BOOL === true;
 
   const body: MeResponse = {
     orgId,
+    orgName,
+    orgConfirmed,
     email,
     auroraTenantReady: setupStatus === OrgSetupStatus.AURORA_TENANT_SETUP_COMPLETE,
   };
+
+  // Only include suggested name if org is not yet confirmed
+  if (!orgConfirmed) {
+    body.suggestedOrgName = suggestOrgName(email, userId);
+  }
 
   return new ResponseBuilder().status(200).body(body).build();
 }
