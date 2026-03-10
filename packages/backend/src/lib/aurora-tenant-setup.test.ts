@@ -138,7 +138,7 @@ describe('processTenantSetup', () => {
     const ssmCalls = ssmMock.commandCalls(PutParameterCommand);
     expect(ssmCalls).toHaveLength(1);
     expect(ssmCalls[0].args[0].input).toStrictEqual({
-      Name: '/hyperspace/test/aurora-api-key/org-1',
+      Name: '/hyperspace/test/aurora-portal/tenant-api-key/aurora-t-1',
       Value: 'atp_secret',
       Type: 'SecureString',
       Overwrite: true,
@@ -205,7 +205,7 @@ describe('processTenantSetup', () => {
     const ssmCalls = ssmMock.commandCalls(PutParameterCommand);
     expect(ssmCalls).toHaveLength(1);
     expect(ssmCalls[0].args[0].input).toStrictEqual({
-      Name: '/hyperspace/test/aurora-api-key/org-1',
+      Name: '/hyperspace/test/aurora-portal/tenant-api-key/aurora-t-3',
       Value: 'atp_key3',
       Type: 'SecureString',
       Overwrite: true,

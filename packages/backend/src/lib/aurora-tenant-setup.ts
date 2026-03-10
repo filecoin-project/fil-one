@@ -124,7 +124,7 @@ async function createAndStoreApiKey(
 
   await ssm.send(
     new PutParameterCommand({
-      Name: `/hyperspace/${stage}/aurora-api-key/${orgId}`,
+      Name: `/hyperspace/${stage}/aurora-portal/tenant-api-key/${auroraTenantId}`,
       Value: token,
       Type: 'SecureString',
       Overwrite: true,

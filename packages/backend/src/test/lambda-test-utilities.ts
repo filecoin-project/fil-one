@@ -5,6 +5,7 @@ import type { AuthenticatedEvent, UserInfo } from '../lib/user-context.js';
 type NormalizedHeaderEvent = { headers: Record<string, string>; rawHeaders: Record<string, string> };
 
 interface BuildEventProps {
+  body?: string;
   cookies?: string[];
   userInfo?: UserInfo;
   queryStringParameters?: Record<string, string>;
@@ -39,6 +40,7 @@ export function buildEvent(props?: BuildEventProps): APIGatewayProxyEventV2 & No
       ...props?.requestContext,
     },
     isBase64Encoded: false,
+    ...(props?.body !== undefined ? { body: props.body } : {}),
     ...(props?.cookies ? { cookies: props.cookies } : {}),
   } as unknown as APIGatewayProxyEventV2 & NormalizedHeaderEvent;
 }

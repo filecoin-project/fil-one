@@ -247,6 +247,7 @@ export default $config({
       routePath: string,
       handler: string,
       extraEnv?: Record<string, $util.Input<string>>,
+      permissions?: sst.aws.FunctionPermissionArgs[],
     ) {
       api.route(`${method} ${routePath}`, {
         handler: `packages/backend/src/handlers/${handler}.handler`,
@@ -255,6 +256,7 @@ export default $config({
           ...sharedEnv,
           ...extraEnv,
         },
+        permissions,
         // TODO: Remove `as any` once SST adds nodejs24.x to its type definitions
         // eslint-disable-next-line typescript/no-explicit-any
       runtime: "nodejs24.x" as any,
@@ -265,7 +267,17 @@ export default $config({
     // ── Data routes ──────────────────────────────────────────────────
     addRoute("POST", "/api/upload", "upload");
     addRoute("GET", "/api/buckets", "list-buckets");
-    addRoute("POST", "/api/buckets", "create-bucket");
+    addRoute("POST", "/api/buckets", "create-bucket", {
+      AURORA_PORTAL_URL: auroraEnv.AURORA_PORTAL_URL,
+      HYPERSPACE_STAGE: $app.stage,
+    }, [
+      {
+        actions: ["ssm:GetParameter"],
+        resources: [
+          $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-portal/tenant-api-key/*`,
+        ],
+      },
+    ]);
     addRoute("DELETE", "/api/buckets/{name}", "delete-bucket");
     addRoute("GET", "/api/buckets/{name}/objects", "list-objects");
     addRoute("POST", "/api/buckets/{name}/objects/upload", "upload-object");
@@ -312,7 +324,7 @@ export default $config({
           {
             actions: ["ssm:PutParameter"],
             resources: [
-              $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-api-key/*`,
+              $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-portal/tenant-api-key/*`,
             ],
           },
         ],
