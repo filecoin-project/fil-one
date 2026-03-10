@@ -11,7 +11,13 @@ import { Resource } from 'sst';
 import type { UserInfo } from '../lib/user-context.js';
 import { ApiErrorCode, OrgRole } from '@hyperspace/shared';
 import type { ErrorResponse } from '@hyperspace/shared';
-import { COOKIE_NAMES, TOKEN_MAX_AGE, makeCookieHeader, makeHintCookieHeader, ResponseBuilder } from '../lib/response-builder.js';
+import {
+  COOKIE_NAMES,
+  TOKEN_MAX_AGE,
+  makeCookieHeader,
+  makeHintCookieHeader,
+  ResponseBuilder,
+} from '../lib/response-builder.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
 import { OrgSetupStatus } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
@@ -47,9 +53,7 @@ let cachedJWKS: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJWKS(domain: string): ReturnType<typeof createRemoteJWKSet> {
   if (cachedJWKS) return cachedJWKS;
-  cachedJWKS = createRemoteJWKSet(
-    new URL(`https://${domain}/.well-known/jwks.json`),
-  );
+  cachedJWKS = createRemoteJWKSet(new URL(`https://${domain}/.well-known/jwks.json`));
   return cachedJWKS;
 }
 
@@ -61,10 +65,7 @@ import { parseCookies } from '../lib/cookies.js';
 import { CSRF_COOKIE_NAME } from '@hyperspace/shared';
 
 function unauthorizedResponse(): APIGatewayProxyStructuredResultV2 {
-  return new ResponseBuilder()
-    .status(401)
-    .body<ErrorResponse>({ message: 'Unauthorized' })
-    .build();
+  return new ResponseBuilder().status(401).body<ErrorResponse>({ message: 'Unauthorized' }).build();
 }
 
 function orgNotConfirmedResponse(): APIGatewayProxyStructuredResultV2 {
@@ -225,7 +226,11 @@ export function authMiddleware() {
     const secrets = getAuthSecrets();
     const jwks = getJWKS(domain);
 
-    const hasCookies = { accessToken: !!accessToken, idToken: !!idToken, refreshToken: !!refreshToken };
+    const hasCookies = {
+      accessToken: !!accessToken,
+      idToken: !!idToken,
+      refreshToken: !!refreshToken,
+    };
     console.warn('[auth] Starting auth check', { hasCookies });
 
     // Step 1: Validate existing access token
