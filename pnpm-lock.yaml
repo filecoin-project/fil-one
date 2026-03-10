@@ -52,6 +52,15 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/aurora-portal-client:
+    devDependencies:
+      '@hey-api/openapi-ts':
+        specifier: 0.94.0
+        version: 0.94.0(magicast@0.5.2)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/backend:
     dependencies:
       '@aws-sdk/client-dynamodb':
