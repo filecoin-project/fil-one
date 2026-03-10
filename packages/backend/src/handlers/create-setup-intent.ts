@@ -19,7 +19,7 @@ const dynamo = new DynamoDBClient({});
 async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyResultV2> {
-  const { userId, email } = getUserInfo(event);
+  const { userId, email, orgId } = getUserInfo(event);
   const tableName = Resource.BillingTable.name;
   const stripe = getStripeClient();
 
@@ -55,6 +55,7 @@ async function baseHandler(
             pk: `CUSTOMER#${userId}`,
             sk: 'SUBSCRIPTION',
             stripeCustomerId,
+            orgId,
             subscriptionStatus: SubscriptionStatus.Trialing,
             trialStartedAt: record.trialStartedAt ?? new Date().toISOString(),
             trialEndsAt: record.trialEndsAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
@@ -78,6 +79,7 @@ async function baseHandler(
           pk: `CUSTOMER#${userId}`,
           sk: 'SUBSCRIPTION',
           stripeCustomerId,
+          orgId,
           subscriptionStatus: SubscriptionStatus.Trialing,
           trialStartedAt: new Date().toISOString(),
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),

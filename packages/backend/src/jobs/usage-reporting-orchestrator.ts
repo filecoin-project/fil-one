@@ -1,4 +1,4 @@
-import { DynamoDBClient, ScanCommand, BatchGetItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, ScanCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { Resource } from 'sst';
@@ -8,7 +8,7 @@ const dynamo = new DynamoDBClient({});
 const lambda = new LambdaClient({});
 
 interface SubscriptionRecord {
-  userId: string;
+  orgId: string;
   subscriptionId: string;
   stripeCustomerId: string;
   currentPeriodStart: string;
@@ -16,13 +16,12 @@ interface SubscriptionRecord {
 
 export async function handler(): Promise<void> {
   const billingTableName = Resource.BillingTable.name;
-  const userInfoTableName = Resource.UserInfoTable.name;
   const workerFunctionName = process.env.USAGE_WORKER_FUNCTION_NAME!;
   const reportDate = new Date().toISOString().split('T')[0];
 
   console.log('[usage-orchestrator] Starting usage reporting', { reportDate });
 
-  // Step 1: Scan for active/trialing subscriptions
+  // Step 1: Scan for non-canceled subscriptions
   const records: SubscriptionRecord[] = [];
   let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
 
@@ -30,11 +29,10 @@ export async function handler(): Promise<void> {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: billingTableName,
-        FilterExpression: 'sk = :sk AND subscriptionStatus IN (:active, :trialing) AND attribute_exists(subscriptionId)',
+        FilterExpression: 'sk = :sk AND subscriptionStatus <> :canceled AND attribute_exists(subscriptionId)',
         ExpressionAttributeValues: {
           ':sk': { S: 'SUBSCRIPTION' },
-          ':active': { S: 'active' },
-          ':trialing': { S: 'trialing' },
+          ':canceled': { S: 'canceled' },
         },
         ...(lastEvaluatedKey ? { ExclusiveStartKey: lastEvaluatedKey } : {}),
       }),
@@ -42,15 +40,19 @@ export async function handler(): Promise<void> {
 
     for (const item of result.Items ?? []) {
       const record = unmarshall(item);
-      const userId = (record.pk as string).replace('CUSTOMER#', '');
+
+      if (!record.orgId) {
+        console.warn('[usage-orchestrator] Missing orgId, skipping', { pk: record.pk });
+        continue;
+      }
 
       if (!record.currentPeriodStart) {
-        console.warn('[usage-orchestrator] Missing currentPeriodStart, skipping', { userId });
+        console.warn('[usage-orchestrator] Missing currentPeriodStart, skipping', { orgId: record.orgId });
         continue;
       }
 
       records.push({
-        userId,
+        orgId: record.orgId as string,
         subscriptionId: record.subscriptionId as string,
         stripeCustomerId: record.stripeCustomerId as string,
         currentPeriodStart: record.currentPeriodStart as string,
@@ -64,69 +66,20 @@ export async function handler(): Promise<void> {
 
   if (records.length === 0) return;
 
-  // Step 2: Batch resolve orgIds from UserInfoTable
-  const userOrgMap = new Map<string, string>();
-  const userIds = records.map((r) => r.userId);
-
-  for (let i = 0; i < userIds.length; i += 100) {
-    const batch = userIds.slice(i, i + 100);
-    const keys = batch.map((uid) => ({
-      pk: { S: `USER#${uid}` },
-      sk: { S: 'PROFILE' },
-    }));
-
-    let unprocessedKeys: typeof keys | undefined = keys;
-    let retryCount = 0;
-
-    while (unprocessedKeys && unprocessedKeys.length > 0 && retryCount < 3) {
-      const batchResult = await dynamo.send(
-        new BatchGetItemCommand({
-          RequestItems: {
-            [userInfoTableName]: { Keys: unprocessedKeys },
-          },
-        }),
-      );
-
-      for (const item of batchResult.Responses?.[userInfoTableName] ?? []) {
-        const profile = unmarshall(item);
-        const uid = (profile.pk as string).replace('USER#', '');
-        if (profile.orgId) {
-          userOrgMap.set(uid, profile.orgId as string);
-        }
-      }
-
-      const remaining = batchResult.UnprocessedKeys?.[userInfoTableName]?.Keys;
-      unprocessedKeys = remaining as typeof keys | undefined;
-      if (unprocessedKeys && unprocessedKeys.length > 0) {
-        retryCount++;
-        await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
-      }
-    }
-  }
-
-  // Step 3: Build payloads, deduplicate by orgId
+  // Step 2: Build payloads, deduplicate by orgId
   const orgSeen = new Set<string>();
   const payloads: UsageReportingWorkerPayload[] = [];
-  let skippedNoOrg = 0;
   let skippedDuplicate = 0;
 
   for (const record of records) {
-    const orgId = userOrgMap.get(record.userId);
-    if (!orgId) {
-      console.warn('[usage-orchestrator] No orgId found, skipping', { userId: record.userId });
-      skippedNoOrg++;
-      continue;
-    }
-
-    if (orgSeen.has(orgId)) {
+    if (orgSeen.has(record.orgId)) {
       skippedDuplicate++;
       continue;
     }
-    orgSeen.add(orgId);
+    orgSeen.add(record.orgId);
 
     payloads.push({
-      userId: record.userId,
-      orgId,
+      orgId: record.orgId,
       subscriptionId: record.subscriptionId,
       stripeCustomerId: record.stripeCustomerId,
       currentPeriodStart: record.currentPeriodStart,
@@ -134,7 +87,7 @@ export async function handler(): Promise<void> {
     });
   }
 
-  // Step 4: Invoke workers
+  // Step 3: Invoke workers
   let invoked = 0;
   let failed = 0;
 
@@ -151,7 +104,6 @@ export async function handler(): Promise<void> {
     } catch (error) {
       failed++;
       console.error('[usage-orchestrator] Failed to invoke worker', {
-        userId: payload.userId,
         orgId: payload.orgId,
         error: (error as Error).message,
       });
@@ -163,7 +115,6 @@ export async function handler(): Promise<void> {
     uniqueOrgs: payloads.length,
     invoked,
     failed,
-    skippedNoOrg,
     skippedDuplicate,
   });
 }

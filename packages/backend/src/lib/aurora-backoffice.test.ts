@@ -193,7 +193,7 @@ describe('getStorageSamples', () => {
     ];
     mockGetStorage.mockResolvedValue({ data: { samples: mockSamples }, error: undefined });
 
-    const result = await getStorageSamples('tenant-1', '2024-01-01T00:00:00Z', '2024-01-02T00:00:00Z', '1h');
+    const result = await getStorageSamples({ tenantId: 'tenant-1', from: '2024-01-01T00:00:00Z', to: '2024-01-02T00:00:00Z', window: '1h' });
 
     expect(result).toEqual(mockSamples);
     expect(mockGetStorage).toHaveBeenCalledWith({
@@ -207,7 +207,7 @@ describe('getStorageSamples', () => {
   it('returns empty array when data has no samples', async () => {
     mockGetStorage.mockResolvedValue({ data: {}, error: undefined });
 
-    const result = await getStorageSamples('tenant-1', '2024-01-01T00:00:00Z', '2024-01-02T00:00:00Z');
+    const result = await getStorageSamples({ tenantId: 'tenant-1', from: '2024-01-01T00:00:00Z', to: '2024-01-02T00:00:00Z' });
 
     expect(result).toEqual([]);
   });
@@ -216,7 +216,7 @@ describe('getStorageSamples', () => {
     mockGetStorage.mockResolvedValue({ data: undefined, error: { message: 'Not found' } });
 
     await expect(
-      getStorageSamples('tenant-1', '2024-01-01T00:00:00Z', '2024-01-02T00:00:00Z'),
+      getStorageSamples({ tenantId: 'tenant-1', from: '2024-01-01T00:00:00Z', to: '2024-01-02T00:00:00Z' }),
     ).rejects.toThrow('Aurora storage API failed for tenant tenant-1');
   });
 });

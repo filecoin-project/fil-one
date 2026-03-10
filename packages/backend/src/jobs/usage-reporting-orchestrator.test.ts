@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, ScanCommand, BatchGetItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { marshall } from '@aws-sdk/util-dynamodb';
 
@@ -11,7 +11,6 @@ import { marshall } from '@aws-sdk/util-dynamodb';
 vi.mock('sst', () => ({
   Resource: {
     BillingTable: { name: 'BillingTable' },
-    UserInfoTable: { name: 'UserInfoTable' },
   },
 }));
 
@@ -26,24 +25,17 @@ import { handler } from './usage-reporting-orchestrator.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function subscriptionItem(userId: string, extra: Record<string, unknown> = {}) {
+function subscriptionItem(orgId: string, extra: Record<string, unknown> = {}) {
   return marshall({
-    pk: `CUSTOMER#${userId}`,
+    pk: `CUSTOMER#user-for-${orgId}`,
     sk: 'SUBSCRIPTION',
-    subscriptionId: `sub_${userId}`,
-    stripeCustomerId: `cus_${userId}`,
+    orgId,
+    subscriptionId: `sub_${orgId}`,
+    stripeCustomerId: `cus_${orgId}`,
     subscriptionStatus: 'active',
     currentPeriodStart: '2024-01-01T00:00:00Z',
     ...extra,
   }, { removeUndefinedValues: true });
-}
-
-function profileItem(userId: string, orgId: string) {
-  return marshall({
-    pk: `USER#${userId}`,
-    sk: 'PROFILE',
-    orgId,
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +58,7 @@ describe('usage-reporting-orchestrator', () => {
   });
 
   it('invokes worker for a single tenant', async () => {
-    ddbMock.on(ScanCommand).resolves({ Items: [subscriptionItem('user-1')] });
-    ddbMock.on(BatchGetItemCommand).resolves({
-      Responses: { UserInfoTable: [profileItem('user-1', 'org-1')] },
-    });
+    ddbMock.on(ScanCommand).resolves({ Items: [subscriptionItem('org-1')] });
     lambdaMock.on(InvokeCommand).resolves({});
 
     await handler();
@@ -77,19 +66,13 @@ describe('usage-reporting-orchestrator', () => {
     const invokeCalls = lambdaMock.commandCalls(InvokeCommand);
     expect(invokeCalls).toHaveLength(1);
     const payload = JSON.parse(Buffer.from(invokeCalls[0].args[0].input.Payload as Uint8Array).toString());
-    expect(payload.userId).toBe('user-1');
     expect(payload.orgId).toBe('org-1');
-    expect(payload.subscriptionId).toBe('sub_user-1');
+    expect(payload.subscriptionId).toBe('sub_org-1');
   });
 
   it('invokes worker for multiple tenants', async () => {
     ddbMock.on(ScanCommand).resolves({
-      Items: [subscriptionItem('user-1'), subscriptionItem('user-2')],
-    });
-    ddbMock.on(BatchGetItemCommand).resolves({
-      Responses: {
-        UserInfoTable: [profileItem('user-1', 'org-1'), profileItem('user-2', 'org-2')],
-      },
+      Items: [subscriptionItem('org-1'), subscriptionItem('org-2')],
     });
     lambdaMock.on(InvokeCommand).resolves({});
 
@@ -101,17 +84,12 @@ describe('usage-reporting-orchestrator', () => {
   it('handles paginated scan', async () => {
     ddbMock.on(ScanCommand)
       .resolvesOnce({
-        Items: [subscriptionItem('user-1')],
+        Items: [subscriptionItem('org-1')],
         LastEvaluatedKey: marshall({ pk: 'CUSTOMER#user-1', sk: 'SUBSCRIPTION' }),
       })
       .resolvesOnce({
-        Items: [subscriptionItem('user-2')],
+        Items: [subscriptionItem('org-2')],
       });
-    ddbMock.on(BatchGetItemCommand).resolves({
-      Responses: {
-        UserInfoTable: [profileItem('user-1', 'org-1'), profileItem('user-2', 'org-2')],
-      },
-    });
     lambdaMock.on(InvokeCommand).resolves({});
 
     await handler();
@@ -121,8 +99,9 @@ describe('usage-reporting-orchestrator', () => {
   });
 
   it('skips tenant with missing orgId', async () => {
-    ddbMock.on(ScanCommand).resolves({ Items: [subscriptionItem('user-1')] });
-    ddbMock.on(BatchGetItemCommand).resolves({ Responses: { UserInfoTable: [] } });
+    ddbMock.on(ScanCommand).resolves({
+      Items: [subscriptionItem('org-1', { orgId: undefined })],
+    });
     lambdaMock.on(InvokeCommand).resolves({});
 
     await handler();
@@ -132,10 +111,7 @@ describe('usage-reporting-orchestrator', () => {
 
   it('skips tenant with missing currentPeriodStart', async () => {
     ddbMock.on(ScanCommand).resolves({
-      Items: [subscriptionItem('user-1', { currentPeriodStart: undefined })],
-    });
-    ddbMock.on(BatchGetItemCommand).resolves({
-      Responses: { UserInfoTable: [profileItem('user-1', 'org-1')] },
+      Items: [subscriptionItem('org-1', { currentPeriodStart: undefined })],
     });
     lambdaMock.on(InvokeCommand).resolves({});
 
@@ -146,12 +122,7 @@ describe('usage-reporting-orchestrator', () => {
 
   it('continues when one Lambda invoke fails', async () => {
     ddbMock.on(ScanCommand).resolves({
-      Items: [subscriptionItem('user-1'), subscriptionItem('user-2')],
-    });
-    ddbMock.on(BatchGetItemCommand).resolves({
-      Responses: {
-        UserInfoTable: [profileItem('user-1', 'org-1'), profileItem('user-2', 'org-2')],
-      },
+      Items: [subscriptionItem('org-1'), subscriptionItem('org-2')],
     });
     lambdaMock.on(InvokeCommand)
       .rejectsOnce(new Error('invoke failed'))
@@ -162,14 +133,12 @@ describe('usage-reporting-orchestrator', () => {
     expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(2);
   });
 
-  it('deduplicates by orgId — two users same org = one worker invocation', async () => {
+  it('deduplicates by orgId — two records same org = one worker invocation', async () => {
     ddbMock.on(ScanCommand).resolves({
-      Items: [subscriptionItem('user-1'), subscriptionItem('user-2')],
-    });
-    ddbMock.on(BatchGetItemCommand).resolves({
-      Responses: {
-        UserInfoTable: [profileItem('user-1', 'shared-org'), profileItem('user-2', 'shared-org')],
-      },
+      Items: [
+        subscriptionItem('shared-org', { pk: 'CUSTOMER#user-1', subscriptionId: 'sub_1', stripeCustomerId: 'cus_1' }),
+        subscriptionItem('shared-org', { pk: 'CUSTOMER#user-2', subscriptionId: 'sub_2', stripeCustomerId: 'cus_2' }),
+      ],
     });
     lambdaMock.on(InvokeCommand).resolves({});
 

@@ -8,7 +8,6 @@ import { calculateAverageUsage } from '../lib/usage-calculator.js';
 const dynamo = new DynamoDBClient({});
 
 export interface UsageReportingWorkerPayload {
-  userId: string;
   orgId: string;
   subscriptionId: string;
   stripeCustomerId: string;
@@ -17,16 +16,15 @@ export interface UsageReportingWorkerPayload {
 }
 
 export async function handler(event: UsageReportingWorkerPayload): Promise<void> {
-  const { userId, orgId, subscriptionId, stripeCustomerId, currentPeriodStart, reportDate } = event;
+  const { orgId, subscriptionId, stripeCustomerId, currentPeriodStart, reportDate } = event;
 
-  console.log('[usage-worker] Processing', { userId, orgId, subscriptionId, reportDate });
+  console.log('[usage-worker] Processing', { orgId, subscriptionId, reportDate });
 
   const now = new Date().toISOString();
-  const samples = await getStorageSamples(orgId, currentPeriodStart, now, '1h');
+  const samples = await getStorageSamples({ tenantId: orgId, from: currentPeriodStart, to: now, window: '1h' });
   const usage = calculateAverageUsage(samples);
 
   console.log('[usage-worker] Usage calculated', {
-    userId,
     orgId,
     sampleCount: usage.sampleCount,
     averageTib: usage.averageTib,
@@ -51,7 +49,7 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
     new PutItemCommand({
       TableName: Resource.BillingTable.name,
       Item: marshall({
-        pk: `CUSTOMER#${userId}`,
+        pk: `ORG#${orgId}`,
         sk: `USAGE_REPORT#${reportDate}`,
         orgId,
         subscriptionId,
@@ -68,5 +66,5 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
     }),
   );
 
-  console.log('[usage-worker] Audit record written', { userId, reportDate });
+  console.log('[usage-worker] Audit record written', { orgId, reportDate });
 }

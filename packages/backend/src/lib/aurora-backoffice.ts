@@ -161,12 +161,19 @@ export async function setupAuroraTenant({
   return { id: data.id!, lastSetupStep: data.lastSetupStep! };
 }
 
-export async function getStorageSamples(
-  tenantId: string,
-  from: string,
-  to: string,
-  window: string = "1h",
-): Promise<ModelStorageMetricsSample[]> {
+export interface GetStorageSamplesOptions {
+  tenantId: string;
+  from: string;
+  to: string;
+  window?: string;
+}
+
+export async function getStorageSamples({
+  tenantId,
+  from,
+  to,
+  window = "1h",
+}: GetStorageSamplesOptions): Promise<ModelStorageMetricsSample[]> {
   const baseUrl = process.env.AURORA_BACKOFFICE_URL!;
   const partnerId = process.env.AURORA_PARTNER_ID!;
   const { AURORA_BACKOFFICE_TOKEN: token } = getAuroraBackofficeSecrets();

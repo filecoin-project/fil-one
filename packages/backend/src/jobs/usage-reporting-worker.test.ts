@@ -37,7 +37,6 @@ import { handler } from './usage-reporting-worker.js';
 // ---------------------------------------------------------------------------
 
 const basePayload: UsageReportingWorkerPayload = {
-  userId: 'user-1',
   orgId: 'org-1',
   subscriptionId: 'sub_123',
   stripeCustomerId: 'cus_123',
@@ -75,7 +74,7 @@ describe('usage-reporting-worker', () => {
     const putCalls = ddbMock.commandCalls(PutItemCommand);
     expect(putCalls).toHaveLength(1);
     const item = putCalls[0].args[0].input.Item!;
-    expect(item.pk).toEqual({ S: 'CUSTOMER#user-1' });
+    expect(item.pk).toEqual({ S: 'ORG#org-1' });
     expect(item.sk).toEqual({ S: 'USAGE_REPORT#2024-01-15' });
     expect(item.reportedToStripe).toEqual({ BOOL: true });
   });
@@ -118,7 +117,7 @@ describe('usage-reporting-worker', () => {
 
     const putCalls = ddbMock.commandCalls(PutItemCommand);
     const item = putCalls[0].args[0].input.Item!;
-    expect(item.pk).toEqual({ S: 'CUSTOMER#user-1' });
+    expect(item.pk).toEqual({ S: 'ORG#org-1' });
     expect(item.sk).toEqual({ S: 'USAGE_REPORT#2024-01-15' });
     expect(item.orgId).toEqual({ S: 'org-1' });
     expect(item.sampleCount).toEqual({ N: '2' });

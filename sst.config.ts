@@ -331,7 +331,7 @@ export default $config({
 
     // ── Usage reporting (cron-based) ────────────────────────────────
     const usageWorker = new sst.aws.Function("UsageReportingWorker", {
-      handler: "packages/backend/src/handlers/usage-reporting-worker.handler",
+      handler: "packages/backend/src/jobs/usage-reporting-worker.handler",
       link: [billingTable, stripeSecretKey, stripeMeterEventName, auroraBackofficeToken],
       environment: { ...auroraEnv },
       // eslint-disable-next-line typescript/no-explicit-any
@@ -341,8 +341,8 @@ export default $config({
     });
 
     const usageOrchestrator = new sst.aws.Function("UsageReportingOrchestrator", {
-      handler: "packages/backend/src/handlers/usage-reporting-orchestrator.handler",
-      link: [billingTable, userInfoTable],
+      handler: "packages/backend/src/jobs/usage-reporting-orchestrator.handler",
+      link: [billingTable],
       environment: { USAGE_WORKER_FUNCTION_NAME: usageWorker.name },
       // eslint-disable-next-line typescript/no-explicit-any
       runtime: "nodejs24.x" as any,
