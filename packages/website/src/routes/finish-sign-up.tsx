@@ -26,7 +26,7 @@ function FinishSignUpRoute() {
       .then((data) => {
         if (data.orgConfirmed) {
           // Already confirmed — go to dashboard
-          navigate({ to: '/dashboard' });
+          void navigate({ to: '/dashboard' });
           return;
         }
         setMe(data);

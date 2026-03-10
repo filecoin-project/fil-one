@@ -32,7 +32,7 @@ function AppWithOrgGuard() {
   // Listen for org:not-confirmed events from API calls during the session
   useEffect(() => {
     function handleOrgNotConfirmed() {
-      navigate({ to: '/finish-sign-up' });
+      void navigate({ to: '/finish-sign-up' });
     }
     window.addEventListener('org:not-confirmed', handleOrgNotConfirmed);
     return () => window.removeEventListener('org:not-confirmed', handleOrgNotConfirmed);
