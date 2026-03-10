@@ -16,9 +16,7 @@ import { sqsClient } from '../lib/sqs-client.js';
 import { OrgSetupStatus } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
 
-async function baseHandler(
-  event: AuthenticatedEvent,
-): Promise<APIGatewayProxyResultV2> {
+async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { orgId } = getUserInfo(event);
   const body = JSON.parse(event.body ?? '{}') as Partial<ConfirmOrgRequest>;
 

@@ -45,10 +45,5 @@ function FinishSignUpRoute() {
     );
   }
 
-  return (
-    <FinishSignUpPage
-      me={me}
-      onComplete={() => navigate({ to: '/dashboard' })}
-    />
-  );
+  return <FinishSignUpPage me={me} onComplete={() => navigate({ to: '/dashboard' })} />;
 }

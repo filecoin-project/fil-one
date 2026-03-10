@@ -22,7 +22,6 @@ import { getAuthSecrets } from '../lib/auth-secrets.js';
 import { OrgSetupStatus } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
 
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -82,10 +81,7 @@ function orgNotConfirmedResponse(): APIGatewayProxyStructuredResultV2 {
  * Routes that are allowed through even when the user's org is not yet confirmed.
  * All other authenticated routes will return 403 ORG_NOT_CONFIRMED.
  */
-const ORG_CONFIRM_BYPASS_ROUTES = new Set([
-  '/api/me',
-  '/api/org/confirm',
-]);
+const ORG_CONFIRM_BYPASS_ROUTES = new Set(['/api/me', '/api/org/confirm']);
 
 // ---------------------------------------------------------------------------
 // Sub → userId + orgId resolution via UserInfoTable
@@ -98,7 +94,10 @@ interface ResolvedIdentity {
   email?: string;
 }
 
-async function resolveUserAndOrg(sub: string, email: string | undefined): Promise<ResolvedIdentity> {
+async function resolveUserAndOrg(
+  sub: string,
+  email: string | undefined,
+): Promise<ResolvedIdentity> {
   const tableName = Resource.UserInfoTable.name;
 
   // Look up existing mapping
@@ -240,7 +239,9 @@ export function authMiddleware() {
         const sub = payload.sub!;
         const email = payload.email as string | undefined;
         const resolved = await resolveUserAndOrg(sub, email);
-        (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
+        (
+          event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }
+        ).userInfo = {
           userId: resolved.userId,
           orgId: resolved.orgId,
           email: resolved.email,
@@ -286,7 +287,11 @@ export function authMiddleware() {
           const refreshedSub = refreshedPayload.sub!;
           const refreshedEmail = refreshedPayload.email as string | undefined;
           const refreshedResolved = await resolveUserAndOrg(refreshedSub, refreshedEmail);
-          (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
+          (
+            event.requestContext as APIGatewayProxyEventV2['requestContext'] & {
+              userInfo: UserInfo;
+            }
+          ).userInfo = {
             userId: refreshedResolved.userId,
             orgId: refreshedResolved.orgId,
             email: refreshedResolved.email,

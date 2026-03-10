@@ -67,8 +67,7 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
           {/* Logged-in banner */}
           {me.email && (
             <p className="text-sm text-zinc-500">
-              Logged in as <span className="font-medium text-zinc-700">{me.email}</span>.{' '}
-              Not you?{' '}
+              Logged in as <span className="font-medium text-zinc-700">{me.email}</span>. Not you?{' '}
               <button
                 type="button"
                 onClick={logout}
@@ -81,9 +80,7 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
 
           {/* Heading */}
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold text-zinc-950">
-              Finish setting up your account
-            </h1>
+            <h1 className="text-2xl font-semibold text-zinc-950">Finish setting up your account</h1>
             <p className="text-sm text-zinc-500">
               Give your organization a name to get started. You can change this later in settings.
             </p>
@@ -105,12 +102,8 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
                 autoFocus
                 autoComplete="organization"
               />
-              {error && (
-                <p className="text-xs text-red-600">{error}</p>
-              )}
-              <p className="text-xs text-zinc-500">
-                This is the name of your team or company.
-              </p>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <p className="text-xs text-zinc-500">This is the name of your team or company.</p>
             </div>
 
             <Button
@@ -136,8 +129,8 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
         </h2>
 
         <p className="mb-10 max-w-sm text-center text-base text-zinc-600">
-          S3-compatible storage on Filecoin. Set up your organization to start
-          storing objects with verifiable content addressing.
+          S3-compatible storage on Filecoin. Set up your organization to start storing objects with
+          verifiable content addressing.
         </p>
 
         <ul className="mb-12 flex w-full max-w-sm flex-col gap-4">

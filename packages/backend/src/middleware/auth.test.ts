@@ -133,17 +133,19 @@ describe('authMiddleware', () => {
           },
         });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          pk: { S: `ORG#${existingOrgId}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'example.com' },
-          orgConfirmed: { BOOL: true },
-          setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `ORG#${existingOrgId}` },
+            sk: { S: 'PROFILE' },
+            name: { S: 'example.com' },
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
@@ -188,17 +190,19 @@ describe('authMiddleware', () => {
           },
         });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          pk: { S: `ORG#${existingOrgId}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'example.com' },
-          orgConfirmed: { BOOL: false },
-          setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `ORG#${existingOrgId}` },
+            sk: { S: 'PROFILE' },
+            name: { S: 'example.com' },
+            orgConfirmed: { BOOL: false },
+            setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
@@ -222,29 +226,33 @@ describe('authMiddleware', () => {
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
       });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-      }).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: existingUserId },
-          orgId: { S: existingOrgId },
-          email: { S: MOCK_EMAIL },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: existingUserId },
+            orgId: { S: existingOrgId },
+            email: { S: MOCK_EMAIL },
+          },
+        });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          pk: { S: `ORG#${existingOrgId}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'example.com' },
-          orgConfirmed: { BOOL: false },
-          setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `ORG#${existingOrgId}` },
+            sk: { S: 'PROFILE' },
+            name: { S: 'example.com' },
+            orgConfirmed: { BOOL: false },
+            setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
@@ -370,25 +378,29 @@ describe('authMiddleware', () => {
         email: MOCK_EMAIL,
       });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-      }).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: existingUserId },
-          orgId: { S: existingOrgId },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: existingUserId },
+            orgId: { S: existingOrgId },
+          },
+        });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          orgConfirmed: { BOOL: true },
-          setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
@@ -454,25 +466,29 @@ describe('authMiddleware', () => {
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
       });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-      }).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: 'some-user' },
-          orgId: { S: 'some-org' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: 'some-user' },
+            orgId: { S: 'some-org' },
+          },
+        });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#some-org` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          orgConfirmed: { BOOL: true },
-          setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#some-org` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+          },
+        });
 
       const { before } = authMiddleware();
       const request = buildMiddyRequest(

@@ -55,10 +55,7 @@ const MOCK_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/123/setup-queue';
 
 function confirmOrgEvent(body: unknown) {
   return buildEvent({
-    cookies: [
-      `hs_access_token=valid-token`,
-      `hs_csrf_token=${MOCK_CSRF_TOKEN}`,
-    ],
+    cookies: [`hs_access_token=valid-token`, `hs_csrf_token=${MOCK_CSRF_TOKEN}`],
     userInfo: { userId: MOCK_USER_ID, orgId: MOCK_ORG_ID, email: MOCK_EMAIL },
     body: JSON.stringify(body),
     method: 'POST',
@@ -81,32 +78,36 @@ describe('POST /api/org/confirm handler', () => {
     });
 
     // Auth middleware: resolve existing user
-    ddbMock.on(GetItemCommand, {
-      TableName: 'UserInfoTable',
-      Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-    }).resolves({
-      Item: {
-        pk: { S: `SUB#${MOCK_SUB}` },
-        sk: { S: 'IDENTITY' },
-        userId: { S: MOCK_USER_ID },
-        orgId: { S: MOCK_ORG_ID },
-        email: { S: MOCK_EMAIL },
-      },
-    });
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `SUB#${MOCK_SUB}` },
+          sk: { S: 'IDENTITY' },
+          userId: { S: MOCK_USER_ID },
+          orgId: { S: MOCK_ORG_ID },
+          email: { S: MOCK_EMAIL },
+        },
+      });
 
     // Auth middleware: org profile (not yet confirmed — this route is in bypass list)
-    ddbMock.on(GetItemCommand, {
-      TableName: 'UserInfoTable',
-      Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-    }).resolves({
-      Item: {
-        pk: { S: `ORG#${MOCK_ORG_ID}` },
-        sk: { S: 'PROFILE' },
-        name: { S: 'example.com' },
-        orgConfirmed: { BOOL: false },
-        setupStatus: { S: OrgSetupStatus.HYPERSPACE_ORG_CREATED },
-      },
-    });
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'example.com' },
+          orgConfirmed: { BOOL: false },
+          setupStatus: { S: OrgSetupStatus.HYPERSPACE_ORG_CREATED },
+        },
+      });
 
     ddbMock.on(UpdateItemCommand).resolves({
       Attributes: {

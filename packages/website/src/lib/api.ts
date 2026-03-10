@@ -104,10 +104,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
 
 // ── Me / Org API ────────────────────────────────────────────────────────
 
-import type {
-  MeResponse,
-  ConfirmOrgResponse,
-} from '@hyperspace/shared';
+import type { MeResponse, ConfirmOrgResponse } from '@hyperspace/shared';
 
 export function getMe(): Promise<MeResponse> {
   return apiRequest<MeResponse>('/me');

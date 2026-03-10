@@ -289,7 +289,7 @@ export default $config({
     addRoute('GET', '/api/me', 'get-me');
 
     // ── Org routes ──────────────────────────────────────────────────
-    addRoute("POST", "/api/org/confirm", "confirm-org");
+    addRoute('POST', '/api/org/confirm', 'confirm-org');
 
     // ── Billing routes ───────────────────────────────────────────────
     addRoute('GET', '/api/billing', 'get-billing');

@@ -13,9 +13,7 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 import { suggestOrgName } from '../lib/suggest-org-name.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
 
-async function baseHandler(
-  event: AuthenticatedEvent,
-): Promise<APIGatewayProxyResultV2> {
+async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { userId, orgId, email } = getUserInfo(event);
 
   const { Item } = await getDynamoClient().send(
