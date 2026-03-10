@@ -33,7 +33,9 @@ const MOCK_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/123/setup-queue';
 
 let uuidCallCount = 0;
 const MOCK_UUIDS = [MOCK_USER_ID, MOCK_ORG_ID];
-vi.spyOn(crypto, 'randomUUID').mockImplementation(() => MOCK_UUIDS[uuidCallCount++] as `${string}-${string}-${string}-${string}-${string}`);
+vi.spyOn(crypto, 'randomUUID').mockImplementation(
+  () => MOCK_UUIDS[uuidCallCount++] as `${string}-${string}-${string}-${string}-${string}`,
+);
 
 vi.mock('sst', () => ({
   Resource: {
