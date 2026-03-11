@@ -14,11 +14,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Enable pnpm via Corepack
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          corepack enable --install-directory "$HOME/.local/bin" pnpm
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@9b5745cdf0a2e8c2620f0746130f809adb911c19
 
       - uses: actions/setup-node@v5
         with:
@@ -60,7 +56,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@9b5745cdf0a2e8c2620f0746130f809adb911c19
 
       - uses: actions/setup-node@v4
         with:
