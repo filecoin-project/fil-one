@@ -7,7 +7,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
   Context,
 } from 'aws-lambda';
-import { SubscriptionStatus } from '@hyperspace/shared';
+import { ApiErrorCode, SubscriptionStatus } from '@hyperspace/shared';
 import { Resource } from 'sst';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -110,7 +110,7 @@ export function subscriptionGuardMiddleware(accessLevel: AccessLevel) {
           .status(403)
           .body({
             message: 'Your subscription has been canceled. Please reactivate to regain access.',
-            code: 'SUBSCRIPTION_CANCELED',
+            code: ApiErrorCode.SUBSCRIPTION_CANCELED,
           })
           .build();
       }
@@ -121,7 +121,7 @@ export function subscriptionGuardMiddleware(accessLevel: AccessLevel) {
           .body({
             message:
               'Your account is in a grace period. Read-only access is available. Please reactivate your subscription to make changes.',
-            code: 'GRACE_PERIOD_WRITE_BLOCKED',
+            code: ApiErrorCode.GRACE_PERIOD_WRITE_BLOCKED,
           })
           .build();
       }
@@ -136,7 +136,7 @@ export function subscriptionGuardMiddleware(accessLevel: AccessLevel) {
         .status(403)
         .body({
           message: 'Your subscription has been canceled. Please reactivate to regain access.',
-          code: 'SUBSCRIPTION_CANCELED',
+          code: ApiErrorCode.SUBSCRIPTION_CANCELED,
         })
         .build();
     }

@@ -3,6 +3,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
+import { ApiErrorCode } from '@hyperspace/shared';
 import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 import { expectErrorResponse } from '../test/assert-helpers.js';
 
@@ -151,7 +152,7 @@ describe('subscriptionGuardMiddleware', () => {
     expectErrorResponse(result, 403, {
       message:
         'Your account is in a grace period. Read-only access is available. Please reactivate your subscription to make changes.',
-      code: 'GRACE_PERIOD_WRITE_BLOCKED',
+      code: ApiErrorCode.GRACE_PERIOD_WRITE_BLOCKED,
     });
   });
 
@@ -193,7 +194,7 @@ describe('subscriptionGuardMiddleware', () => {
 
     expectErrorResponse(result, 403, {
       message: 'Your subscription has been canceled. Please reactivate to regain access.',
-      code: 'SUBSCRIPTION_CANCELED',
+      code: ApiErrorCode.SUBSCRIPTION_CANCELED,
     });
 
     // Verify transition to canceled
@@ -246,7 +247,7 @@ describe('subscriptionGuardMiddleware', () => {
 
     expectErrorResponse(result, 403, {
       message: 'Your subscription has been canceled. Please reactivate to regain access.',
-      code: 'SUBSCRIPTION_CANCELED',
+      code: ApiErrorCode.SUBSCRIPTION_CANCELED,
     });
   });
 });

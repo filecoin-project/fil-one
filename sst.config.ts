@@ -195,10 +195,7 @@ export default $config({
           resources: [$interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/*`],
         },
       ],
-      // TODO: Remove `as any` once SST adds nodejs24.x to its type definitions
-      // this PR was merged: https://github.com/anomalyco/sst/pull/6243#ref-commit-6fb1396
-      // eslint-disable-next-line typescript/no-explicit-any
-      runtime: 'nodejs24.x' as any,
+      runtime: 'nodejs24.x',
       timeout: '30 seconds',
     });
 
@@ -265,9 +262,7 @@ export default $config({
           ...extraEnv,
         },
         permissions,
-        // TODO: Remove `as any` once SST adds nodejs24.x to its type definitions
-        // eslint-disable-next-line typescript/no-explicit-any
-        runtime: 'nodejs24.x' as any,
+        runtime: 'nodejs24.x',
         timeout: '10 seconds',
       });
     }
@@ -312,6 +307,9 @@ export default $config({
     // ── Me route ───────────────────────────────────────────────────
     addRoute('GET', '/api/me', 'get-me');
 
+    // ── Org routes ──────────────────────────────────────────────────
+    addRoute('POST', '/api/org/confirm', 'confirm-org');
+
     // ── Billing routes ───────────────────────────────────────────────
     addRoute('GET', '/api/billing', 'get-billing');
     addRoute('POST', '/api/billing/setup-intent', 'create-setup-intent');
@@ -338,8 +336,7 @@ export default $config({
             ],
           },
         ],
-        // eslint-disable-next-line typescript/no-explicit-any
-        runtime: 'nodejs24.x' as any,
+        runtime: 'nodejs24.x',
         timeout: '60 seconds',
       },
       { batch: { size: 1 } },

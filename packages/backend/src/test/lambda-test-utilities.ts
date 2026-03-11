@@ -13,6 +13,8 @@ interface BuildEventProps {
   userInfo?: UserInfo;
   queryStringParameters?: Record<string, string>;
   requestContext?: Partial<APIGatewayProxyEventV2['requestContext']>;
+  rawPath?: string;
+  method?: string;
 }
 
 export function buildEvent(
@@ -25,12 +27,13 @@ export function buildEvent(
   return {
     version: '2.0',
     routeKey: 'GET /test',
-    rawPath: '/test',
+    rawPath: props?.rawPath ?? '/test',
     rawQueryString: props?.queryStringParameters
       ? new URLSearchParams(props.queryStringParameters).toString()
       : '',
     headers: {},
     rawHeaders: {},
+    ...(props?.body !== undefined && { body: props.body }),
     ...(props?.queryStringParameters && { queryStringParameters: props.queryStringParameters }),
     requestContext: {
       accountId: '123',
@@ -38,8 +41,8 @@ export function buildEvent(
       domainName: 'test.execute-api.us-east-1.amazonaws.com',
       domainPrefix: 'test',
       http: {
-        method: 'GET',
-        path: '/test',
+        method: props?.method ?? 'GET',
+        path: props?.rawPath ?? '/test',
         protocol: 'HTTP/1.1',
         sourceIp: '127.0.0.1',
         userAgent: 'test',
