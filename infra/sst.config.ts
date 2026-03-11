@@ -13,6 +13,11 @@ export default $config({
 
     if (stage === 'staging') {
       awsProvider.allowedAccountIds = ['654654381893'];
+    } else if (stage === 'production') {
+      throw new Error(
+        'Production AWS account ID is not yet configured. ' +
+          'Set allowedAccountIds for the production stage before deploying.',
+      );
     }
 
     return {
@@ -29,7 +34,6 @@ export default $config({
     const github = new aws.iam.OpenIdConnectProvider('GithubOidcProvider', {
       url: 'https://token.actions.githubusercontent.com',
       clientIdLists: ['sts.amazonaws.com'],
-      thumbprintLists: ['ffffffffffffffffffffffffffffffffffffffff'],
     });
 
     // IAM Role for GitHub Actions
@@ -44,9 +48,13 @@ export default $config({
             Principal: { Federated: github.arn },
             Action: 'sts:AssumeRoleWithWebIdentity',
             Condition: {
-              StringLike: github.url.apply((url) => ({
-                [`${url}:sub`]: 'repo:filecoin-project/filhyperspace:*',
-              })),
+              StringLike: {
+                'token.actions.githubusercontent.com:sub':
+                  'repo:filecoin-project/filhyperspace:*',
+              },
+              StringEquals: {
+                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+              },
             },
           },
         ],
