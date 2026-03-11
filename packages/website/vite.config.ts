@@ -10,7 +10,7 @@ const uiSrc = path.resolve(__dirname, '../ui/src');
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, __dirname, '');
-  const proxyTarget = env.DEV_PROXY_TARGET; // e.g. https://staging.filhyperspace.com
+  const proxyTarget = env.DEV_PROXY_TARGET; // e.g. https://staging.fil.one
 
   return {
     plugins: [react(), tailwindcss(), basicSsl()],
@@ -27,22 +27,22 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: [
-        // @hyperspace/shared — resolve from source at dev time
+        // @filone/shared — resolve from source at dev time
         {
-          find: '@hyperspace/shared',
+          find: '@filone/shared',
           replacement: path.resolve(__dirname, '../shared/src/index.ts'),
         },
-        // @hyperspace/ui — specific non-component sub-paths first
-        { find: '@hyperspace/ui/utils', replacement: `${uiSrc}/utils/index.ts` },
-        { find: '@hyperspace/ui/styles', replacement: `${uiSrc}/styles/globals.css` },
+        // @filone/ui — specific non-component sub-paths first
+        { find: '@filone/ui/utils', replacement: `${uiSrc}/utils/index.ts` },
+        { find: '@filone/ui/styles', replacement: `${uiSrc}/styles/globals.css` },
         {
-          find: '@hyperspace/ui/constants/tailwindConstants',
+          find: '@filone/ui/constants/tailwindConstants',
           replacement: `${uiSrc}/constants/tailwindConstants.ts`,
         },
-        { find: '@hyperspace/ui/config/ui-config', replacement: `${uiSrc}/config/ui-config.ts` },
-        // @hyperspace/ui — general component sub-path fallback
-        // e.g. @hyperspace/ui/Button → src/components/Button.tsx
-        { find: /^@hyperspace\/ui\/(.+)/, replacement: `${uiSrc}/components/$1` },
+        { find: '@filone/ui/config/ui-config', replacement: `${uiSrc}/config/ui-config.ts` },
+        // @filone/ui — general component sub-path fallback
+        // e.g. @filone/ui/Button → src/components/Button.tsx
+        { find: /^@filone\/ui\/(.+)/, replacement: `${uiSrc}/components/$1` },
       ],
     },
   };

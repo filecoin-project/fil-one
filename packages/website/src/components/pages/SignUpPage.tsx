@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Input } from '@hyperspace/ui/Input';
-import { Button } from '@hyperspace/ui/Button';
-import { DividerWithLabel } from '@hyperspace/ui/DividerWithLabel';
+import { Input } from '@filone/ui/Input';
+import { Button } from '@filone/ui/Button';
+import { DividerWithLabel } from '@filone/ui/DividerWithLabel';
 import { redirectToLogin } from '../../lib/api.js';
 
 export function SignUpPage() {
@@ -20,7 +20,7 @@ export function SignUpPage() {
         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600 text-sm font-bold text-white">
           F
         </span>
-        <span className="text-sm font-semibold text-zinc-900">Fil Hyperspace</span>
+        <span className="text-sm font-semibold text-zinc-900">Fil.one</span>
       </div>
 
       {/* Heading */}

@@ -1,5 +1,5 @@
 import { DatabaseIcon, QuestionIcon, BellIcon, SignOutIcon } from '@phosphor-icons/react/dist/ssr';
-import { ProgressBar } from '@hyperspace/ui/ProgressBar';
+import { ProgressBar } from '@filone/ui/ProgressBar';
 import { logout } from '../lib/api.js';
 
 type AppHeaderProps = {

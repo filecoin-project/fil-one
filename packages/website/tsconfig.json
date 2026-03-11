@@ -8,12 +8,12 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "@hyperspace/shared": ["../shared/src/index.ts"],
-      "@hyperspace/ui/utils": ["../ui/src/utils/index.ts"],
-      "@hyperspace/ui/styles": ["../ui/src/styles/globals.css"],
-      "@hyperspace/ui/constants/tailwindConstants": ["../ui/src/constants/tailwindConstants.ts"],
-      "@hyperspace/ui/config/ui-config": ["../ui/src/config/ui-config.ts"],
-      "@hyperspace/ui/*": ["../ui/src/components/*"]
+      "@filone/shared": ["../shared/src/index.ts"],
+      "@filone/ui/utils": ["../ui/src/utils/index.ts"],
+      "@filone/ui/styles": ["../ui/src/styles/globals.css"],
+      "@filone/ui/constants/tailwindConstants": ["../ui/src/constants/tailwindConstants.ts"],
+      "@filone/ui/config/ui-config": ["../ui/src/config/ui-config.ts"],
+      "@filone/ui/*": ["../ui/src/components/*"]
     }
   },
   "include": ["src", "../shared/src"]
