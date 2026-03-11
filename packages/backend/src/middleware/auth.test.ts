@@ -7,8 +7,12 @@ import type {
   Context,
 } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
-import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  TransactWriteItemsCommand,
+} from '@aws-sdk/client-dynamodb';
+import { ApiErrorCode, OrgRole } from '@hyperspace/shared';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 import { expectErrorResponse } from '../test/assert-helpers.js';
@@ -21,7 +25,6 @@ const MOCK_USER_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const MOCK_ORG_ID = '11111111-2222-3333-4444-555555555555';
 const MOCK_SUB = 'auth0|abc123';
 const MOCK_EMAIL = 'user@example.com';
-const MOCK_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/123/setup-queue';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up before importing the module under test
@@ -29,9 +32,9 @@ const MOCK_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/123/setup-queue';
 
 let uuidCallCount = 0;
 const MOCK_UUIDS = [MOCK_USER_ID, MOCK_ORG_ID];
-vi.mock('uuid', () => ({
-  v4: () => MOCK_UUIDS[uuidCallCount++],
-}));
+vi.spyOn(crypto, 'randomUUID').mockImplementation(
+  () => MOCK_UUIDS[uuidCallCount++] as `${string}-${string}-${string}-${string}-${string}`,
+);
 
 vi.mock('sst', () => ({
   Resource: {
@@ -64,7 +67,6 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 const ddbMock = mockClient(DynamoDBClient);
-const sqsMock = mockClient(SQSClient);
 
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
@@ -96,7 +98,6 @@ describe('authMiddleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
-    sqsMock.reset();
     uuidCallCount = 0;
   });
 
@@ -118,28 +119,33 @@ describe('authMiddleware', () => {
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
       });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-      }).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: existingUserId },
-          orgId: { S: existingOrgId },
-          email: { S: MOCK_EMAIL },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: existingUserId },
+            orgId: { S: existingOrgId },
+            email: { S: MOCK_EMAIL },
+          },
+        });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          pk: { S: `ORG#${existingOrgId}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'example.com' },
-          setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `ORG#${existingOrgId}` },
+            sk: { S: 'PROFILE' },
+            name: { S: 'example.com' },
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
@@ -157,12 +163,12 @@ describe('authMiddleware', () => {
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: existingUserId,
         orgId: existingOrgId,
+
         email: MOCK_EMAIL,
       });
-      expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
     });
 
-    it('enqueues tenant setup when existing user org setup is not complete', async () => {
+    it('returns 403 ORG_NOT_CONFIRMED when org is not confirmed', async () => {
       const existingUserId = 'existing-user-uuid';
       const existingOrgId = 'existing-org-uuid';
 
@@ -170,30 +176,33 @@ describe('authMiddleware', () => {
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
       });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-      }).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: existingUserId },
-          orgId: { S: existingOrgId },
-          email: { S: MOCK_EMAIL },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: existingUserId },
+            orgId: { S: existingOrgId },
+            email: { S: MOCK_EMAIL },
+          },
+        });
 
-      ddbMock.on(GetItemCommand, {
-        Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
-      }).resolves({
-        Item: {
-          pk: { S: `ORG#${existingOrgId}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'example.com' },
-          setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
-        },
-      });
-
-      sqsMock.on(SendMessageCommand).resolves({});
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `ORG#${existingOrgId}` },
+            sk: { S: 'PROFILE' },
+            name: { S: 'example.com' },
+            orgConfirmed: { BOOL: false },
+            setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
@@ -203,20 +212,63 @@ describe('authMiddleware', () => {
 
       const result = await before(request);
 
+      expectErrorResponse(result, 403, {
+        message: 'Please create an organization to continue.',
+        code: ApiErrorCode.ORG_NOT_CONFIRMED,
+      });
+    });
+
+    it('allows bypass routes through when org is not confirmed', async () => {
+      const existingUserId = 'existing-user-uuid';
+      const existingOrgId = 'existing-org-uuid';
+
+      mockJwtVerify.mockResolvedValue({
+        payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
+      });
+
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: existingUserId },
+            orgId: { S: existingOrgId },
+            email: { S: MOCK_EMAIL },
+          },
+        });
+
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `ORG#${existingOrgId}` },
+            sk: { S: 'PROFILE' },
+            name: { S: 'example.com' },
+            orgConfirmed: { BOOL: false },
+            setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
+          },
+        });
+
+      const { before } = authMiddleware();
+      const event = buildEvent({
+        cookies: [`hs_access_token=valid-token`],
+        rawPath: '/api/me',
+      });
+      const request = buildMiddyRequest(event);
+
+      const result = await before(request);
+
       expect(result).toBeUndefined();
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: existingUserId,
         orgId: existingOrgId,
-        email: MOCK_EMAIL,
-      });
 
-      const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
-      expect(sqsCalls).toHaveLength(1);
-      expect(sqsCalls[0].args[0].input).toStrictEqual({
-        QueueUrl: MOCK_QUEUE_URL,
-        MessageBody: JSON.stringify({ orgId: existingOrgId, orgName: 'example.com' }),
-        MessageGroupId: existingOrgId,
-        MessageDeduplicationId: existingOrgId,
+        email: MOCK_EMAIL,
       });
     });
 
@@ -227,10 +279,10 @@ describe('authMiddleware', () => {
 
       ddbMock.on(GetItemCommand).resolves({ Item: undefined });
       ddbMock.on(TransactWriteItemsCommand).resolves({});
-      sqsMock.on(SendMessageCommand).resolves({});
 
       const { before } = authMiddleware();
-      const event = buildEvent({ cookies: [`hs_access_token=valid-token`] });
+      // Use bypass route so the handler proceeds (org is unconfirmed)
+      const event = buildEvent({ cookies: [`hs_access_token=valid-token`], rawPath: '/api/me' });
       const request = buildMiddyRequest(event);
 
       const result = await before(request);
@@ -239,16 +291,8 @@ describe('authMiddleware', () => {
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: MOCK_USER_ID,
         orgId: MOCK_ORG_ID,
-        email: MOCK_EMAIL,
-      });
 
-      const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
-      expect(sqsCalls).toHaveLength(1);
-      expect(sqsCalls[0].args[0].input).toStrictEqual({
-        QueueUrl: MOCK_QUEUE_URL,
-        MessageBody: JSON.stringify({ orgId: MOCK_ORG_ID, orgName: 'example.com' }),
-        MessageGroupId: MOCK_ORG_ID,
-        MessageDeduplicationId: MOCK_ORG_ID,
+        email: MOCK_EMAIL,
       });
 
       const transactCalls = ddbMock.commandCalls(TransactWriteItemsCommand);
@@ -291,6 +335,7 @@ describe('authMiddleware', () => {
               pk: { S: `ORG#${MOCK_ORG_ID}` },
               sk: { S: 'PROFILE' },
               name: { S: 'example.com' },
+              orgConfirmed: { BOOL: false },
               setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
               createdBy: { S: MOCK_USER_ID },
               createdAt: { S: expect.any(String) },
@@ -304,7 +349,7 @@ describe('authMiddleware', () => {
             Item: {
               pk: { S: `ORG#${MOCK_ORG_ID}` },
               sk: { S: `MEMBER#${MOCK_USER_ID}` },
-              role: { S: 'admin' },
+              role: { S: OrgRole.Admin },
               email: { S: MOCK_EMAIL },
               joinedAt: { S: expect.any(String) },
             },
@@ -333,21 +378,33 @@ describe('authMiddleware', () => {
         email: MOCK_EMAIL,
       });
 
-      ddbMock.on(GetItemCommand).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: existingUserId },
-          orgId: { S: existingOrgId },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: existingUserId },
+            orgId: { S: existingOrgId },
+          },
+        });
+
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${existingOrgId}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+          },
+        });
 
       const { before } = authMiddleware();
       const event = buildEvent({
-        cookies: [
-          `hs_access_token=expired-token`,
-          `hs_refresh_token=valid-refresh`,
-        ],
+        cookies: [`hs_access_token=expired-token`, `hs_refresh_token=valid-refresh`],
       });
       const request = buildMiddyRequest(event);
 
@@ -357,6 +414,7 @@ describe('authMiddleware', () => {
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: existingUserId,
         orgId: existingOrgId,
+
         email: MOCK_EMAIL,
       });
       expect(request.internal.newTokens).toEqual({
@@ -376,12 +434,11 @@ describe('authMiddleware', () => {
       });
 
       const { before } = authMiddleware();
-      const request = buildMiddyRequest(buildEvent({
-        cookies: [
-          `hs_access_token=expired`,
-          `hs_refresh_token=bad-refresh`,
-        ],
-      }));
+      const request = buildMiddyRequest(
+        buildEvent({
+          cookies: [`hs_access_token=expired`, `hs_refresh_token=bad-refresh`],
+        }),
+      );
 
       const result = await before(request);
 
@@ -393,12 +450,11 @@ describe('authMiddleware', () => {
       mockFetch.mockRejectedValue(new Error('network error'));
 
       const { before } = authMiddleware();
-      const request = buildMiddyRequest(buildEvent({
-        cookies: [
-          `hs_access_token=expired`,
-          `hs_refresh_token=some-refresh`,
-        ],
-      }));
+      const request = buildMiddyRequest(
+        buildEvent({
+          cookies: [`hs_access_token=expired`, `hs_refresh_token=some-refresh`],
+        }),
+      );
 
       const result = await before(request);
 
@@ -410,27 +466,43 @@ describe('authMiddleware', () => {
         payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
       });
 
-      ddbMock.on(GetItemCommand).resolves({
-        Item: {
-          pk: { S: `SUB#${MOCK_SUB}` },
-          sk: { S: 'IDENTITY' },
-          userId: { S: 'some-user' },
-          orgId: { S: 'some-org' },
-        },
-      });
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            pk: { S: `SUB#${MOCK_SUB}` },
+            sk: { S: 'IDENTITY' },
+            userId: { S: 'some-user' },
+            orgId: { S: 'some-org' },
+          },
+        });
+
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#some-org` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+          },
+        });
 
       const { before } = authMiddleware();
-      const request = buildMiddyRequest(buildEvent({
-        cookies: [' hs_access_token = my-token '],
-      }));
+      const request = buildMiddyRequest(
+        buildEvent({
+          cookies: [' hs_access_token = my-token '],
+        }),
+      );
 
       await before(request);
 
-      expect(mockJwtVerify).toHaveBeenCalledWith(
-        'my-token',
-        'mock-jwks',
-        { audience: process.env.AUTH0_AUDIENCE, issuer: `https://${process.env.AUTH0_DOMAIN}/` },
-      );
+      expect(mockJwtVerify).toHaveBeenCalledWith('my-token', 'mock-jwks', {
+        audience: process.env.AUTH0_AUDIENCE,
+        issuer: `https://${process.env.AUTH0_DOMAIN}/`,
+      });
     });
   });
 
@@ -456,11 +528,19 @@ describe('authMiddleware', () => {
 
       const cookies = response.cookies ?? [];
       expect(cookies).toHaveLength(5);
-      expect(cookies[0]).toBe('hs_access_token=new-at; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600');
-      expect(cookies[1]).toBe('hs_id_token=new-it; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600');
-      expect(cookies[2]).toBe('hs_refresh_token=new-rt; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000');
+      expect(cookies[0]).toBe(
+        'hs_access_token=new-at; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600',
+      );
+      expect(cookies[1]).toBe(
+        'hs_id_token=new-it; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600',
+      );
+      expect(cookies[2]).toBe(
+        'hs_refresh_token=new-rt; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000',
+      );
       expect(cookies[3]).toBe('hs_logged_in=1; Secure; SameSite=Lax; Path=/; Max-Age=2592000');
-      expect(cookies[4]).toMatch(/^hs_csrf_token=[a-f0-9-]+; Secure; SameSite=Lax; Path=\/; Max-Age=3600$/)
+      expect(cookies[4]).toMatch(
+        /^hs_csrf_token=[a-f0-9-]+; Secure; SameSite=Lax; Path=\/; Max-Age=3600$/,
+      );
     });
 
     it('does not modify response when no newTokens', async () => {

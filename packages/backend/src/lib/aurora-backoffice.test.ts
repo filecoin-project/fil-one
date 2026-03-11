@@ -13,20 +13,28 @@ vi.mock('./auth-secrets.js', () => ({
 const mockPostTenants = vi.fn((_options: Record<string, unknown>) => ({}));
 const mockGetTenants = vi.fn((_options: Record<string, unknown>) => ({}));
 const mockPostSetup = vi.fn((_options: Record<string, unknown>) => ({}));
+const mockPostTokens = vi.fn((_options: Record<string, unknown>) => ({}));
 const mockCreateClient = vi.fn((_config: Record<string, unknown>) => 'mock-aurora-client');
 
 vi.mock('@hyperspace/aurora-backoffice-client', () => ({
   createClient: (config: Record<string, unknown>) => mockCreateClient(config),
-  postPartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockPostTenants(options),
-  getPartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockGetTenants(options),
-  postPartnersByPartnerIdTenantsByTenantIdSetup: (options: Record<string, unknown>) => mockPostSetup(options),
+  postV1PartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockPostTenants(options),
+  getV1PartnersByPartnerIdTenants: (options: Record<string, unknown>) => mockGetTenants(options),
+  postV1PartnersByPartnerIdTenantsByTenantIdSetup: (options: Record<string, unknown>) =>
+    mockPostSetup(options),
+  postAuthV1PartnersByPartnerIdTenantsByTenantIdTokens: (options: Record<string, unknown>) =>
+    mockPostTokens(options),
 }));
 
-process.env.AURORA_BACKOFFICE_URL = 'https://api.backoffice.test.example.com/api/v1';
+process.env.AURORA_BACKOFFICE_URL = 'https://api.backoffice.test.example.com/api';
 process.env.AURORA_PARTNER_ID = 'test-partner';
 process.env.AURORA_REGION_ID = 'test-region';
 
-import { createAuroraTenant, setupAuroraTenant } from './aurora-backoffice.js';
+import {
+  createAuroraTenant,
+  setupAuroraTenant,
+  createAuroraTenantApiKey,
+} from './aurora-backoffice.js';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -51,7 +59,7 @@ describe('createAuroraTenant', () => {
     await createAuroraTenant({ orgId: 'org-123', displayName: 'My Org' });
 
     expect(mockCreateClient).toHaveBeenCalledWith({
-      baseUrl: 'https://api.backoffice.test.example.com/api/v1',
+      baseUrl: 'https://api.backoffice.test.example.com/api',
       headers: { 'X-Api-Key': 'test-aurora-token' },
     });
 
@@ -107,9 +115,9 @@ describe('createAuroraTenant', () => {
       error: undefined,
     });
 
-    await expect(
-      createAuroraTenant({ orgId: 'org-123', displayName: 'My Org' }),
-    ).rejects.toThrow('Aurora tenant already exists for org org-123 but lookup failed');
+    await expect(createAuroraTenant({ orgId: 'org-123', displayName: 'My Org' })).rejects.toThrow(
+      'Aurora tenant already exists for org org-123 but lookup failed',
+    );
   });
 });
 
@@ -149,7 +157,7 @@ describe('setupAuroraTenant', () => {
     await setupAuroraTenant({ tenantId: 'tenant-123' });
 
     expect(mockCreateClient).toHaveBeenCalledWith({
-      baseUrl: 'https://api.backoffice.test.example.com/api/v1',
+      baseUrl: 'https://api.backoffice.test.example.com/api',
       headers: { 'X-Api-Key': 'test-aurora-token' },
     });
 
@@ -164,16 +172,67 @@ describe('setupAuroraTenant', () => {
   it('throws when the Aurora API returns an error', async () => {
     mockPostSetup.mockResolvedValue({ data: undefined, error: { message: 'Setup failed' } });
 
-    await expect(
-      setupAuroraTenant({ tenantId: 'tenant-456' }),
-    ).rejects.toThrow('Aurora tenant setup failed for tenant tenant-456');
+    await expect(setupAuroraTenant({ tenantId: 'tenant-456' })).rejects.toThrow(
+      'Aurora tenant setup failed for tenant tenant-456',
+    );
   });
 
   it('throws when the Aurora API returns no data', async () => {
     mockPostSetup.mockResolvedValue({ data: undefined, error: undefined });
 
+    await expect(setupAuroraTenant({ tenantId: 'tenant-789' })).rejects.toThrow(
+      'Aurora API did not return setup data for tenant tenant-789',
+    );
+  });
+});
+
+describe('createAuroraTenantApiKey', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns token and tokenId on success', async () => {
+    mockPostTokens.mockResolvedValue({
+      data: { token: 'atp_secret123', id: 'token-id-1' },
+      error: undefined,
+      response: { status: 201 },
+    });
+
+    const result = await createAuroraTenantApiKey({
+      tenantId: 'tenant-1',
+      orgId: 'org-1',
+    });
+
+    expect(result).toStrictEqual({ token: 'atp_secret123', tokenId: 'token-id-1' });
+    expect(mockPostTokens).toHaveBeenCalledWith({
+      client: 'mock-aurora-client',
+      path: { partnerId: 'test-partner', tenantId: 'tenant-1' },
+      body: { name: 'hyperspace-org-1' },
+      throwOnError: false,
+    });
+  });
+
+  it('throws on API error', async () => {
+    mockPostTokens.mockResolvedValue({
+      data: undefined,
+      error: { message: 'forbidden' },
+      response: { status: 403 },
+    });
+
     await expect(
-      setupAuroraTenant({ tenantId: 'tenant-789' }),
-    ).rejects.toThrow('Aurora API did not return setup data for tenant tenant-789');
+      createAuroraTenantApiKey({ tenantId: 'tenant-1', orgId: 'org-1' }),
+    ).rejects.toThrow('Aurora API key creation failed for org org-1');
+  });
+
+  it('throws when response has no token field', async () => {
+    mockPostTokens.mockResolvedValue({
+      data: { id: 'token-id-1' },
+      error: undefined,
+      response: { status: 201 },
+    });
+
+    await expect(
+      createAuroraTenantApiKey({ tenantId: 'tenant-1', orgId: 'org-1' }),
+    ).rejects.toThrow('Aurora API did not return a token for org org-1: {"id":"token-id-1"}');
   });
 });

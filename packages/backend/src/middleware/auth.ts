@@ -5,17 +5,22 @@ import type {
   APIGatewayProxyStructuredResultV2,
   Context,
 } from 'aws-lambda';
-import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
-import { SendMessageCommand } from '@aws-sdk/client-sqs';
+import { GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
-import { v4 as uuidv4 } from 'uuid';
 import { Resource } from 'sst';
 import type { UserInfo } from '../lib/user-context.js';
+import { ApiErrorCode, OrgRole } from '@hyperspace/shared';
 import type { ErrorResponse } from '@hyperspace/shared';
-import { COOKIE_NAMES, TOKEN_MAX_AGE, makeCookieHeader, makeHintCookieHeader, ResponseBuilder } from '../lib/response-builder.js';
+import {
+  COOKIE_NAMES,
+  TOKEN_MAX_AGE,
+  makeCookieHeader,
+  makeHintCookieHeader,
+  ResponseBuilder,
+} from '../lib/response-builder.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
-import { SetupStatus } from '../lib/aurora-tenant-setup.js';
-import { sqsClient } from '../lib/sqs-client.js';
+import { OrgSetupStatus } from '../lib/org-setup-status.js';
+import { getDynamoClient } from '../lib/ddb-client.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,9 +52,7 @@ let cachedJWKS: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJWKS(domain: string): ReturnType<typeof createRemoteJWKSet> {
   if (cachedJWKS) return cachedJWKS;
-  cachedJWKS = createRemoteJWKSet(
-    new URL(`https://${domain}/.well-known/jwks.json`),
-  );
+  cachedJWKS = createRemoteJWKSet(new URL(`https://${domain}/.well-known/jwks.json`));
   return cachedJWKS;
 }
 
@@ -61,11 +64,24 @@ import { parseCookies } from '../lib/cookies.js';
 import { CSRF_COOKIE_NAME } from '@hyperspace/shared';
 
 function unauthorizedResponse(): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder().status(401).body<ErrorResponse>({ message: 'Unauthorized' }).build();
+}
+
+function orgNotConfirmedResponse(): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder()
-    .status(401)
-    .body<ErrorResponse>({ message: 'Unauthorized' })
+    .status(403)
+    .body<ErrorResponse>({
+      message: 'Please create an organization to continue.',
+      code: ApiErrorCode.ORG_NOT_CONFIRMED,
+    })
     .build();
 }
+
+/**
+ * Routes that are allowed through even when the user's org is not yet confirmed.
+ * All other authenticated routes will return 403 ORG_NOT_CONFIRMED.
+ */
+const ORG_CONFIRM_BYPASS_ROUTES = new Set(['/api/me', '/api/org/confirm']);
 
 // ---------------------------------------------------------------------------
 // Sub → userId + orgId resolution via UserInfoTable
@@ -74,15 +90,18 @@ function unauthorizedResponse(): APIGatewayProxyStructuredResultV2 {
 interface ResolvedIdentity {
   userId: string;
   orgId: string;
+  orgConfirmed: boolean;
+  email?: string;
 }
 
-const dynamo = new DynamoDBClient({});
-
-async function resolveUserAndOrg(sub: string, email: string | undefined): Promise<ResolvedIdentity> {
+async function resolveUserAndOrg(
+  sub: string,
+  email: string | undefined,
+): Promise<ResolvedIdentity> {
   const tableName = Resource.UserInfoTable.name;
 
   // Look up existing mapping
-  const result = await dynamo.send(
+  const result = await getDynamoClient().send(
     new GetItemCommand({
       TableName: tableName,
       Key: {
@@ -98,29 +117,27 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
   if (result.Item?.userId?.S && result.Item?.orgId?.S) {
     const userId = result.Item.userId.S;
     const orgId = result.Item.orgId.S;
+    // Prefer stored email from identity record, fall back to JWT email
+    const resolvedEmail = result.Item.email?.S ?? email;
 
-    const { Item: orgItem } = await dynamo.send(
+    const { Item: orgItem } = await getDynamoClient().send(
       new GetItemCommand({
         TableName: tableName,
         Key: { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } },
       }),
     );
 
-    await ensureTenantSetupEnqueued({
-      orgId,
-      orgName: orgItem?.name?.S ?? orgName,
-      setupStatus: orgItem?.setupStatus?.S,
-    });
+    const orgConfirmed = orgItem?.orgConfirmed?.BOOL === true;
 
-    return { userId, orgId };
+    return { userId, orgId, orgConfirmed, email: resolvedEmail };
   }
 
   // New user — create user, org, and membership records atomically
-  const userId = uuidv4();
-  const orgId = uuidv4();
+  const userId = crypto.randomUUID();
+  const orgId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  await dynamo.send(
+  await getDynamoClient().send(
     new TransactWriteItemsCommand({
       TransactItems: [
         {
@@ -157,7 +174,8 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
               pk: { S: `ORG#${orgId}` },
               sk: { S: 'PROFILE' },
               name: { S: orgName },
-              setupStatus: { S: SetupStatus.HYPERSPACE_ORG_CREATED },
+              orgConfirmed: { BOOL: false },
+              setupStatus: { S: OrgSetupStatus.HYPERSPACE_ORG_CREATED },
               createdBy: { S: userId },
               createdAt: { S: now },
             },
@@ -169,7 +187,7 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
             Item: {
               pk: { S: `ORG#${orgId}` },
               sk: { S: `MEMBER#${userId}` },
-              role: { S: 'admin' },
+              role: { S: OrgRole.Admin },
               ...(email ? { email: { S: email } } : {}),
               joinedAt: { S: now },
             },
@@ -179,34 +197,10 @@ async function resolveUserAndOrg(sub: string, email: string | undefined): Promis
     }),
   );
 
-  await ensureTenantSetupEnqueued({
-    orgId,
-    orgName,
-    setupStatus: SetupStatus.HYPERSPACE_ORG_CREATED,
-  });
+  // Do NOT enqueue tenant setup here — org is not yet confirmed.
+  // Tenant setup will be triggered when the user confirms their org via POST /api/org/confirm.
 
-  return { userId, orgId };
-}
-
-async function ensureTenantSetupEnqueued({
-  orgId,
-  orgName,
-  setupStatus,
-}: {
-  orgId: string;
-  orgName: string;
-  setupStatus: string | undefined;
-}): Promise<void> {
-  if (setupStatus === SetupStatus.AURORA_TENANT_SETUP_COMPLETE) return;
-
-  await sqsClient.send(
-    new SendMessageCommand({
-      QueueUrl: Resource.AuroraTenantSetupQueue.url,
-      MessageBody: JSON.stringify({ orgId, orgName }),
-      MessageGroupId: orgId,
-      MessageDeduplicationId: orgId,
-    }),
-  );
+  return { userId, orgId, orgConfirmed: false, email };
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +225,11 @@ export function authMiddleware() {
     const secrets = getAuthSecrets();
     const jwks = getJWKS(domain);
 
-    const hasCookies = { accessToken: !!accessToken, idToken: !!idToken, refreshToken: !!refreshToken };
+    const hasCookies = {
+      accessToken: !!accessToken,
+      idToken: !!idToken,
+      refreshToken: !!refreshToken,
+    };
     console.warn('[auth] Starting auth check', { hasCookies });
 
     // Step 1: Validate existing access token
@@ -240,12 +238,17 @@ export function authMiddleware() {
         const { payload } = await jwtVerify(accessToken, jwks, { audience, issuer });
         const sub = payload.sub!;
         const email = payload.email as string | undefined;
-        const { userId, orgId } = await resolveUserAndOrg(sub, email);
-        (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
-          userId,
-          orgId,
-          email,
+        const resolved = await resolveUserAndOrg(sub, email);
+        (
+          event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }
+        ).userInfo = {
+          userId: resolved.userId,
+          orgId: resolved.orgId,
+          email: resolved.email,
         };
+        if (!resolved.orgConfirmed && !ORG_CONFIRM_BYPASS_ROUTES.has(event.rawPath)) {
+          return orgNotConfirmedResponse();
+        }
         return; // Valid — continue to handler
       } catch (err) {
         // Expired or invalid — fall through to refresh
@@ -283,13 +286,20 @@ export function authMiddleware() {
           const refreshedPayload = decodeJwt(tokens.access_token);
           const refreshedSub = refreshedPayload.sub!;
           const refreshedEmail = refreshedPayload.email as string | undefined;
-          const { userId: refreshedUserId, orgId: refreshedOrgId } = await resolveUserAndOrg(refreshedSub, refreshedEmail);
-          (event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }).userInfo = {
-            userId: refreshedUserId,
-            orgId: refreshedOrgId,
-            email: refreshedEmail,
+          const refreshedResolved = await resolveUserAndOrg(refreshedSub, refreshedEmail);
+          (
+            event.requestContext as APIGatewayProxyEventV2['requestContext'] & {
+              userInfo: UserInfo;
+            }
+          ).userInfo = {
+            userId: refreshedResolved.userId,
+            orgId: refreshedResolved.orgId,
+            email: refreshedResolved.email,
           };
           console.warn('[auth] Token refresh succeeded');
+          if (!refreshedResolved.orgConfirmed && !ORG_CONFIRM_BYPASS_ROUTES.has(event.rawPath)) {
+            return orgNotConfirmedResponse();
+          }
           return; // Continue to handler
         }
         const refreshBody = await tokenRes.text().catch(() => '');

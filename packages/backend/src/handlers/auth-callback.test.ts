@@ -25,7 +25,7 @@ vi.stubGlobal('fetch', mockFetch);
 process.env.WEBSITE_URL = 'https://app.example.com';
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
-process.env.AUTH_CALLBACK_URL = 'https://api.test.com/auth/callback';
+process.env.ALLOWED_REDIRECT_ORIGINS = '';
 
 import { handler } from './auth-callback.js';
 
@@ -57,7 +57,9 @@ describe('auth-callback handler', () => {
       const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
-      expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=User%20cancelled');
+      expect(result.headers!['Location']).toBe(
+        'https://app.example.com/sign-in?error=User%20cancelled',
+      );
     });
 
     it('redirects to sign-in with the error code when no description', async () => {
@@ -68,7 +70,9 @@ describe('auth-callback handler', () => {
       const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
-      expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=access_denied');
+      expect(result.headers!['Location']).toBe(
+        'https://app.example.com/sign-in?error=access_denied',
+      );
     });
   });
 
@@ -79,7 +83,9 @@ describe('auth-callback handler', () => {
       const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
-      expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=Authentication%20failed');
+      expect(result.headers!['Location']).toBe(
+        'https://app.example.com/sign-in?error=Authentication%20failed',
+      );
     });
   });
 
@@ -97,7 +103,9 @@ describe('auth-callback handler', () => {
       const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
-      expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=Invalid%20state');
+      expect(result.headers!['Location']).toBe(
+        'https://app.example.com/sign-in?error=Invalid%20state',
+      );
     });
 
     it('redirects to sign-in when state cookie is missing', async () => {
@@ -108,7 +116,9 @@ describe('auth-callback handler', () => {
       const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
-      expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=Invalid%20state');
+      expect(result.headers!['Location']).toBe(
+        'https://app.example.com/sign-in?error=Invalid%20state',
+      );
     });
   });
 
@@ -128,7 +138,9 @@ describe('auth-callback handler', () => {
       const result = await handler(event, stubContext);
 
       expect(result.statusCode).toBe(302);
-      expect(result.headers!['Location']).toBe('https://app.example.com/sign-in?error=Token%20exchange%20failed');
+      expect(result.headers!['Location']).toBe(
+        'https://app.example.com/sign-in?error=Token%20exchange%20failed',
+      );
     });
   });
 
@@ -180,7 +192,7 @@ describe('auth-callback handler', () => {
       expect(body.get('client_id')).toBe('test-client-id');
       expect(body.get('client_secret')).toBe('test-client-secret');
       expect(body.get('code')).toBe('auth-code-123');
-      expect(body.get('redirect_uri')).toBe('https://api.test.com/auth/callback');
+      expect(body.get('redirect_uri')).toBe('https://app.example.com/api/auth/callback');
       expect(body.get('audience')).toBe('https://api.test.com');
     });
 
@@ -189,12 +201,45 @@ describe('auth-callback handler', () => {
       const cookies = result.cookies ?? [];
 
       expect(cookies).toHaveLength(6);
-      expect(cookies[0]).toBe('hs_access_token=new-access-token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600');
-      expect(cookies[1]).toBe('hs_id_token=new-id-token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600');
-      expect(cookies[2]).toBe('hs_refresh_token=new-refresh-token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000');
+      expect(cookies[0]).toBe(
+        'hs_access_token=new-access-token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600',
+      );
+      expect(cookies[1]).toBe(
+        'hs_id_token=new-id-token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600',
+      );
+      expect(cookies[2]).toBe(
+        'hs_refresh_token=new-refresh-token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000',
+      );
       expect(cookies[3]).toBe('hs_logged_in=1; Secure; SameSite=Lax; Path=/; Max-Age=2592000');
-      expect(cookies[4]).toMatch(/^hs_csrf_token=[a-f0-9-]+; Secure; SameSite=Lax; Path=\/; Max-Age=3600$/);
+      expect(cookies[4]).toMatch(
+        /^hs_csrf_token=[a-f0-9-]+; Secure; SameSite=Lax; Path=\/; Max-Age=3600$/,
+      );
       expect(cookies[5]).toBe('hs_oauth_state=; Secure; SameSite=Lax; Path=/; Max-Age=0');
+    });
+
+    it('uses X-Dev-Origin when it matches ALLOWED_REDIRECT_ORIGINS', async () => {
+      process.env.ALLOWED_REDIRECT_ORIGINS = 'https://localhost:5173';
+      const event = validStateEvent();
+      event.headers['x-dev-origin'] = 'https://localhost:5173';
+
+      const result = await handler(event, stubContext);
+
+      expect(result.headers?.['Location']).toBe('https://localhost:5173/dashboard');
+      const body = new URLSearchParams(mockFetch.mock.calls[0][1].body as string);
+      expect(body.get('redirect_uri')).toBe('https://localhost:5173/api/auth/callback');
+
+      // Reset
+      process.env.ALLOWED_REDIRECT_ORIGINS = '';
+    });
+
+    it('ignores X-Dev-Origin when not in ALLOWED_REDIRECT_ORIGINS', async () => {
+      process.env.ALLOWED_REDIRECT_ORIGINS = '';
+      const event = validStateEvent();
+      event.headers['x-dev-origin'] = 'https://evil.com';
+
+      const result = await handler(event, stubContext);
+
+      expect(result.headers!['Location']).toBe('https://app.example.com/dashboard');
     });
 
     it('omits refresh_token cookie when Auth0 does not return one', async () => {
@@ -210,10 +255,16 @@ describe('auth-callback handler', () => {
       const cookies = result.cookies ?? [];
 
       expect(cookies).toHaveLength(5);
-      expect(cookies[0]).toBe('hs_access_token=at; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600');
-      expect(cookies[1]).toBe('hs_id_token=it; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600');
+      expect(cookies[0]).toBe(
+        'hs_access_token=at; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600',
+      );
+      expect(cookies[1]).toBe(
+        'hs_id_token=it; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600',
+      );
       expect(cookies[2]).toBe('hs_logged_in=1; Secure; SameSite=Lax; Path=/; Max-Age=2592000');
-      expect(cookies[3]).toMatch(/^hs_csrf_token=[a-f0-9-]+; Secure; SameSite=Lax; Path=\/; Max-Age=3600$/);
+      expect(cookies[3]).toMatch(
+        /^hs_csrf_token=[a-f0-9-]+; Secure; SameSite=Lax; Path=\/; Max-Age=3600$/,
+      );
       expect(cookies[4]).toBe('hs_oauth_state=; Secure; SameSite=Lax; Path=/; Max-Age=0');
     });
   });
