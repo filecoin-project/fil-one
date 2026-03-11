@@ -1,0 +1,66 @@
+/// <reference path="./.sst/platform/config.d.ts" />
+
+export default $config({
+  app(input) {
+    const stage = input?.stage;
+    if (stage !== 'staging' && stage !== 'production') {
+      throw new Error(
+        `The infra project only supports "staging" and "production" stages, got "${stage}".`,
+      );
+    }
+
+    const awsProvider: Record<string, unknown> = { region: 'us-east-2' };
+
+    if (stage === 'staging') {
+      awsProvider.allowedAccountIds = ['654654381893'];
+    }
+
+    return {
+      name: 'hyperspace-infra',
+      removal: stage === 'production' ? 'retain' : 'remove',
+      home: 'aws',
+      providers: {
+        aws: awsProvider,
+      },
+    };
+  },
+  async run() {
+    // OIDC Identity Provider for GitHub Actions
+    const github = new aws.iam.OpenIdConnectProvider('GithubOidcProvider', {
+      url: 'https://token.actions.githubusercontent.com',
+      clientIdLists: ['sts.amazonaws.com'],
+      thumbprintLists: ['ffffffffffffffffffffffffffffffffffffffff'],
+    });
+
+    // IAM Role for GitHub Actions
+    const roleName = `hyperspace-infra-${$app.stage}-github`;
+    const role = new aws.iam.Role('GitHubActionsRole', {
+      name: roleName,
+      assumeRolePolicy: {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { Federated: github.arn },
+            Action: 'sts:AssumeRoleWithWebIdentity',
+            Condition: {
+              StringLike: github.url.apply((url) => ({
+                [`${url}:sub`]: 'repo:filecoin-project/filhyperspace:*',
+              })),
+            },
+          },
+        ],
+      },
+    });
+
+    // AdministratorAccess (SST needs broad permissions)
+    new aws.iam.RolePolicyAttachment('GitHubActionsRolePolicy', {
+      policyArn: 'arn:aws:iam::aws:policy/AdministratorAccess',
+      role: role.name,
+    });
+
+    return {
+      roleArn: role.arn,
+    };
+  },
+});
