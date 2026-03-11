@@ -1,9 +1,14 @@
-import { DynamoDBClient, DeleteItemCommand, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  DeleteItemCommand,
+  PutItemCommand,
+  UpdateItemCommand,
+} from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import Stripe from 'stripe';
 import { SubscriptionStatus } from '@hyperspace/shared';
-import { Resource } from "sst";
+import { Resource } from 'sst';
 import { getStripeClient, getWebhookSecret } from '../lib/stripe-client.js';
 
 const dynamo = new DynamoDBClient({});
@@ -33,7 +38,11 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
   // 2. Verify webhook signature
   let stripeEvent: Stripe.Event;
   try {
-    stripeEvent = stripe.webhooks.constructEvent(rawBody, signatureHeader, await getWebhookSecret());
+    stripeEvent = stripe.webhooks.constructEvent(
+      rawBody,
+      signatureHeader,
+      await getWebhookSecret(),
+    );
   } catch (err) {
     console.error('[stripe-webhook] Signature verification failed:', (err as Error).message);
     return { statusCode: 400, body: JSON.stringify({ message: 'Invalid signature' }) };
@@ -103,7 +112,10 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     try {
       await dynamo.send(new DeleteItemCommand({ TableName: tableName, Key: idempotencyKey }));
     } catch (deleteErr) {
-      console.error('[stripe-webhook] Failed to release idempotency claim:', (deleteErr as Error).message);
+      console.error(
+        '[stripe-webhook] Failed to release idempotency claim:',
+        (deleteErr as Error).message,
+      );
     }
     return { statusCode: 500, body: JSON.stringify({ message: 'Processing error' }) };
   }

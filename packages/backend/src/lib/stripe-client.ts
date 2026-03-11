@@ -1,6 +1,6 @@
 import { Resource } from 'sst';
 import Stripe from 'stripe';
-import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
 declare const process: { env: Record<string, string | undefined> };
 

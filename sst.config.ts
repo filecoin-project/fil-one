@@ -317,9 +317,21 @@ export default $config({
     addRoute('POST', '/api/billing/portal', 'create-portal-session', {
       WEBSITE_URL: siteUrl,
     });
-    addRoute("POST", "/api/stripe/webhook", "stripe-webhook",
-      { STRIPE_WEBHOOK_SECRET_SSM_PATH: $interpolate`/hyperspace/${$app.stage}/stripe-webhook-secret` },
-      [{ actions: ["ssm:GetParameter"], resources: [$interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/stripe-webhook-secret`] }],
+    addRoute(
+      'POST',
+      '/api/stripe/webhook',
+      'stripe-webhook',
+      {
+        STRIPE_WEBHOOK_SECRET_SSM_PATH: $interpolate`/hyperspace/${$app.stage}/stripe-webhook-secret`,
+      },
+      [
+        {
+          actions: ['ssm:GetParameter'],
+          resources: [
+            $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/stripe-webhook-secret`,
+          ],
+        },
+      ],
     );
 
     // ── Tenant setup consumer ──────────────────────────────────────

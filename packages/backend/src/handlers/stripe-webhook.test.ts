@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, DeleteItemCommand, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  DeleteItemCommand,
+  PutItemCommand,
+  UpdateItemCommand,
+} from '@aws-sdk/client-dynamodb';
 import { buildEvent } from '../test/lambda-test-utilities.js';
 import { SubscriptionStatus } from '@hyperspace/shared';
 
@@ -139,11 +144,7 @@ describe('stripe-webhook handler', () => {
       const evt = buildWebhookEvent(rawBody, { isBase64Encoded: true });
       await handler(evt);
 
-      expect(mockConstructEvent).toHaveBeenCalledWith(
-        rawBody,
-        'sig_test',
-        'whsec_test_fake',
-      );
+      expect(mockConstructEvent).toHaveBeenCalledWith(rawBody, 'sig_test', 'whsec_test_fake');
     });
   });
 
@@ -198,7 +199,10 @@ describe('stripe-webhook handler', () => {
       ddbMock.on(UpdateItemCommand).rejects(new Error('DynamoDB error'));
 
       const result = await handler(buildWebhookEvent('{}'));
-      expect(result).toEqual({ statusCode: 500, body: JSON.stringify({ message: 'Processing error' }) });
+      expect(result).toEqual({
+        statusCode: 500,
+        body: JSON.stringify({ message: 'Processing error' }),
+      });
 
       const deleteCalls = ddbMock.commandCalls(DeleteItemCommand);
       expect(deleteCalls).toHaveLength(1);
@@ -217,7 +221,10 @@ describe('stripe-webhook handler', () => {
       ddbMock.on(DeleteItemCommand).rejects(new Error('Delete failed'));
 
       const result = await handler(buildWebhookEvent('{}'));
-      expect(result).toEqual({ statusCode: 500, body: JSON.stringify({ message: 'Processing error' }) });
+      expect(result).toEqual({
+        statusCode: 500,
+        body: JSON.stringify({ message: 'Processing error' }),
+      });
     });
   });
 
@@ -238,7 +245,8 @@ describe('stripe-webhook handler', () => {
           pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
           sk: { S: 'SUBSCRIPTION' },
         },
-        UpdateExpression: 'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, updatedAt = :now REMOVE gracePeriodEndsAt, canceledAt',
+        UpdateExpression:
+          'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, updatedAt = :now REMOVE gracePeriodEndsAt, canceledAt',
         ExpressionAttributeValues: {
           ':subId': { S: MOCK_SUBSCRIPTION_ID },
           ':status': { S: 'active' },
@@ -257,12 +265,14 @@ describe('stripe-webhook handler', () => {
 
       const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
       expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0].args[0].input).toEqual(expect.objectContaining({
-        Key: {
-          pk: { S: 'CUSTOMER#fallback-user' },
-          sk: { S: 'SUBSCRIPTION' },
-        },
-      }));
+      expect(updateCalls[0].args[0].input).toEqual(
+        expect.objectContaining({
+          Key: {
+            pk: { S: 'CUSTOMER#fallback-user' },
+            sk: { S: 'SUBSCRIPTION' },
+          },
+        }),
+      );
       expect(mockCustomersRetrieve).toHaveBeenCalledWith(MOCK_CUSTOMER_ID);
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
@@ -290,7 +300,10 @@ describe('stripe-webhook handler', () => {
     });
 
     it('handles string customer ID via getCustomerIdString', async () => {
-      setupStripeEvent('customer.subscription.created', mockSubscription({ customer: 'cus_string_id' }));
+      setupStripeEvent(
+        'customer.subscription.created',
+        mockSubscription({ customer: 'cus_string_id' }),
+      );
 
       await handler(buildWebhookEvent('{}'));
       // No error thrown, processed correctly
@@ -298,19 +311,25 @@ describe('stripe-webhook handler', () => {
     });
 
     it('handles Customer object instead of string', async () => {
-      setupStripeEvent('customer.subscription.created', mockSubscription({
-        customer: { id: 'cus_obj_id', deleted: false },
-      }));
+      setupStripeEvent(
+        'customer.subscription.created',
+        mockSubscription({
+          customer: { id: 'cus_obj_id', deleted: false },
+        }),
+      );
 
       await handler(buildWebhookEvent('{}'));
       expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(1);
     });
 
     it('handles DeletedCustomer object', async () => {
-      setupStripeEvent('customer.subscription.created', mockSubscription({
-        metadata: {},
-        customer: { id: 'cus_del_id', deleted: true },
-      }));
+      setupStripeEvent(
+        'customer.subscription.created',
+        mockSubscription({
+          metadata: {},
+          customer: { id: 'cus_del_id', deleted: true },
+        }),
+      );
       setupDeletedCustomerRetrieve();
 
       const result = await handler(buildWebhookEvent('{}'));
@@ -325,16 +344,21 @@ describe('stripe-webhook handler', () => {
 
       const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
       expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0].args[0].input).toEqual(expect.objectContaining({
-        ExpressionAttributeValues: expect.objectContaining({
-          ':status': { S: 'past_due' },
+      expect(updateCalls[0].args[0].input).toEqual(
+        expect.objectContaining({
+          ExpressionAttributeValues: expect.objectContaining({
+            ':status': { S: 'past_due' },
+          }),
         }),
-      }));
+      );
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
 
     it('falls back to customer lookup when userId is empty string', async () => {
-      setupStripeEvent('customer.subscription.created', mockSubscription({ metadata: { userId: '' } }));
+      setupStripeEvent(
+        'customer.subscription.created',
+        mockSubscription({ metadata: { userId: '' } }),
+      );
       setupCustomerRetrieve('fallback-user');
 
       const result = await handler(buildWebhookEvent('{}'));
@@ -342,12 +366,14 @@ describe('stripe-webhook handler', () => {
       expect(mockCustomersRetrieve).toHaveBeenCalledWith(MOCK_CUSTOMER_ID);
       const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
       expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0].args[0].input).toEqual(expect.objectContaining({
-        Key: {
-          pk: { S: 'CUSTOMER#fallback-user' },
-          sk: { S: 'SUBSCRIPTION' },
-        },
-      }));
+      expect(updateCalls[0].args[0].input).toEqual(
+        expect.objectContaining({
+          Key: {
+            pk: { S: 'CUSTOMER#fallback-user' },
+            sk: { S: 'SUBSCRIPTION' },
+          },
+        }),
+      );
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
   });
@@ -369,7 +395,8 @@ describe('stripe-webhook handler', () => {
           pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
           sk: { S: 'SUBSCRIPTION' },
         },
-        UpdateExpression: 'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, updatedAt = :now REMOVE gracePeriodEndsAt, canceledAt',
+        UpdateExpression:
+          'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, updatedAt = :now REMOVE gracePeriodEndsAt, canceledAt',
         ExpressionAttributeValues: {
           ':subId': { S: MOCK_SUBSCRIPTION_ID },
           ':status': { S: 'active' },
@@ -381,36 +408,46 @@ describe('stripe-webhook handler', () => {
     });
 
     it('sets currentPeriodEnd from subscription.items.data[0].current_period_end', async () => {
-      setupStripeEvent('customer.subscription.updated', mockSubscription({
-        items: { data: [{ current_period_end: 1800000000 }] },
-      }));
+      setupStripeEvent(
+        'customer.subscription.updated',
+        mockSubscription({
+          items: { data: [{ current_period_end: 1800000000 }] },
+        }),
+      );
 
       const result = await handler(buildWebhookEvent('{}'));
 
       const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
       expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0].args[0].input).toEqual(expect.objectContaining({
-        ExpressionAttributeValues: expect.objectContaining({
-          ':periodEnd': { S: new Date(1800000000 * 1000).toISOString() },
+      expect(updateCalls[0].args[0].input).toEqual(
+        expect.objectContaining({
+          ExpressionAttributeValues: expect.objectContaining({
+            ':periodEnd': { S: new Date(1800000000 * 1000).toISOString() },
+          }),
         }),
-      }));
+      );
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
 
     it('handles empty items.data array (defaults to epoch 0)', async () => {
-      setupStripeEvent('customer.subscription.updated', mockSubscription({
-        items: { data: [] },
-      }));
+      setupStripeEvent(
+        'customer.subscription.updated',
+        mockSubscription({
+          items: { data: [] },
+        }),
+      );
 
       const result = await handler(buildWebhookEvent('{}'));
 
       const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
       expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0].args[0].input).toEqual(expect.objectContaining({
-        ExpressionAttributeValues: expect.objectContaining({
-          ':periodEnd': { S: new Date(0).toISOString() },
+      expect(updateCalls[0].args[0].input).toEqual(
+        expect.objectContaining({
+          ExpressionAttributeValues: expect.objectContaining({
+            ':periodEnd': { S: new Date(0).toISOString() },
+          }),
         }),
-      }));
+      );
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
   });
@@ -437,7 +474,8 @@ describe('stripe-webhook handler', () => {
           pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
           sk: { S: 'SUBSCRIPTION' },
         },
-        UpdateExpression: 'SET subscriptionStatus = :status, canceledAt = :now, gracePeriodEndsAt = :grace, updatedAt = :now',
+        UpdateExpression:
+          'SET subscriptionStatus = :status, canceledAt = :now, gracePeriodEndsAt = :grace, updatedAt = :now',
         ExpressionAttributeValues: {
           ':status': { S: SubscriptionStatus.GracePeriod },
           ':now': { S: expect.any(String) },
@@ -507,7 +545,8 @@ describe('stripe-webhook handler', () => {
           pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
           sk: { S: 'SUBSCRIPTION' },
         },
-        UpdateExpression: 'SET subscriptionStatus = :active, lastPaymentAt = :now, updatedAt = :now REMOVE gracePeriodEndsAt',
+        UpdateExpression:
+          'SET subscriptionStatus = :active, lastPaymentAt = :now, updatedAt = :now REMOVE gracePeriodEndsAt',
         ExpressionAttributeValues: {
           ':active': { S: SubscriptionStatus.Active },
           ':now': { S: expect.any(String) },
@@ -545,9 +584,12 @@ describe('stripe-webhook handler', () => {
     });
 
     it('handles invoice with Customer object instead of string', async () => {
-      setupStripeEvent('invoice.payment_succeeded', mockInvoice({
-        customer: { id: MOCK_CUSTOMER_ID, deleted: false },
-      }));
+      setupStripeEvent(
+        'invoice.payment_succeeded',
+        mockInvoice({
+          customer: { id: MOCK_CUSTOMER_ID, deleted: false },
+        }),
+      );
       setupCustomerRetrieve();
 
       const result = await handler(buildWebhookEvent('{}'));
@@ -579,7 +621,8 @@ describe('stripe-webhook handler', () => {
           pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
           sk: { S: 'SUBSCRIPTION' },
         },
-        UpdateExpression: 'SET subscriptionStatus = :status, gracePeriodEndsAt = :grace, updatedAt = :now',
+        UpdateExpression:
+          'SET subscriptionStatus = :status, gracePeriodEndsAt = :grace, updatedAt = :now',
         ExpressionAttributeValues: {
           ':status': { S: SubscriptionStatus.PastDue },
           ':grace': { S: expect.any(String) },
@@ -623,9 +666,12 @@ describe('stripe-webhook handler', () => {
     });
 
     it('handles invoice with Customer object instead of string', async () => {
-      setupStripeEvent('invoice.payment_failed', mockInvoice({
-        customer: { id: MOCK_CUSTOMER_ID, deleted: false },
-      }));
+      setupStripeEvent(
+        'invoice.payment_failed',
+        mockInvoice({
+          customer: { id: MOCK_CUSTOMER_ID, deleted: false },
+        }),
+      );
       setupCustomerRetrieve();
 
       const result = await handler(buildWebhookEvent('{}'));
@@ -644,7 +690,10 @@ describe('stripe-webhook handler', () => {
       ddbMock.on(UpdateItemCommand).rejects(new Error('DynamoDB update failed'));
 
       const result = await handler(buildWebhookEvent('{}'));
-      expect(result).toEqual({ statusCode: 500, body: JSON.stringify({ message: 'Processing error' }) });
+      expect(result).toEqual({
+        statusCode: 500,
+        body: JSON.stringify({ message: 'Processing error' }),
+      });
     });
 
     it('returns 500 when stripe.customers.retrieve fails', async () => {
@@ -652,7 +701,10 @@ describe('stripe-webhook handler', () => {
       mockCustomersRetrieve.mockRejectedValue(new Error('Stripe API error'));
 
       const result = await handler(buildWebhookEvent('{}'));
-      expect(result).toEqual({ statusCode: 500, body: JSON.stringify({ message: 'Processing error' }) });
+      expect(result).toEqual({
+        statusCode: 500,
+        body: JSON.stringify({ message: 'Processing error' }),
+      });
     });
 
     it('unhandled event type returns 200 and records idempotency', async () => {
@@ -668,7 +720,10 @@ describe('stripe-webhook handler', () => {
       ddbMock.on(PutItemCommand).rejects(new Error('DynamoDB put failed'));
 
       const result = await handler(buildWebhookEvent('{}'));
-      expect(result).toEqual({ statusCode: 500, body: JSON.stringify({ message: 'Idempotency check error' }) });
+      expect(result).toEqual({
+        statusCode: 500,
+        body: JSON.stringify({ message: 'Idempotency check error' }),
+      });
       expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
     });
   });
