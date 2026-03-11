@@ -69,7 +69,25 @@ export async function createAuroraAccessKey({
   const { data, error } = await putTenantsByTenantIdAccessKeys({
     client,
     path: { tenantId },
-    body: { name },
+    body: {
+      name,
+      access: [
+        'Default',
+        'Read',
+        'Write',
+        'Delete',
+        'List',
+        'GetBucketVersioning',
+        'GetBucketObjectLockConfiguration',
+        'ListBucketVersions',
+        'GetObjectVersion',
+        'GetObjectRetention',
+        'GetObjectLegalHold',
+        'PutObjectRetention',
+        'PutObjectLegalHold',
+        'DeleteObjectVersion',
+      ],
+    },
     throwOnError: false,
   });
 
