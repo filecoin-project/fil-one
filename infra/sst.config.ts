@@ -49,8 +49,7 @@ export default $config({
             Action: 'sts:AssumeRoleWithWebIdentity',
             Condition: {
               StringLike: {
-                'token.actions.githubusercontent.com:sub':
-                  'repo:filecoin-project/filhyperspace:*',
+                'token.actions.githubusercontent.com:sub': 'repo:filecoin-project/filhyperspace:*',
               },
               StringEquals: {
                 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
