@@ -68,6 +68,14 @@ export default $config({
       primaryIndex: { hashKey: 'pk', rangeKey: 'sk' },
     });
 
+    const accessKeysTable = new sst.aws.Dynamo('AccessKeysTable', {
+      fields: {
+        pk: 'string',
+        sk: 'string',
+      },
+      primaryIndex: { hashKey: 'pk', rangeKey: 'sk' },
+    });
+
     // ── SQS Queues ─────────────────────────────────────────────────
     const tenantSetupDlq = new sst.aws.Queue('AuroraTenantSetupDlq', {
       fifo: true,
@@ -220,6 +228,7 @@ export default $config({
       uploadsTable,
       billingTable,
       userInfoTable,
+      accessKeysTable,
       userFilesBucket,
       tenantSetupQueue,
       auth0ClientId,
@@ -247,6 +256,8 @@ export default $config({
       AURORA_PARTNER_ID: 'ff',
       AURORA_REGION_ID: 'ff',
     };
+
+    const auroraApiKeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-portal/tenant-api-key/*`;
 
     function addRoute(
       method: string,
@@ -281,13 +292,25 @@ export default $config({
       [
         {
           actions: ['ssm:GetParameter'],
-          resources: [
-            $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-portal/tenant-api-key/*`,
-          ],
+          resources: [auroraApiKeySsmArn],
         },
       ],
     );
     addRoute('DELETE', '/api/buckets/{name}', 'delete-bucket');
+    addRoute(
+      'POST',
+      '/api/access-keys',
+      'create-access-key',
+      {
+        AURORA_PORTAL_URL: auroraEnv.AURORA_PORTAL_URL,
+      },
+      [
+        {
+          actions: ['ssm:GetParameter'],
+          resources: [auroraApiKeySsmArn],
+        },
+      ],
+    );
     addRoute('GET', '/api/buckets/{name}/objects', 'list-objects');
     addRoute('POST', '/api/buckets/{name}/objects/upload', 'upload-object');
     addRoute('GET', '/api/buckets/{name}/objects/download', 'download-object');
@@ -331,9 +354,7 @@ export default $config({
         permissions: [
           {
             actions: ['ssm:PutParameter'],
-            resources: [
-              $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-portal/tenant-api-key/*`,
-            ],
+            resources: [auroraApiKeySsmArn],
           },
         ],
         runtime: 'nodejs24.x',

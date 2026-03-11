@@ -1,5 +1,10 @@
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
-import { createClient, postTenantsByTenantIdBucket } from '@hyperspace/aurora-portal-client';
+import {
+  createClient,
+  postTenantsByTenantIdBucket,
+  putTenantsByTenantIdAccessKeys,
+} from '@hyperspace/aurora-portal-client';
+import type { ModelsAccessKeyFull } from '@hyperspace/aurora-portal-client';
 
 const ssm = new SSMClient({});
 
@@ -41,6 +46,54 @@ export async function createAuroraBucket({
   }
 
   console.log(`Aurora bucket "${bucketName}" created for tenant ${tenantId}`);
+}
+
+export interface CreateAuroraAccessKeyOptions {
+  tenantId: string;
+  name: string;
+}
+
+export async function createAuroraAccessKey({
+  tenantId,
+  name,
+}: CreateAuroraAccessKeyOptions): Promise<ModelsAccessKeyFull> {
+  const baseUrl = process.env.AURORA_PORTAL_URL!;
+  const stage = process.env.HYPERSPACE_STAGE!;
+  const apiKey = await getAuroraPortalApiKey(stage, tenantId);
+
+  const client = createClient({
+    baseUrl,
+    headers: { 'X-Api-Key': apiKey },
+  });
+
+  const { data, error } = await putTenantsByTenantIdAccessKeys({
+    client,
+    path: { tenantId },
+    body: { name },
+    throwOnError: false,
+  });
+
+  if (error) {
+    console.error(
+      `Aurora access key creation failed for tenant ${tenantId}:`,
+      JSON.stringify(error),
+    );
+    throw new Error(`Failed to create Aurora access key "${name}" for tenant ${tenantId}`, {
+      cause: error,
+    });
+  }
+
+  const accessKey = data?.accessKey;
+  if (!accessKey) {
+    console.error(
+      `Aurora API returned empty access key for tenant ${tenantId}. Full response:`,
+      JSON.stringify(data),
+    );
+    throw new Error(`Aurora API returned empty access key for tenant ${tenantId}`);
+  }
+
+  console.log(`Aurora access key "${name}" created for tenant ${tenantId}`);
+  return accessKey;
 }
 
 export async function getAuroraPortalApiKey(stage: string, tenantId: string): Promise<string> {

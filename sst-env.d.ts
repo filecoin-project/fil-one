@@ -38,6 +38,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "AccessKeysTable": {
+      "name": string
+      "type": "sst.aws.Dynamo"
+    }
     "BillingTable": {
       "name": string
       "type": "sst.aws.Dynamo"

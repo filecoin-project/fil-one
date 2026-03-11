@@ -4,14 +4,13 @@ import { KeyIcon, PlusIcon, PowerIcon, TrashIcon } from '@phosphor-icons/react/d
 
 import { Button } from '@hyperspace/ui/Button';
 import { CodeBlock } from '@hyperspace/ui/CodeBlock';
-import { Input } from '@hyperspace/ui/Input';
-import { Modal, ModalBody, ModalFooter, ModalHeader } from '@hyperspace/ui/Modal';
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@hyperspace/ui/Tabs';
 import { useToast } from '@hyperspace/ui/Toast';
 
-import type { AccessKey } from '@hyperspace/shared';
+import type { AccessKey, CreateAccessKeyResponse } from '@hyperspace/shared';
 
 import { S3_ENDPOINT } from '../../env';
+import { CreateAccessKeyModal } from '../CreateAccessKeyModal';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -20,7 +19,7 @@ import { S3_ENDPOINT } from '../../env';
 const MOCK_KEYS: AccessKey[] = [
   {
     id: '1',
-    name: 'Production',
+    keyName: 'Production',
     accessKeyId: 'HKIAXXXXXXXXXXX1ABCD',
     createdAt: '2024-01-15T10:00:00Z',
     lastUsedAt: '2024-02-15T10:00:00Z',
@@ -28,7 +27,7 @@ const MOCK_KEYS: AccessKey[] = [
   },
   {
     id: '2',
-    name: 'Local dev',
+    keyName: 'Local dev',
     accessKeyId: 'HKIAXXXXXXXXXXX2EFGH',
     createdAt: '2024-02-01T09:00:00Z',
     lastUsedAt: undefined,
@@ -128,7 +127,7 @@ function AccessKeysTab({ keys, onCreateOpen, onToggle, onDelete }: AccessKeysTab
                   key={key.id}
                   className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                 >
-                  <td className="px-4 py-3 text-sm font-medium text-zinc-900">{key.name}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-zinc-900">{key.keyName}</td>
                   <td className="px-4 py-3 font-mono text-sm text-zinc-700">{key.accessKeyId}</td>
                   <td className="px-4 py-3 text-sm text-zinc-600">{formatDate(key.createdAt)}</td>
                   <td className="px-4 py-3 text-sm text-zinc-600">
@@ -214,98 +213,6 @@ function ConnectionDetailsTab() {
 }
 
 // ---------------------------------------------------------------------------
-// Create Access Key Modal
-// ---------------------------------------------------------------------------
-
-type CreateKeyModalProps = {
-  open: boolean;
-  onClose: () => void;
-  keys: AccessKey[];
-  createStep: 'form' | 'credentials';
-  newKeyName: string;
-  newSecretKey: string;
-  onNameChange: (value: string) => void;
-  onCreateKey: () => void;
-  onDone: () => void;
-};
-
-function CreateKeyModal({
-  open,
-  onClose,
-  keys,
-  createStep,
-  newKeyName,
-  newSecretKey,
-  onNameChange,
-  onCreateKey,
-  onDone,
-}: CreateKeyModalProps) {
-  if (createStep === 'form') {
-    return (
-      <Modal open={open} onClose={onClose} size="sm">
-        <ModalHeader onClose={onClose}>Create access key</ModalHeader>
-        <ModalBody>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-zinc-700">Key name</label>
-            <Input
-              value={newKeyName}
-              onChange={onNameChange}
-              placeholder="e.g. Production, Local dev"
-            />
-            <p className="text-xs text-zinc-500">
-              A descriptive name to identify where this key is used.
-            </p>
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="filled" disabled={!newKeyName.trim()} onClick={onCreateKey}>
-              Create key
-            </Button>
-          </div>
-        </ModalFooter>
-      </Modal>
-    );
-  }
-
-  // Step: credentials
-  return (
-    <Modal open={open} onClose={onClose} size="md">
-      <ModalHeader>Save your credentials</ModalHeader>
-      <ModalBody>
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          ⚠️ This is the only time you&apos;ll be able to see the secret access key. Copy it now.
-        </div>
-        <div className="flex flex-col gap-3">
-          <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              Access Key ID
-            </p>
-            <CodeBlock code={keys[keys.length - 1]?.accessKeyId ?? ''} />
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              Secret Access Key
-            </p>
-            <CodeBlock code={newSecretKey} />
-          </div>
-        </div>
-      </ModalBody>
-      <ModalFooter>
-        <div className="flex justify-end">
-          <Button variant="filled" onClick={onDone}>
-            I&apos;ve saved my credentials
-          </Button>
-        </div>
-      </ModalFooter>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -316,43 +223,26 @@ export function ApiKeysPage() {
 
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
-  const [createStep, setCreateStep] = useState<'form' | 'credentials'>('form');
-  const [newKeyName, setNewKeyName] = useState('');
-  const [newSecretKey, setNewSecretKey] = useState('');
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
   function handleOpenCreate() {
-    setNewKeyName('');
-    setCreateStep('form');
     setCreateOpen(true);
   }
 
-  function handleCloseCreate() {
-    setCreateOpen(false);
-    setCreateStep('form');
-  }
-
-  function handleCreateKey() {
+  function handleKeyCreated(response: CreateAccessKeyResponse) {
     const newKey: AccessKey = {
-      id: String(Date.now()),
-      name: newKeyName.trim(),
-      accessKeyId: 'HKIA' + Math.random().toString(36).slice(2, 18).toUpperCase(),
+      id: response.accessKeyId,
+      keyName: response.keyName,
+      accessKeyId: response.accessKeyId,
       createdAt: new Date().toISOString(),
       lastUsedAt: undefined,
       status: 'active',
     };
     setKeys((prev) => [...prev, newKey]);
-    setNewSecretKey('wJalrXUtnFEMI/' + Math.random().toString(36).slice(2, 30));
-    setCreateStep('credentials');
-  }
-
-  function handleDoneCredentials() {
     setCreateOpen(false);
-    setCreateStep('form');
-    setNewKeyName('');
   }
 
   function handleToggle(id: string) {
@@ -399,16 +289,10 @@ export function ApiKeysPage() {
         </TabPanels>
       </Tabs>
 
-      <CreateKeyModal
+      <CreateAccessKeyModal
         open={createOpen}
-        onClose={handleCloseCreate}
-        keys={keys}
-        createStep={createStep}
-        newKeyName={newKeyName}
-        newSecretKey={newSecretKey}
-        onNameChange={setNewKeyName}
-        onCreateKey={handleCreateKey}
-        onDone={handleDoneCredentials}
+        onClose={() => setCreateOpen(false)}
+        onDone={handleKeyCreated}
       />
     </div>
   );

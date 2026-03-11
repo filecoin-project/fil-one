@@ -2,7 +2,7 @@ export type AccessKeyStatus = 'active' | 'inactive';
 
 export interface AccessKey {
   id: string;
-  name: string;
+  keyName: string;
   accessKeyId: string;
   createdAt: string;
   lastUsedAt?: string;
@@ -14,11 +14,12 @@ export interface ListAccessKeysResponse {
 }
 
 export interface CreateAccessKeyRequest {
-  name: string;
+  keyName: string;
 }
 
 export interface CreateAccessKeyResponse {
-  key: AccessKey;
+  keyName: string;
+  accessKeyId: string;
   secretAccessKey: string;
 }
 
