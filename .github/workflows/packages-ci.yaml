@@ -42,8 +42,7 @@ jobs:
         run: pnpm test
 
   deploy-staging:
-    # FIXME: uncomment the next line before merging
-    # if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     needs: [check-packages]
     runs-on: ubuntu-latest
     concurrency: deploy-staging
