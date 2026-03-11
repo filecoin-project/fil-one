@@ -26,16 +26,19 @@ import { handler } from './usage-reporting-orchestrator.js';
 // ---------------------------------------------------------------------------
 
 function subscriptionItem(orgId: string, extra: Record<string, unknown> = {}) {
-  return marshall({
-    pk: `CUSTOMER#user-for-${orgId}`,
-    sk: 'SUBSCRIPTION',
-    orgId,
-    subscriptionId: `sub_${orgId}`,
-    stripeCustomerId: `cus_${orgId}`,
-    subscriptionStatus: 'active',
-    currentPeriodStart: '2024-01-01T00:00:00Z',
-    ...extra,
-  }, { removeUndefinedValues: true });
+  return marshall(
+    {
+      pk: `CUSTOMER#user-for-${orgId}`,
+      sk: 'SUBSCRIPTION',
+      orgId,
+      subscriptionId: `sub_${orgId}`,
+      stripeCustomerId: `cus_${orgId}`,
+      subscriptionStatus: 'active',
+      currentPeriodStart: '2024-01-01T00:00:00Z',
+      ...extra,
+    },
+    { removeUndefinedValues: true },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +68,9 @@ describe('usage-reporting-orchestrator', () => {
 
     const invokeCalls = lambdaMock.commandCalls(InvokeCommand);
     expect(invokeCalls).toHaveLength(1);
-    const payload = JSON.parse(Buffer.from(invokeCalls[0].args[0].input.Payload as Uint8Array).toString());
+    const payload = JSON.parse(
+      Buffer.from(invokeCalls[0].args[0].input.Payload as Uint8Array).toString(),
+    );
     expect(payload.orgId).toBe('org-1');
     expect(payload.subscriptionId).toBe('sub_org-1');
   });
@@ -82,7 +87,8 @@ describe('usage-reporting-orchestrator', () => {
   });
 
   it('handles paginated scan', async () => {
-    ddbMock.on(ScanCommand)
+    ddbMock
+      .on(ScanCommand)
       .resolvesOnce({
         Items: [subscriptionItem('org-1')],
         LastEvaluatedKey: marshall({ pk: 'CUSTOMER#user-1', sk: 'SUBSCRIPTION' }),
@@ -124,9 +130,7 @@ describe('usage-reporting-orchestrator', () => {
     ddbMock.on(ScanCommand).resolves({
       Items: [subscriptionItem('org-1'), subscriptionItem('org-2')],
     });
-    lambdaMock.on(InvokeCommand)
-      .rejectsOnce(new Error('invoke failed'))
-      .resolves({});
+    lambdaMock.on(InvokeCommand).rejectsOnce(new Error('invoke failed')).resolves({});
 
     await handler();
 
@@ -136,8 +140,16 @@ describe('usage-reporting-orchestrator', () => {
   it('deduplicates by orgId — two records same org = one worker invocation', async () => {
     ddbMock.on(ScanCommand).resolves({
       Items: [
-        subscriptionItem('shared-org', { pk: 'CUSTOMER#user-1', subscriptionId: 'sub_1', stripeCustomerId: 'cus_1' }),
-        subscriptionItem('shared-org', { pk: 'CUSTOMER#user-2', subscriptionId: 'sub_2', stripeCustomerId: 'cus_2' }),
+        subscriptionItem('shared-org', {
+          pk: 'CUSTOMER#user-1',
+          subscriptionId: 'sub_1',
+          stripeCustomerId: 'cus_1',
+        }),
+        subscriptionItem('shared-org', {
+          pk: 'CUSTOMER#user-2',
+          subscriptionId: 'sub_2',
+          stripeCustomerId: 'cus_2',
+        }),
       ],
     });
     lambdaMock.on(InvokeCommand).resolves({});
@@ -145,7 +157,11 @@ describe('usage-reporting-orchestrator', () => {
     await handler();
 
     expect(lambdaMock.commandCalls(InvokeCommand)).toHaveLength(1);
-    const payload = JSON.parse(Buffer.from(lambdaMock.commandCalls(InvokeCommand)[0].args[0].input.Payload as Uint8Array).toString());
+    const payload = JSON.parse(
+      Buffer.from(
+        lambdaMock.commandCalls(InvokeCommand)[0].args[0].input.Payload as Uint8Array,
+      ).toString(),
+    );
     expect(payload.orgId).toBe('shared-org');
   });
 });

@@ -2,11 +2,12 @@ import {
   createClient,
   getAnalyticsV1ByPartnerIdTenantsByTenantIdStorage,
   getV1PartnersByPartnerIdTenants,
+  postAuthV1PartnersByPartnerIdTenantsByTenantIdTokens,
   postV1PartnersByPartnerIdTenants,
   postV1PartnersByPartnerIdTenantsByTenantIdSetup,
   type ModelStorageMetricsSample,
-} from "@hyperspace/aurora-backoffice-client";
-import { getAuroraBackofficeSecrets } from "./auth-secrets.js";
+} from '@hyperspace/aurora-backoffice-client';
+import { getAuroraBackofficeSecrets } from './auth-secrets.js';
 
 export type { ModelStorageMetricsSample };
 
@@ -49,18 +50,13 @@ export async function createAuroraTenant({
   if (error) {
     const status = response?.status;
     if (status === 409) {
-      console.log(
-        `Aurora tenant already exists for org ${orgId}, looking up existing tenant`,
-      );
+      console.log(`Aurora tenant already exists for org ${orgId}, looking up existing tenant`);
       try {
         return await findAuroraTenantByOrgId({ client, partnerId, orgId });
       } catch (cause) {
-        throw new Error(
-          `Aurora tenant already exists for org ${orgId} but lookup failed`,
-          {
-            cause,
-          },
-        );
+        throw new Error(`Aurora tenant already exists for org ${orgId} but lookup failed`, {
+          cause,
+        });
       }
     }
     console.error('Failed to create Aurora tenant:', error);
@@ -149,16 +145,66 @@ export async function setupAuroraTenant({
   }
 
   if (!data) {
+    throw new Error(`Aurora API did not return setup data for tenant ${tenantId}`);
+  }
+
+  console.log(`Aurora tenant ${tenantId} setup response:`, JSON.stringify(data));
+  return { id: data.id!, lastSetupStep: data.lastSetupStep! };
+}
+
+export interface CreateAuroraTenantApiKeyOptions {
+  tenantId: string;
+  orgId: string;
+}
+
+export interface CreateAuroraTenantApiKeyResult {
+  token: string;
+  tokenId: string;
+}
+
+export async function createAuroraTenantApiKey({
+  tenantId,
+  orgId,
+}: CreateAuroraTenantApiKeyOptions): Promise<CreateAuroraTenantApiKeyResult> {
+  const baseUrl = process.env.AURORA_BACKOFFICE_URL!;
+  const partnerId = process.env.AURORA_PARTNER_ID!;
+  const { AURORA_BACKOFFICE_TOKEN: token } = getAuroraBackofficeSecrets();
+
+  const client = createClient({
+    baseUrl,
+    headers: {
+      'X-Api-Key': token,
+    },
+  });
+
+  const { data, error } = await postAuthV1PartnersByPartnerIdTenantsByTenantIdTokens({
+    client,
+    path: { partnerId, tenantId },
+    body: { name: `hyperspace-${orgId}` },
+    throwOnError: false,
+  });
+
+  if (error) {
+    console.error('Failed to create Aurora API key:', error);
+    throw new Error(`Aurora API key creation failed for org ${orgId}`, {
+      cause: error,
+    });
+  }
+
+  const apiToken = data?.token;
+  if (!apiToken) {
+    throw new Error(`Aurora API did not return a token for org ${orgId}: ${JSON.stringify(data)}`);
+  }
+
+  const tokenId = data.id;
+  if (!tokenId) {
     throw new Error(
-      `Aurora API did not return setup data for tenant ${tenantId}`,
+      `Aurora API did not return a token ID for org ${orgId}: ${JSON.stringify(data)}`,
     );
   }
 
-  console.log(
-    `Aurora tenant ${tenantId} setup response:`,
-    JSON.stringify(data),
-  );
-  return { id: data.id!, lastSetupStep: data.lastSetupStep! };
+  console.log(`Aurora API key created for org ${orgId}: tokenId=${tokenId}`);
+  return { token: apiToken, tokenId };
 }
 
 export interface GetStorageSamplesOptions {
@@ -172,7 +218,7 @@ export async function getStorageSamples({
   tenantId,
   from,
   to,
-  window = "1h",
+  window = '1h',
 }: GetStorageSamplesOptions): Promise<ModelStorageMetricsSample[]> {
   const baseUrl = process.env.AURORA_BACKOFFICE_URL!;
   const partnerId = process.env.AURORA_PARTNER_ID!;
@@ -180,16 +226,15 @@ export async function getStorageSamples({
 
   const client = createClient({
     baseUrl,
-    headers: { "X-Api-Key": token },
+    headers: { 'X-Api-Key': token },
   });
 
-  const { data, error } =
-    await getAnalyticsV1ByPartnerIdTenantsByTenantIdStorage({
-      client,
-      path: { partnerId, tenantId },
-      query: { from, to, window },
-      throwOnError: false,
-    });
+  const { data, error } = await getAnalyticsV1ByPartnerIdTenantsByTenantIdStorage({
+    client,
+    path: { partnerId, tenantId },
+    query: { from, to, window },
+    throwOnError: false,
+  });
 
   if (error) {
     throw new Error(`Aurora storage API failed for tenant ${tenantId}`, {

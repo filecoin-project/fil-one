@@ -27,7 +27,9 @@ describe('calculateAverageUsage', () => {
   });
 
   it('returns exactly 1 TiB for TIB_BYTES input', () => {
-    const result = calculateAverageUsage([{ timestamp: '2024-01-01T00:00:00Z', bytesUsed: TIB_BYTES }]);
+    const result = calculateAverageUsage([
+      { timestamp: '2024-01-01T00:00:00Z', bytesUsed: TIB_BYTES },
+    ]);
     expect(result.averageTib).toBe(1);
   });
 

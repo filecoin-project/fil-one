@@ -21,7 +21,12 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
   console.log('[usage-worker] Processing', { orgId, subscriptionId, reportDate });
 
   const now = new Date().toISOString();
-  const samples = await getStorageSamples({ tenantId: orgId, from: currentPeriodStart, to: now, window: '1h' });
+  const samples = await getStorageSamples({
+    tenantId: orgId,
+    from: currentPeriodStart,
+    to: now,
+    window: '1h',
+  });
   const usage = calculateAverageUsage(samples);
 
   console.log('[usage-worker] Usage calculated', {
@@ -40,7 +45,10 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
       },
       timestamp: Math.floor(Date.now() / 1000),
     });
-    console.log('[usage-worker] Stripe meter event created', { stripeCustomerId, averageTib: usage.averageTib });
+    console.log('[usage-worker] Stripe meter event created', {
+      stripeCustomerId,
+      averageTib: usage.averageTib,
+    });
   }
 
   // Write audit record

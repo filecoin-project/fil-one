@@ -7,7 +7,9 @@ export interface UsageCalculationResult {
   sampleCount: number;
 }
 
-export function calculateAverageUsage(samples: ModelStorageMetricsSample[]): UsageCalculationResult {
+export function calculateAverageUsage(
+  samples: ModelStorageMetricsSample[],
+): UsageCalculationResult {
   if (samples.length === 0) {
     return { averageBytesUsed: 0, averageTib: 0, sampleCount: 0 };
   }

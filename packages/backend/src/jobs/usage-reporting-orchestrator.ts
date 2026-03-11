@@ -29,7 +29,8 @@ export async function handler(): Promise<void> {
     const result = await dynamo.send(
       new ScanCommand({
         TableName: billingTableName,
-        FilterExpression: 'sk = :sk AND subscriptionStatus <> :canceled AND attribute_exists(subscriptionId)',
+        FilterExpression:
+          'sk = :sk AND subscriptionStatus <> :canceled AND attribute_exists(subscriptionId)',
         ExpressionAttributeValues: {
           ':sk': { S: 'SUBSCRIPTION' },
           ':canceled': { S: 'canceled' },
@@ -47,7 +48,9 @@ export async function handler(): Promise<void> {
       }
 
       if (!record.currentPeriodStart) {
-        console.warn('[usage-orchestrator] Missing currentPeriodStart, skipping', { orgId: record.orgId });
+        console.warn('[usage-orchestrator] Missing currentPeriodStart, skipping', {
+          orgId: record.orgId,
+        });
         continue;
       }
 

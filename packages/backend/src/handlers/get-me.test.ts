@@ -72,31 +72,37 @@ describe('GET /api/me handler', () => {
     });
 
     // Auth middleware: resolve existing user
-    ddbMock.on(GetItemCommand, {
-      TableName: 'UserInfoTable',
-      Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
-    }).resolves({
-      Item: {
-        pk: { S: `SUB#${MOCK_SUB}` },
-        sk: { S: 'IDENTITY' },
-        userId: { S: MOCK_USER_ID },
-        orgId: { S: MOCK_ORG_ID },
-        email: { S: MOCK_EMAIL },
-      },
-    });
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `SUB#${MOCK_SUB}` },
+          sk: { S: 'IDENTITY' },
+          userId: { S: MOCK_USER_ID },
+          orgId: { S: MOCK_ORG_ID },
+          email: { S: MOCK_EMAIL },
+        },
+      });
   });
 
-  it('returns auroraTenantReady: true when setupStatus is AURORA_TENANT_SETUP_COMPLETE', async () => {
-    ddbMock.on(GetItemCommand, {
-      TableName: 'UserInfoTable',
-      Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-    }).resolves({
-      Item: {
-        pk: { S: `ORG#${MOCK_ORG_ID}` },
-        sk: { S: 'PROFILE' },
-        setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
-      },
-    });
+  it('returns orgSetupComplete: true when setupStatus is AURORA_TENANT_API_KEY_CREATED', async () => {
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
+          setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
+        },
+      });
 
     const result = await handler(authenticatedEvent(), buildContext());
 
@@ -104,23 +110,29 @@ describe('GET /api/me handler', () => {
       statusCode: 200,
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
         email: MOCK_EMAIL,
-        auroraTenantReady: true,
+        orgSetupComplete: true,
       }),
     });
   });
 
-  it('returns auroraTenantReady: false when setupStatus is HYPERSPACE_ORG_CREATED', async () => {
-    ddbMock.on(GetItemCommand, {
-      TableName: 'UserInfoTable',
-      Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-    }).resolves({
-      Item: {
-        pk: { S: `ORG#${MOCK_ORG_ID}` },
-        sk: { S: 'PROFILE' },
-        setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
-      },
-    });
+  it('returns orgSetupComplete: false when setupStatus is HYPERSPACE_ORG_CREATED', async () => {
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
+          setupStatus: { S: 'HYPERSPACE_ORG_CREATED' },
+        },
+      });
 
     const result = await handler(authenticatedEvent(), buildContext());
 
@@ -128,22 +140,28 @@ describe('GET /api/me handler', () => {
       statusCode: 200,
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
         email: MOCK_EMAIL,
-        auroraTenantReady: false,
+        orgSetupComplete: false,
       }),
     });
   });
 
-  it('returns auroraTenantReady: false when setupStatus is missing', async () => {
-    ddbMock.on(GetItemCommand, {
-      TableName: 'UserInfoTable',
-      Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-    }).resolves({
-      Item: {
-        pk: { S: `ORG#${MOCK_ORG_ID}` },
-        sk: { S: 'PROFILE' },
-      },
-    });
+  it('returns orgSetupComplete: false when setupStatus is missing', async () => {
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
+        },
+      });
 
     const result = await handler(authenticatedEvent(), buildContext());
 
@@ -151,8 +169,10 @@ describe('GET /api/me handler', () => {
       statusCode: 200,
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
         email: MOCK_EMAIL,
-        auroraTenantReady: false,
+        orgSetupComplete: false,
       }),
     });
   });

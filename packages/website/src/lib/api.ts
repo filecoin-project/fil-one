@@ -1,5 +1,5 @@
 import { API_URL, AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_AUDIENCE } from '../env.js';
-import { OAUTH_STATE_COOKIE, CSRF_COOKIE_NAME } from '@hyperspace/shared';
+import { ApiErrorCode, OAUTH_STATE_COOKIE, CSRF_COOKIE_NAME } from '@hyperspace/shared';
 
 // Prevents multiple simultaneous 401 responses from each triggering a redirect.
 let isRedirecting = false;
@@ -7,7 +7,7 @@ let isRedirecting = false;
 function getCsrfToken(): string | undefined {
   return document.cookie
     .split('; ')
-    .find(c => c.startsWith(`${CSRF_COOKIE_NAME}=`))
+    .find((c) => c.startsWith(`${CSRF_COOKIE_NAME}=`))
     ?.split('=')[1];
 }
 
@@ -54,10 +54,7 @@ export function logout(): void {
  * - Always sends HttpOnly auth cookies via credentials: 'include'
  * - Redirects to Auth0 login on 401
  */
-export async function apiRequest<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = options.method?.toUpperCase() ?? 'GET';
   const headers = new Headers(options.headers);
   if (!headers.has('Content-Type')) {
@@ -81,22 +78,43 @@ export async function apiRequest<T>(
   }
 
   if (response.status === 403) {
-    const body = await response.json().catch(() => ({})) as { message?: string; code?: string };
-    if (body.code === 'GRACE_PERIOD_WRITE_BLOCKED') {
-      throw new Error('Your account is in a grace period. Read-only access is available. Please reactivate your subscription to make changes.');
+    const body = (await response.json().catch(() => ({}))) as { message?: string; code?: string };
+    if (body.code === ApiErrorCode.ORG_NOT_CONFIRMED) {
+      window.dispatchEvent(new CustomEvent('org:not-confirmed'));
+      throw new Error('Please create an organization to continue.');
     }
-    if (body.code === 'SUBSCRIPTION_CANCELED') {
+    if (body.code === ApiErrorCode.GRACE_PERIOD_WRITE_BLOCKED) {
+      throw new Error(
+        'Your account is in a grace period. Read-only access is available. Please reactivate your subscription to make changes.',
+      );
+    }
+    if (body.code === ApiErrorCode.SUBSCRIPTION_CANCELED) {
       throw new Error('Your subscription has been canceled. Please reactivate to regain access.');
     }
     throw new Error(body.message ?? 'Access denied');
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({})) as { message?: string };
+    const error = (await response.json().catch(() => ({}))) as { message?: string };
     throw new Error(error.message ?? `Request failed with status ${response.status}`);
   }
 
   return response.json() as Promise<T>;
+}
+
+// ── Me / Org API ────────────────────────────────────────────────────────
+
+import type { MeResponse, ConfirmOrgResponse } from '@hyperspace/shared';
+
+export function getMe(): Promise<MeResponse> {
+  return apiRequest<MeResponse>('/me');
+}
+
+export function confirmOrg(orgName: string): Promise<ConfirmOrgResponse> {
+  return apiRequest<ConfirmOrgResponse>('/org/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ orgName }),
+  });
 }
 
 // ── Billing API ─────────────────────────────────────────────────────────

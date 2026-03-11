@@ -63,13 +63,15 @@ describe('usage-reporting-worker', () => {
     await handler(basePayload);
 
     expect(mockMeterEventsCreate).toHaveBeenCalledOnce();
-    expect(mockMeterEventsCreate).toHaveBeenCalledWith(expect.objectContaining({
-      event_name: 'storage_usage',
-      payload: {
-        stripe_customer_id: 'cus_123',
-        value: '1',
-      },
-    }));
+    expect(mockMeterEventsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_name: 'storage_usage',
+        payload: {
+          stripe_customer_id: 'cus_123',
+          value: '1',
+        },
+      }),
+    );
 
     const putCalls = ddbMock.commandCalls(PutItemCommand);
     expect(putCalls).toHaveLength(1);
