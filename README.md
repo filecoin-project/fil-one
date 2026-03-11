@@ -14,7 +14,7 @@ hyperspace/
 │   ├── aurora-backoffice-client/ # Generated TS client for Aurora Back Office API
 │   ├── aurora-portal-client/    # Generated TS client for Aurora Portal API
 │   ├── backend/    # Lambda handlers (upload → DynamoDB)
-│   ├── ui/         # UI component library (git submodule → joemocode-business/ui-filone)
+│   ├── ui/         # UI component library (git submodule → joemocode-business/ui-hyperspace)
 │   └── website/    # Vite + React 19 + TanStack Router SPA + Tailwind v4
 ```
 
@@ -301,7 +301,7 @@ pnpm generate:api-clients
 
 ## UI submodule (`packages/ui`)
 
-`packages/ui` is a git submodule pointing to `joemocode-business/ui-filone` — a fork of `@filecoin-foundation/ui-filecoin` adapted for Vite/React. It is consumed from source by the website (no separate build step in dev).
+`packages/ui` is a git submodule pointing to `joemocode-business/ui-hyperspace` — a fork of `@filecoin-foundation/ui-filecoin` adapted for Vite/React. It is consumed from source by the website (no separate build step in dev).
 
 **Importing components in the website**
 
@@ -329,7 +329,7 @@ The full fork at `joemocode-business/filecoin-foundation` tracks the upstream `F
 
 ```bash
 # In the filecoin-foundation fork, sync upstream then cherry-pick or copy
-# changed files from packages/ui-filecoin/ into the ui-filone repo manually.
+# changed files from packages/ui-filecoin/ into the ui-hyperspace repo manually.
 ```
 
 > **Note**: Several components in `packages/ui` use Next.js-specific APIs (`next/navigation`, `next/image`) or `nuqs` and are not usable as-is in this Vite app. These include `Navigation/*`, `Network/*`, and `Search/Search`. They will be adapted for React Router as needed.
