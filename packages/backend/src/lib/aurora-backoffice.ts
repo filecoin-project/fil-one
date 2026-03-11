@@ -192,7 +192,13 @@ export async function createAuroraTenantApiKey({
     throw new Error(`Aurora API did not return a token for org ${orgId}: ${JSON.stringify(data)}`);
   }
 
-  const tokenId = data.id!;
+  const tokenId = data.id;
+  if (!tokenId) {
+    throw new Error(
+      `Aurora API did not return a token ID for org ${orgId}: ${JSON.stringify(data)}`,
+    );
+  }
+
   console.log(`Aurora API key created for org ${orgId}: tokenId=${tokenId}`);
   return { token: apiToken, tokenId };
 }

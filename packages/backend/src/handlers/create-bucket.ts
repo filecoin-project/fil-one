@@ -6,6 +6,7 @@ import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import type { CreateBucketRequest, CreateBucketResponse, ErrorResponse } from '@hyperspace/shared';
 import { Resource } from 'sst';
 import { createAuroraBucket } from '../lib/aurora-portal.js';
+import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
@@ -60,7 +61,8 @@ export async function baseHandler(
   );
 
   const auroraTenantId = orgProfile?.auroraTenantId?.S;
-  if (!auroraTenantId) {
+  const setupStatus = orgProfile?.setupStatus?.S;
+  if (!auroraTenantId || !isOrgSetupComplete(setupStatus)) {
     return new ResponseBuilder()
       .status(503)
       .body<ErrorResponse>({

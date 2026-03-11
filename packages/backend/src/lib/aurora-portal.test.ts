@@ -19,7 +19,7 @@ process.env.HYPERSPACE_STAGE = 'test';
 
 const ssmMock = mockClient(SSMClient);
 
-import { createAuroraBucket } from './aurora-portal.js';
+import { createAuroraBucket, getAuroraPortalApiKey } from './aurora-portal.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,12 +113,49 @@ describe('createAuroraBucket', () => {
       createAuroraBucket({ tenantId: 'tenant-1', bucketName: 'my-bucket' }),
     ).rejects.toThrow('Failed to create Aurora bucket "my-bucket" for tenant tenant-1');
   });
+});
+
+describe('getAuroraPortalApiKey', () => {
+  beforeEach(() => {
+    ssmMock.reset();
+  });
+
+  it('calls SSM with correct parameter name and WithDecryption', async () => {
+    setupSsmMock('my-key');
+
+    await getAuroraPortalApiKey('test', 'tenant-1');
+
+    const ssmCalls = ssmMock.commandCalls(GetParameterCommand);
+    expect(ssmCalls).toHaveLength(1);
+    expect(ssmCalls[0].args[0].input).toStrictEqual({
+      Name: '/hyperspace/test/aurora-portal/tenant-api-key/tenant-1',
+      WithDecryption: true,
+    });
+  });
+
+  it('returns the API key from SSM', async () => {
+    setupSsmMock('my-secret-key');
+
+    const result = await getAuroraPortalApiKey('test', 'tenant-1');
+
+    expect(result).toBe('my-secret-key');
+  });
+
+  it('throws when SSM parameter is not found', async () => {
+    ssmMock
+      .on(GetParameterCommand)
+      .rejects(Object.assign(new Error('Parameter not found'), { name: 'ParameterNotFound' }));
+
+    await expect(getAuroraPortalApiKey('test', 'tenant-1')).rejects.toThrow(
+      'Aurora API key not found in SSM for tenant tenant-1',
+    );
+  });
 
   it('throws when SSM parameter has no value', async () => {
     ssmMock.on(GetParameterCommand).resolves({ Parameter: { Value: undefined } });
 
-    await expect(
-      createAuroraBucket({ tenantId: 'tenant-1', bucketName: 'my-bucket' }),
-    ).rejects.toThrow('Aurora API key not found in SSM for tenant tenant-1');
+    await expect(getAuroraPortalApiKey('test', 'tenant-1')).rejects.toThrow(
+      'Aurora API key not found in SSM for tenant tenant-1',
+    );
   });
 });

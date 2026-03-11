@@ -40,6 +40,7 @@ function orgProfileWithTenant(tenantId: string) {
       pk: { S: `ORG#${USER_INFO.orgId}` },
       sk: { S: 'PROFILE' },
       auroraTenantId: { S: tenantId },
+      setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
     },
   };
 }
@@ -80,6 +81,24 @@ describe('create-bucket baseHandler', () => {
 
   it('returns 503 when auroraTenantId is missing', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithoutTenant());
+
+    const event = buildEvent({ body: validBody(), userInfo: USER_INFO });
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(503);
+    expect(mockCreateAuroraBucket).not.toHaveBeenCalled();
+    expect(ddbMock.commandCalls(PutItemCommand)).toHaveLength(0);
+  });
+
+  it('returns 503 when org setup is not complete', async () => {
+    ddbMock.on(GetItemCommand).resolves({
+      Item: {
+        pk: { S: `ORG#${USER_INFO.orgId}` },
+        sk: { S: 'PROFILE' },
+        auroraTenantId: { S: 'aurora-t-1' },
+        setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+      },
+    });
 
     const event = buildEvent({ body: validBody(), userInfo: USER_INFO });
     const result = await baseHandler(event);

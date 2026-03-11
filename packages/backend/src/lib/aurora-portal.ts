@@ -1,6 +1,8 @@
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { createClient, postTenantsByTenantIdBucket } from '@hyperspace/aurora-portal-client';
 
+const ssm = new SSMClient({});
+
 export interface CreateAuroraBucketOptions {
   tenantId: string;
   bucketName: string;
@@ -12,19 +14,7 @@ export async function createAuroraBucket({
 }: CreateAuroraBucketOptions): Promise<void> {
   const baseUrl = process.env.AURORA_PORTAL_URL!;
   const stage = process.env.HYPERSPACE_STAGE!;
-
-  const ssm = new SSMClient({});
-  const { Parameter } = await ssm.send(
-    new GetParameterCommand({
-      Name: `/hyperspace/${stage}/aurora-portal/tenant-api-key/${tenantId}`,
-      WithDecryption: true,
-    }),
-  );
-
-  const apiKey = Parameter?.Value;
-  if (!apiKey) {
-    throw new Error(`Aurora API key not found in SSM for tenant ${tenantId}`);
-  }
+  const apiKey = await getAuroraPortalApiKey(stage, tenantId);
 
   const client = createClient({
     baseUrl,
@@ -51,4 +41,28 @@ export async function createAuroraBucket({
   }
 
   console.log(`Aurora bucket "${bucketName}" created for tenant ${tenantId}`);
+}
+
+export async function getAuroraPortalApiKey(stage: string, tenantId: string): Promise<string> {
+  let apiKey: string | undefined;
+  try {
+    const { Parameter } = await ssm.send(
+      new GetParameterCommand({
+        Name: `/hyperspace/${stage}/aurora-portal/tenant-api-key/${tenantId}`,
+        WithDecryption: true,
+      }),
+    );
+    apiKey = Parameter?.Value;
+  } catch (err) {
+    if ((err as { name?: string }).name === 'ParameterNotFound') {
+      throw new Error(`Aurora API key not found in SSM for tenant ${tenantId}`);
+    }
+    throw err;
+  }
+
+  if (!apiKey) {
+    throw new Error(`Aurora API key not found in SSM for tenant ${tenantId}`);
+  }
+
+  return apiKey;
 }

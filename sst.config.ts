@@ -228,7 +228,8 @@ export default $config({
       stripePriceId,
     ];
 
-    const sharedEnv: Record<string, string> = {
+    const sharedEnv: Record<string, $util.Input<string>> = {
+      HYPERSPACE_STAGE: $app.stage,
       AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
       AUTH0_AUDIENCE: 'console.filhyperspace.com',
     };
@@ -276,7 +277,6 @@ export default $config({
       'create-bucket',
       {
         AURORA_PORTAL_URL: auroraEnv.AURORA_PORTAL_URL,
-        HYPERSPACE_STAGE: $app.stage,
       },
       [
         {
@@ -326,7 +326,7 @@ export default $config({
         link: [userInfoTable, auroraBackofficeToken],
         environment: {
           ...auroraEnv,
-          HYPERSPACE_STAGE: $app.stage,
+          ...sharedEnv,
         },
         permissions: [
           {
