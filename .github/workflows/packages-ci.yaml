@@ -27,7 +27,7 @@ jobs:
       # type definitions live in .sst/platform/ and are not checked into git.
       # Run `sst install` to generate them so oxlint's type-aware checks pass.
       - name: Generate SST provider types
-        run: npx sst install
+        run: pnpx sst install
 
       - name: Lint
         run: pnpm lint
