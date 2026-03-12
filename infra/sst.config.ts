@@ -21,7 +21,7 @@ export default $config({
     }
 
     return {
-      name: 'hyperspace-infra',
+      name: 'filone-infra',
       removal: stage === 'production' ? 'retain' : 'remove',
       home: 'aws',
       providers: {
@@ -37,7 +37,7 @@ export default $config({
     });
 
     // IAM Role for GitHub Actions
-    const roleName = `hyperspace-infra-${$app.stage}-github`;
+    const roleName = `filone-infra-${$app.stage}-github`;
     const role = new aws.iam.Role('GitHubActionsRole', {
       name: roleName,
       assumeRolePolicy: {
@@ -49,7 +49,7 @@ export default $config({
             Action: 'sts:AssumeRoleWithWebIdentity',
             Condition: {
               StringLike: {
-                'token.actions.githubusercontent.com:sub': 'repo:filecoin-project/filhyperspace:*',
+                'token.actions.githubusercontent.com:sub': 'repo:filecoin-project/fil-one:*',
               },
               StringEquals: {
                 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
