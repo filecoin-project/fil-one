@@ -8,11 +8,7 @@ import { Spinner } from '@hyperspace/ui/Spinner';
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@hyperspace/ui/Tabs';
 import { useToast } from '@hyperspace/ui/Toast';
 
-import type {
-  AccessKey,
-  CreateAccessKeyResponse,
-  ListAccessKeysResponse,
-} from '@filone/shared';
+import type { AccessKey, CreateAccessKeyResponse, ListAccessKeysResponse } from '@filone/shared';
 
 import { apiRequest } from '../../lib/api.js';
 import { S3_ENDPOINT } from '../../env';

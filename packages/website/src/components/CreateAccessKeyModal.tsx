@@ -6,7 +6,7 @@ import { Input } from '@hyperspace/ui/Input';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@hyperspace/ui/Modal';
 import { useToast } from '@hyperspace/ui/Toast';
 
-import type { CreateAccessKeyResponse } from '@hyperspace/shared';
+import type { CreateAccessKeyResponse } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
 
 // ---------------------------------------------------------------------------

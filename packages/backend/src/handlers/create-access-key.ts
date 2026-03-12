@@ -7,7 +7,7 @@ import type {
   CreateAccessKeyRequest,
   CreateAccessKeyResponse,
   ErrorResponse,
-} from '@hyperspace/shared';
+} from '@filone/shared';
 import { Resource } from 'sst';
 import { createAuroraAccessKey } from '../lib/aurora-portal.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
