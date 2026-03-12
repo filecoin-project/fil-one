@@ -1,0 +1,11 @@
+{
+  "name": "@filone/infra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy:staging": "sst deploy --stage staging"
+  },
+  "devDependencies": {
+    "sst": "^4.2.4"
+  }
+}
