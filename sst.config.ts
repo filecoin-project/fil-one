@@ -372,8 +372,7 @@ export default $config({
       handler: 'packages/backend/src/jobs/usage-reporting-orchestrator.handler',
       link: [billingTable],
       environment: { USAGE_WORKER_FUNCTION_NAME: usageWorker.name },
-      // eslint-disable-next-line typescript/no-explicit-any
-      runtime: 'nodejs24.x' as any,
+      runtime: 'nodejs24.x',
       timeout: '300 seconds',
       memory: '256 MB',
       permissions: [
