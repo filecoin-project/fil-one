@@ -128,6 +128,32 @@ pnpm run typecheck        # tsc --noEmit across all packages
 cd packages/website && pnpm run dev
 ```
 
+### E2E Tests
+
+The repo includes a Playwright end-to-end test suite under `e2e/`. The `@playwright/test` package is already a devDependency, so `pnpm install` covers it.
+
+**Install browser binaries** (one-time):
+
+```bash
+pnpm exec playwright install --with-deps
+```
+
+**Run tests** against a deployed stage:
+
+```bash
+BASE_URL=<your-cloudfront-url> pnpm test:e2e
+```
+
+`BASE_URL` is required and should point to a deployed SST stage (personal dev stack, staging, etc.).
+
+After a run, an HTML report is generated at `playwright-report/`. To view it:
+
+```bash
+pnpm exec playwright show-report
+```
+
+> CI runs these tests automatically against preview deployments on PRs.
+
 ### Personal Dev Stack
 
 ```bash

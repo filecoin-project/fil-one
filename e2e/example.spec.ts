@@ -1,6 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
-test("homepage loads with a non-empty title", async ({ page }) => {
-  await page.goto("/");
-  await expect(page).not.toHaveTitle("");
+test('homepage loads with a non-empty title', async ({ page }) => {
+  await page.goto('/');
+  await expect(page).not.toHaveTitle('');
 });
