@@ -1,6 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const isCI = !!process.env.CI;
+const baseURL = process.env.BASE_URL;
+
+if (!baseURL) {
+  throw new Error(
+    "BASE_URL env var is required. Deploy an SST stage first, then run: BASE_URL=<url> pnpm test:e2e"
+  );
+}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -10,7 +17,7 @@ export default defineConfig({
   workers: isCI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: isCI ? "https://localhost:4173" : "https://localhost:5173",
+    baseURL,
     ignoreHTTPSErrors: true,
     trace: "on-first-retry",
   },
@@ -28,13 +35,4 @@ export default defineConfig({
       use: { ...devices["Desktop Safari"] },
     },
   ],
-  webServer: {
-    command: isCI
-      ? "pnpm --filter @hyperspace/website preview"
-      : "pnpm --filter @hyperspace/website dev",
-    url: isCI ? "https://localhost:4173" : "https://localhost:5173",
-    reuseExistingServer: !isCI,
-    ignoreHTTPSErrors: true,
-    timeout: 120_000,
-  },
 });

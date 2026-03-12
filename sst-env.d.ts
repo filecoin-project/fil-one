@@ -18,10 +18,6 @@ declare module "sst" {
       "type": "sst.aws.Queue"
       "url": string
     }
-    "AuroraTenantSetupQueue": {
-      "type": "sst.aws.Queue"
-      "url": string
-    }
     "Auth0ClientId": {
       "type": "sst.sst.Secret"
       "value": string
@@ -41,10 +37,6 @@ declare module "sst" {
     "BillingTable": {
       "name": string
       "type": "sst.aws.Dynamo"
-    }
-    "SetupIntegrations": {
-      "name": string
-      "type": "sst.aws.Function"
     }
     "StripePriceId": {
       "type": "sst.sst.Secret"
@@ -69,10 +61,6 @@ declare module "sst" {
     "WebsiteBucket": {
       "name": string
       "type": "sst.aws.Bucket"
-    }
-    "WebsiteRouter": {
-      "type": "sst.aws.Router"
-      "url": string
     }
   }
 }
