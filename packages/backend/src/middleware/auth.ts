@@ -150,10 +150,7 @@ interface ResolvedIdentity {
   email: string | null;
 }
 
-async function resolveUserAndOrg(
-  sub: string,
-  email: string | null,
-): Promise<ResolvedIdentity> {
+async function resolveUserAndOrg(sub: string, email: string | null): Promise<ResolvedIdentity> {
   const tableName = Resource.UserInfoTable.name;
 
   // Look up existing mapping
