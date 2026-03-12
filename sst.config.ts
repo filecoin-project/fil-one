@@ -335,8 +335,7 @@ export default $config({
 
     // ── Usage + Dashboard routes ─────────────────────────────────────
     addRoute('GET', '/api/usage', 'get-usage');
-    addRoute('GET', '/api/dashboard/trends', 'get-dashboard-trends');
-    addRoute('GET', '/api/dashboard/activity', 'get-dashboard-activity');
+    addRoute('GET', '/api/activity', 'get-activity');
 
     // ── Billing routes ───────────────────────────────────────────────
     addRoute('GET', '/api/billing', 'get-billing');

@@ -4,7 +4,7 @@ import {
   DatabaseIcon,
   KeyIcon,
   ArrowUpIcon,
-  TrashIcon,
+  HardDrivesIcon,
   XIcon,
 } from '@phosphor-icons/react/dist/ssr';
 import { Link } from '@tanstack/react-router';
@@ -12,24 +12,21 @@ import { Link } from '@tanstack/react-router';
 const UsageTrends = lazy(() => import('./UsageTrends'));
 
 import { Button } from '@hyperspace/ui/Button';
-import { StatCard } from '@hyperspace/ui/StatCard';
+import { ProgressBar } from '@hyperspace/ui/ProgressBar';
+import { formatBytes } from '@hyperspace/ui/utils';
 
-import { SubscriptionStatus } from '@filone/shared';
-import type { UsageResponse, BillingInfo, RecentActivity, ActivityAction } from '@filone/shared';
+import { PlanId, SubscriptionStatus } from '@filone/shared';
+import type { UsageResponse, BillingInfo, RecentActivity } from '@filone/shared';
 
-import { getUsage, getBilling, getDashboardActivity } from '../../lib/api.js';
+import { getUsage, getBilling, getActivity } from '../../lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
+const TIB_BYTES = 1_099_511_627_776;
+const STORAGE_LIMIT = 1 * TIB_BYTES;
+const EGRESS_LIMIT = 2 * TIB_BYTES;
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -45,24 +42,55 @@ function daysRemaining(isoString: string): number {
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
-// ---------------------------------------------------------------------------
-// Activity helpers
-// ---------------------------------------------------------------------------
+function planDisplayName(planId: PlanId): string {
+  switch (planId) {
+    case PlanId.FreeTrial:
+      return 'Free trial';
+    case PlanId.PayAsYouGo:
+      return 'Pay As You Go';
+    default:
+      return 'Unknown';
+  }
+}
 
-type ActivityIconConfig = {
-  icon: React.ElementType;
-  colorClass: string;
-  label: string;
-};
+function statusBadge(status: SubscriptionStatus): { label: string; className: string } {
+  switch (status) {
+    case SubscriptionStatus.Trialing:
+      return {
+        label: 'Trial',
+        className: 'bg-[rgba(0,128,255,0.1)] text-[#0080ff]',
+      };
+    case SubscriptionStatus.Active:
+      return {
+        label: 'Active',
+        className: 'bg-green-50 text-green-600',
+      };
+    case SubscriptionStatus.PastDue:
+      return {
+        label: 'Past Due',
+        className: 'bg-amber-50 text-amber-600',
+      };
+    case SubscriptionStatus.Canceled:
+      return {
+        label: 'Canceled',
+        className: 'bg-red-50 text-red-600',
+      };
+    case SubscriptionStatus.GracePeriod:
+      return {
+        label: 'Grace Period',
+        className: 'bg-amber-50 text-amber-600',
+      };
+    default:
+      return { label: status, className: 'bg-zinc-100 text-zinc-500' };
+  }
+}
 
-const ACTIVITY_CONFIG: Record<ActivityAction, ActivityIconConfig> = {
-  'bucket.created': { icon: DatabaseIcon, colorClass: 'text-green-600', label: 'Bucket created' },
-  'bucket.deleted': { icon: DatabaseIcon, colorClass: 'text-red-500', label: 'Bucket deleted' },
-  'object.uploaded': { icon: ArrowUpIcon, colorClass: 'text-blue-600', label: 'Object uploaded' },
-  'object.deleted': { icon: TrashIcon, colorClass: 'text-red-500', label: 'Object deleted' },
-  'key.created': { icon: KeyIcon, colorClass: 'text-green-600', label: 'Key created' },
-  'key.deleted': { icon: KeyIcon, colorClass: 'text-red-500', label: 'Key deleted' },
-};
+function estimateMonthlyCost(usedBytes: number, pricePerTibCents: number): string {
+  if (usedBytes === 0) return '$0.00';
+  const tib = usedBytes / TIB_BYTES;
+  const cents = tib * pricePerTibCents;
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 // ---------------------------------------------------------------------------
 // Skeleton
@@ -72,15 +100,12 @@ function DashboardSkeleton() {
   return (
     <div className="p-6 animate-pulse">
       <div className="mb-6 h-8 w-40 rounded bg-zinc-200" />
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="h-28 rounded-lg bg-zinc-100" />
-        <div className="h-28 rounded-lg bg-zinc-100" />
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="h-[157px] rounded-xl bg-zinc-100" />
+        <div className="h-[157px] rounded-xl bg-zinc-100" />
+        <div className="h-[157px] rounded-xl bg-zinc-100" />
       </div>
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="h-24 rounded-lg bg-zinc-100" />
-        <div className="h-24 rounded-lg bg-zinc-100" />
-        <div className="h-24 rounded-lg bg-zinc-100" />
-      </div>
+      <div className="mb-5 h-[88px] rounded-xl bg-zinc-100" />
       <div className="h-48 rounded-lg bg-zinc-100" />
     </div>
   );
@@ -98,7 +123,7 @@ export function DashboardPage() {
   const [trialBannerVisible, setTrialBannerVisible] = useState(true);
 
   useEffect(() => {
-    Promise.all([getUsage(), getBilling(), getDashboardActivity(5)])
+    Promise.all([getUsage(), getBilling(), getActivity({ limit: 5 })])
       .then(([u, b, a]) => {
         setUsage(u);
         setBilling(b);
@@ -120,20 +145,17 @@ export function DashboardPage() {
       ? daysRemaining(billing.subscription.trialEndsAt)
       : null;
 
-  const storagePct =
-    usage.storage.limitBytes > 0
-      ? Math.round((usage.storage.usedBytes / usage.storage.limitBytes) * 100)
-      : 0;
-
-  const downloadsPct =
-    usage.downloads.limitBytes > 0
-      ? Math.round((usage.downloads.usedBytes / usage.downloads.limitBytes) * 100)
-      : 0;
-
   const showQuickSetup =
     usage.buckets.count === 0 || usage.objects.count === 0 || usage.accessKeys.count === 0;
 
-  const isPopulated = usage.buckets.count > 0;
+  const badge = statusBadge(billing.subscription.status);
+  const pricePerTibCents = billing.subscription.planId === PlanId.PayAsYouGo ? 499 : 0;
+
+  const storagePct =
+    STORAGE_LIMIT > 0 ? Math.round((usage.storage.usedBytes / STORAGE_LIMIT) * 100) : 0;
+
+  const egressPct =
+    EGRESS_LIMIT > 0 ? Math.round((usage.downloads.usedBytes / EGRESS_LIMIT) * 100) : 0;
 
   const quickSetupTasks = [
     {
@@ -170,15 +192,13 @@ export function DashboardPage() {
       {/* 1. Page header */}
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-zinc-900">Dashboard</h1>
-        {isPopulated && (
-          <Link
-            to="/buckets"
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] hover:bg-zinc-50"
-          >
-            <PlusIcon size={16} />
-            New bucket
-          </Link>
-        )}
+        <Link
+          to="/buckets"
+          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] hover:bg-zinc-50"
+        >
+          <PlusIcon size={16} />
+          New bucket
+        </Link>
       </div>
 
       {/* 2. Trial banner */}
@@ -190,7 +210,10 @@ export function DashboardPage() {
             </span>
             <p className="text-[13px]">
               <span className="font-medium text-zinc-900">Free trial</span>
-              <span className="text-[#677183]"> — Add a payment method to unlock unlimited storage at $4.99/TiB</span>
+              <span className="text-[#677183]">
+                {' '}
+                — Add a payment method to unlock unlimited storage at $4.99/TiB
+              </span>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -213,99 +236,236 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* 3. Quick Setup card */}
+      {/* 3. Quick Setup */}
       {showQuickSetup && (
-        <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-6">
+        <div className="mb-5 rounded-xl border border-[#e1e4ea] bg-white p-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
           <div className="mb-4 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              Quick Setup
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#677183]">
+              QUICK SETUP
             </span>
-            <span className="text-xs text-zinc-400">
+            <span className="text-[11px] text-[#677183]">
               {quickSetupDone} of {quickSetupTotal}
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {quickSetupTasks.map(({ id, icon: Icon, title, subtitle, href, done }) => (
               <Link
                 key={id}
                 to={href}
-                className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border p-4 text-center ${
-                  done ? 'border-green-200 bg-green-50' : 'border-zinc-200 hover:bg-zinc-50'
+                className={`flex items-center gap-3 rounded-lg border p-4 ${
+                  done ? 'border-green-200 bg-green-50' : 'border-[#e1e4ea] hover:bg-zinc-50'
                 }`}
               >
                 <span
-                  className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                    done ? 'bg-green-100 text-green-600' : 'bg-brand-50 text-brand-600'
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                    done
+                      ? 'bg-green-100 text-green-600'
+                      : 'bg-[rgba(0,128,255,0.08)] text-[#0080ff]'
                   }`}
                 >
-                  <Icon size={20} />
+                  <Icon size={18} />
                 </span>
-                <span className="text-sm font-medium text-zinc-800">{title}</span>
-                <span className="text-xs text-zinc-500">{subtitle}</span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium text-zinc-900">{title}</p>
+                  <p className="text-[11px] text-[#677183]">{subtitle}</p>
+                </div>
               </Link>
             ))}
           </div>
         </div>
       )}
 
-      {/* 4. Stats row */}
-      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <StatCard
-          size="lg"
-          label="STORAGE"
-          value={formatBytes(usage.storage.usedBytes)}
-          limit={
-            usage.storage.limitBytes > 0
-              ? `/ ${formatBytes(usage.storage.limitBytes)}`
-              : '/ Unlimited'
-          }
-          usage={`${storagePct}% used`}
-          progress={storagePct}
-        />
-        <StatCard
-          size="lg"
-          label="DOWNLOADS"
-          value={formatBytes(usage.downloads.usedBytes)}
-          limit={`/ ${formatBytes(usage.downloads.limitBytes)}`}
-          usage={`${downloadsPct}% used`}
-          progress={downloadsPct}
-        />
+      {/* 4. Top row: Plan · Storage · Egress */}
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/* Plan card */}
+        <div className="flex h-[157px] flex-col justify-between rounded-xl border border-[#e1e4ea] bg-white p-5">
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+                PLAN
+              </span>
+              {isTrialing && trialDaysLeft !== null && (
+                <span className="rounded-full bg-[rgba(0,128,255,0.1)] px-2 py-0.5 text-[10px] font-semibold text-[#0080ff]">
+                  {trialDaysLeft} days left
+                </span>
+              )}
+              {!isTrialing && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}
+                >
+                  {badge.label}
+                </span>
+              )}
+            </div>
+            <span className="text-xl font-semibold text-[#14181f]">
+              {planDisplayName(billing.subscription.planId)}
+            </span>
+            {isTrialing && (
+              <p className="mt-0.5 text-[11px] text-[#677183]">
+                1 TiB storage &amp; downloads included
+              </p>
+            )}
+            {!isTrialing && (
+              <p className="mt-0.5 text-[11px] text-[#677183]">$4.99/TiB · no egress fees</p>
+            )}
+          </div>
+          <div>
+            {isTrialing ? (
+              <Link
+                to="/billing"
+                className="text-[12px] font-medium text-[#677183] hover:text-zinc-900"
+              >
+                Upgrade <span aria-hidden="true">→</span>
+              </Link>
+            ) : (
+              <Link
+                to="/billing"
+                className="text-[12px] font-medium text-[#677183] hover:text-zinc-900"
+              >
+                Manage plan <span aria-hidden="true">→</span>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Storage card */}
+        <div className="flex h-[157px] flex-col justify-between rounded-xl border border-[#e1e4ea] bg-white p-5">
+          <div>
+            <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+              STORAGE
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[30px] font-semibold leading-9 tracking-tight text-[#14181f]">
+                {formatBytes(usage.storage.usedBytes)}
+              </span>
+              {isTrialing && <span className="text-[13px] text-[#677183]">/ 1 TiB</span>}
+            </div>
+          </div>
+          {isTrialing ? (
+            <ProgressBar value={storagePct} size="sm" label="Storage usage" />
+          ) : (
+            <div className="flex items-center justify-between border-t border-[#e1e4ea] pt-3">
+              <span className="text-[11px] text-[#677183]">Est. monthly cost</span>
+              <span className="text-[13px] font-semibold text-[#14181f]">
+                {estimateMonthlyCost(usage.storage.usedBytes, pricePerTibCents)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Egress card */}
+        <div className="flex h-[157px] flex-col justify-between rounded-xl border border-[#e1e4ea] bg-white p-5">
+          <div>
+            <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+              EGRESS
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[30px] font-semibold leading-9 tracking-tight text-[#14181f]">
+                {formatBytes(usage.downloads.usedBytes)}
+              </span>
+              {isTrialing && <span className="text-[13px] text-[#677183]">/ 2 TiB</span>}
+            </div>
+          </div>
+          {isTrialing ? (
+            <ProgressBar value={egressPct} size="sm" label="Egress usage" />
+          ) : (
+            <div className="flex items-center border-t border-[#e1e4ea] pt-3">
+              <span className="text-[11px] text-[#677183]">No egress fees · unlimited</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard
-          label="BUCKETS"
-          value={String(usage.buckets.count)}
-          limit={`/ ${usage.buckets.limit}`}
-        />
-        <StatCard label="OBJECTS" value={String(usage.objects.count)} limit="total" />
-        <StatCard
-          label="ACCESS KEYS"
-          value={String(usage.accessKeys.count)}
-          limit={`/ ${usage.accessKeys.limit}`}
-        />
+      {/* 5. Buckets · Objects · API Keys — single card with vertical dividers */}
+      <div className="mb-5 grid grid-cols-3 divide-x divide-[#e1e4ea] rounded-xl border border-[#e1e4ea] bg-white shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+        <div className="px-5 py-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+              BUCKETS
+            </span>
+            <Link to="/buckets" className="text-[11px] text-[#677183] hover:text-zinc-900">
+              View all
+            </Link>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-semibold text-[#14181f]">{usage.buckets.count}</span>
+            <span className="text-[11px] text-[#677183]">/ {usage.buckets.limit}</span>
+          </div>
+        </div>
+        <div className="px-5 py-4">
+          <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+            OBJECTS
+          </span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-semibold text-[#14181f]">{usage.objects.count}</span>
+            <span className="text-[11px] text-[#677183]">total</span>
+          </div>
+        </div>
+        <div className="px-5 py-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+              API KEYS
+            </span>
+            <Link to="/api-keys" className="text-[11px] text-[#677183] hover:text-zinc-900">
+              View all
+            </Link>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-xl font-semibold text-[#14181f]">{usage.accessKeys.count}</span>
+            <span className="text-[11px] text-[#677183]">/ {usage.accessKeys.limit}</span>
+          </div>
+        </div>
       </div>
 
-      {/* 5. Usage Trends — wrapped for spacing */}
+      {/* 6. Filecoin Sealing Status (visual placeholder) */}
+      <div className="mb-6 rounded-xl border border-[#e1e4ea] bg-white p-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[11px] font-medium uppercase tracking-wider text-[#677183]">
+              FILECOIN SEALING STATUS
+            </h2>
+            <span className="rounded-full bg-[rgba(0,128,255,0.1)] px-2 py-0.5 text-[10px] font-semibold text-[#0080ff]">
+              On-chain verification
+            </span>
+          </div>
+          <a
+            href="https://docs.filecoin.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-[#677183] hover:text-zinc-900"
+          >
+            Learn more ↗
+          </a>
+        </div>
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100">
+            <HardDrivesIcon size={20} className="text-[#677183]" />
+          </div>
+          <p className="text-[13px] font-medium text-zinc-900">No objects sealing yet</p>
+          <p className="max-w-xs text-[11px] text-[#677183]">
+            Upload your first object to see real-time Filecoin sealing status and on-chain
+            verification
+          </p>
+          <Link
+            to="/buckets"
+            className="mt-1 text-[12px] font-medium text-[#0080ff] hover:underline"
+          >
+            Go to buckets <span aria-hidden="true">→</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* 7. Usage Trends */}
       <Suspense fallback={<div className="mb-6" style={{ height: 200 }} />}>
         <UsageTrends />
       </Suspense>
 
-      {/* 6. Recent Activity */}
-      <div className="rounded-lg border border-[rgba(225,228,234,0.6)] bg-white pb-5 pl-3 pr-5 pt-4 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
-        <div className="mb-3 flex items-center justify-between">
+      {/* 8. Recent Activity */}
+      <div className="rounded-xl border border-[#e1e4ea] bg-white pb-5 pl-3 pr-5 pt-4 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+        <div className="mb-3">
           <h2 className="text-xs font-medium uppercase tracking-wider text-[#677183]">
             Recent Activity
           </h2>
-          {activities.length > 0 && (
-            <Link
-              to="/buckets"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#677183] hover:text-zinc-900"
-            >
-              View all
-              <span aria-hidden="true">→</span>
-            </Link>
-          )}
         </div>
 
         {activities.length === 0 ? (
@@ -318,47 +478,43 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="divide-y divide-zinc-100/50">
-            {activities.map((activity) => {
-              const config = ACTIVITY_CONFIG[activity.action];
-              const Icon = config.icon;
-              return (
-                <div key={activity.id} className="flex items-center gap-4 rounded-lg px-2 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-[13px] font-medium text-zinc-900">
-                        {activity.resourceName}
-                      </span>
-                      <span
-                        className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
-                          activity.resourceType === 'object'
-                            ? 'bg-[rgba(0,128,255,0.1)] text-[#0080ff]'
-                            : activity.resourceType === 'bucket'
-                              ? 'bg-zinc-100 text-[#677183]'
-                              : 'bg-purple-50 text-purple-600'
-                        }`}
-                      >
-                        {activity.resourceType}
-                      </span>
-                    </div>
-                    {activity.cid && (
-                      <p className="mt-0.5 truncate font-mono text-[10px] text-[#677183]">
-                        {activity.cid}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4 shrink-0">
-                    {activity.sizeBytes !== undefined && (
-                      <span className="text-[11px] font-medium text-[#677183]">
-                        {formatBytes(activity.sizeBytes)}
-                      </span>
-                    )}
-                    <span className="w-14 text-right text-[11px] text-[#677183]">
-                      {timeAgo(activity.timestamp)}
+            {activities.map((activity) => (
+              <div key={activity.id} className="flex items-center gap-4 rounded-lg px-2 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13px] font-medium text-zinc-900">
+                      {activity.resourceName}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                        activity.resourceType === 'object'
+                          ? 'bg-[rgba(0,128,255,0.1)] text-[#0080ff]'
+                          : activity.resourceType === 'bucket'
+                            ? 'bg-zinc-100 text-[#677183]'
+                            : 'bg-purple-50 text-purple-600'
+                      }`}
+                    >
+                      {activity.resourceType}
                     </span>
                   </div>
+                  {activity.cid && (
+                    <p className="mt-0.5 truncate font-mono text-[10px] text-[#677183]">
+                      {activity.cid}
+                    </p>
+                  )}
                 </div>
-              );
-            })}
+                <div className="flex shrink-0 items-center gap-4">
+                  {activity.sizeBytes !== undefined && (
+                    <span className="text-[11px] font-medium text-[#677183]">
+                      {formatBytes(activity.sizeBytes)}
+                    </span>
+                  )}
+                  <span className="w-14 text-right text-[11px] text-[#677183]">
+                    {timeAgo(activity.timestamp)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -11,6 +11,7 @@ import {
 
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { useToast } from '@hyperspace/ui/Toast';
+import { formatBytes } from '@hyperspace/ui/utils';
 
 import { SubscriptionStatus, TIB_BYTES } from '@filone/shared';
 import type { BillingInfo, UsageResponse, CreateSetupIntentResponse } from '@filone/shared';
@@ -22,14 +23,6 @@ import { AddPaymentDialog } from '../billing/AddPaymentDialog.js';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 function daysRemaining(isoString: string): number {
   const ms = new Date(isoString).getTime() - Date.now();

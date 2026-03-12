@@ -1,12 +1,13 @@
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
+import { getDynamoClient } from '../lib/ddb-client.js';
 import { Resource } from 'sst';
 import { TIB_BYTES } from '@filone/shared';
 import { getStripeClient } from '../lib/stripe-client.js';
 import { getStorageSamples } from '../lib/aurora-backoffice.js';
 import { calculateAverageUsage } from '../lib/usage-calculator.js';
 
-const dynamo = new DynamoDBClient({});
+const dynamo = getDynamoClient();
 
 export interface UsageReportingWorkerPayload {
   orgId: string;

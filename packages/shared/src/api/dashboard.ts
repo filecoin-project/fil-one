@@ -33,3 +33,8 @@ export interface RecentActivity {
 export interface RecentActivityResponse {
   activities: RecentActivity[];
 }
+
+export interface ActivityResponse {
+  activities: RecentActivity[];
+  trends: UsageTrendsResponse;
+}

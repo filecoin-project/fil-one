@@ -12,27 +12,8 @@ import {
 
 import type { UsageTrendsResponse } from '@filone/shared';
 
-import { getDashboardTrends } from '../../lib/api.js';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function formatBytesShort(bytes: number): string {
-  if (bytes === 0) return '0';
-  const k = 1024;
-  const sizes = ['B', 'K', 'M', 'G', 'T'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(0))}${sizes[i]}`;
-}
+import { formatBytes, formatBytesShort } from '@hyperspace/ui/utils';
+import { getActivity } from '../../lib/api.js';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -45,8 +26,8 @@ export function UsageTrends() {
 
   useEffect(() => {
     setLoading(true);
-    getDashboardTrends(period)
-      .then(setData)
+    getActivity({ period })
+      .then((res) => setData(res.trends))
       .catch(() => {
         // silent — dashboard still usable without trends
       })
@@ -137,6 +118,7 @@ export function UsageTrends() {
                   width={40}
                   tickCount={5}
                   tickFormatter={formatBytesShort}
+                  domain={['dataMin', 'dataMax']}
                 />
                 <Area
                   type="monotone"
@@ -181,8 +163,9 @@ export function UsageTrends() {
                   axisLine={false}
                   tickLine={false}
                   width={30}
-                  tickCount={5}
+                  tickCount={6}
                   allowDecimals={false}
+                  domain={['dataMin', 'dataMax']}
                 />
                 <Bar dataKey="value" fill="#0080FF" radius={[2, 2, 0, 0]} />
               </BarChart>
