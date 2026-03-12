@@ -12,23 +12,34 @@ export interface UsageTrendsResponse {
   objects: UsageDataPoint[];
 }
 
-export type ActivityAction =
-  | 'bucket.created'
-  | 'bucket.deleted'
-  | 'object.uploaded'
-  | 'object.deleted'
-  | 'key.created'
-  | 'key.deleted';
+// ---------------------------------------------------------------------------
+// Activity types – discriminated union on `resourceType`
+// ---------------------------------------------------------------------------
 
-export interface RecentActivity {
+interface BaseActivity {
   id: string;
-  action: ActivityAction;
-  resourceType: 'bucket' | 'object' | 'key';
   resourceName: string;
   timestamp: string;
+}
+
+export interface BucketActivity extends BaseActivity {
+  resourceType: 'bucket';
+  action: 'bucket.created' | 'bucket.deleted';
+}
+
+export interface ObjectActivity extends BaseActivity {
+  resourceType: 'object';
+  action: 'object.uploaded' | 'object.deleted';
   sizeBytes?: number;
   cid?: string;
 }
+
+export interface KeyActivity extends BaseActivity {
+  resourceType: 'key';
+  action: 'key.created' | 'key.deleted';
+}
+
+export type RecentActivity = BucketActivity | ObjectActivity | KeyActivity;
 
 export interface RecentActivityResponse {
   activities: RecentActivity[];

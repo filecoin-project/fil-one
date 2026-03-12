@@ -11,17 +11,18 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
-import type { BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
+import type { AccessKeyRecord, BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
 
 const dynamo = getDynamoClient();
 
 export async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { userId } = getUserInfo(event);
+  const { userId, orgId } = getUserInfo(event);
   const limit = Math.min(parseInt(event.queryStringParameters?.limit ?? '10', 10), 50);
   const period = event.queryStringParameters?.period === '30d' ? 30 : 7;
   const uploadsTableName = Resource.UploadsTable.name;
+  const userInfoTableName = Resource.UserInfoTable.name;
 
   // Get all buckets
   const bucketsResult = await dynamo.send(
@@ -73,6 +74,28 @@ export async function baseHandler(
       });
       allObjects.push({ sizeBytes: obj.sizeBytes, uploadedAt: obj.uploadedAt });
     }
+  }
+
+  // Get access keys
+  const keysResult = await dynamo.send(
+    new QueryCommand({
+      TableName: userInfoTableName,
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
+      ExpressionAttributeValues: {
+        ':pk': { S: `ORG#${orgId}` },
+        ':skPrefix': { S: 'ACCESSKEY#' },
+      },
+    }),
+  );
+  for (const item of keysResult.Items ?? []) {
+    const key = unmarshall(item) as AccessKeyRecord;
+    activities.push({
+      id: `key-${key.sk.replace('ACCESSKEY#', '')}`,
+      action: 'key.created',
+      resourceType: 'key',
+      resourceName: key.keyName,
+      timestamp: key.createdAt,
+    });
   }
 
   // Sort activities most-recent-first

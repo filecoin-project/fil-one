@@ -10,6 +10,7 @@ import { marshall } from '@aws-sdk/util-dynamodb';
 vi.mock('sst', () => ({
   Resource: {
     UploadsTable: { name: 'UploadsTable' },
+    UserInfoTable: { name: 'UserInfoTable' },
   },
 }));
 
@@ -49,6 +50,22 @@ function objectItem(bucketName: string, key: string, uploadedAt: string, sizeByt
   });
 }
 
+function keyItem(id: string, keyName: string, createdAt: string) {
+  return marshall({
+    pk: `ORG#${USER_INFO.orgId}`,
+    sk: `ACCESSKEY#${id}`,
+    keyName,
+    accessKeyId: `AKIA-${id}`,
+    createdAt,
+    status: 'active',
+  });
+}
+
+/** Build an array of { date: expect.any(String), value } for flat trend assertions. */
+function flatTrend(length: number, value: number) {
+  return Array.from({ length }, () => ({ date: expect.any(String), value }));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -67,13 +84,13 @@ describe('get-activity baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.activities).toStrictEqual([]);
-    expect(body.trends.storage).toHaveLength(7);
-    expect(body.trends.objects).toHaveLength(7);
-    // All trend values should be 0
-    for (const point of body.trends.storage) {
-      expect(point.value).toBe(0);
-    }
+    expect(body).toStrictEqual({
+      activities: [],
+      trends: {
+        storage: flatTrend(7, 0),
+        objects: flatTrend(7, 0),
+      },
+    });
   });
 
   it('returns bucket and object activities sorted most-recent-first', async () => {
@@ -101,17 +118,50 @@ describe('get-activity baseHandler', () => {
         ],
       });
 
+    // Third query: access keys
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
 
-    expect(body.activities).toHaveLength(3);
-    // Most recent first
-    expect(body.activities[0].resourceName).toBe('cat.jpg');
-    expect(body.activities[1].resourceName).toBe('dog.jpg');
-    expect(body.activities[2].resourceName).toBe('photos');
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'object-photos-cat.jpg',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'cat.jpg',
+          timestamp: '2026-01-05T00:00:00Z',
+          sizeBytes: 1024,
+        },
+        {
+          id: 'object-photos-dog.jpg',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'dog.jpg',
+          timestamp: '2026-01-03T00:00:00Z',
+          sizeBytes: 2048,
+        },
+        {
+          id: 'bucket-photos',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'photos',
+          timestamp: '2026-01-01T00:00:00Z',
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
+      },
+    });
   });
 
   it('respects the limit query parameter', async () => {
@@ -138,6 +188,12 @@ describe('get-activity baseHandler', () => {
         ],
       });
 
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
     const event = buildEvent({
       userInfo: USER_INFO,
       queryStringParameters: { limit: '2' },
@@ -145,7 +201,30 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.activities).toHaveLength(2);
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'object-b1-c.txt',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'c.txt',
+          timestamp: '2026-01-04T00:00:00Z',
+          sizeBytes: 300,
+        },
+        {
+          id: 'object-b1-b.txt',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'b.txt',
+          timestamp: '2026-01-03T00:00:00Z',
+          sizeBytes: 200,
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
+      },
+    });
   });
 
   it('caps limit at 50', async () => {
@@ -157,8 +236,15 @@ describe('get-activity baseHandler', () => {
     });
     const result = await baseHandler(event);
 
-    // Should not error — just capped
     expect(result.statusCode).toBe(200);
+    const body = JSON.parse(String(result.body));
+    expect(body).toStrictEqual({
+      activities: [],
+      trends: {
+        storage: flatTrend(7, 0),
+        objects: flatTrend(7, 0),
+      },
+    });
   });
 
   it('returns 30-day trend series when period=30d', async () => {
@@ -171,8 +257,13 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.trends.storage).toHaveLength(30);
-    expect(body.trends.objects).toHaveLength(30);
+    expect(body).toStrictEqual({
+      activities: [],
+      trends: {
+        storage: flatTrend(30, 0),
+        objects: flatTrend(30, 0),
+      },
+    });
   });
 
   it('defaults to 7-day trend series', async () => {
@@ -182,8 +273,13 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.trends.storage).toHaveLength(7);
-    expect(body.trends.objects).toHaveLength(7);
+    expect(body).toStrictEqual({
+      activities: [],
+      trends: {
+        storage: flatTrend(7, 0),
+        objects: flatTrend(7, 0),
+      },
+    });
   });
 
   it('computes cumulative storage in trends', async () => {
@@ -218,6 +314,12 @@ describe('get-activity baseHandler', () => {
         ],
       });
 
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
@@ -225,6 +327,39 @@ describe('get-activity baseHandler', () => {
     // The last day's cumulative storage should be 800 (500 + 300)
     const lastStoragePoint = body.trends.storage[body.trends.storage.length - 1];
     expect(lastStoragePoint.value).toBe(800);
+
+    // Full structure check
+    expect(body).toStrictEqual({
+      activities: expect.arrayContaining([
+        {
+          id: 'object-data-new.bin',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'new.bin',
+          timestamp: yesterday.toISOString(),
+          sizeBytes: 300,
+        },
+        {
+          id: 'object-data-old.bin',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'old.bin',
+          timestamp: twoDaysAgo.toISOString(),
+          sizeBytes: 500,
+        },
+        {
+          id: 'bucket-data',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'data',
+          timestamp: '2025-01-01T00:00:00Z',
+        },
+      ]),
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
+      },
+    });
   });
 
   it('queries DynamoDB with correct key conditions', async () => {
@@ -234,14 +369,78 @@ describe('get-activity baseHandler', () => {
     await baseHandler(event);
 
     const calls = ddbMock.commandCalls(QueryCommand);
-    expect(calls).toHaveLength(1);
-    const input = calls.at(0)?.args.at(0)?.input;
-    expect(input).toStrictEqual({
+    expect(calls).toHaveLength(2);
+    expect(calls.at(0)?.args.at(0)?.input).toStrictEqual({
       TableName: 'UploadsTable',
       KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
       ExpressionAttributeValues: {
         ':pk': { S: 'USER#user-1' },
         ':skPrefix': { S: 'BUCKET#' },
+      },
+    });
+    expect(calls.at(1)?.args.at(0)?.input).toStrictEqual({
+      TableName: 'UserInfoTable',
+      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
+      ExpressionAttributeValues: {
+        ':pk': { S: 'ORG#org-1' },
+        ':skPrefix': { S: 'ACCESSKEY#' },
+      },
+    });
+  });
+
+  it('includes key activities sorted with buckets and objects', async () => {
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `USER#${USER_INFO.userId}` } },
+      })
+      .resolves({
+        Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
+      });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: {
+          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
+          ':skPrefix': { S: 'OBJECT#' },
+        },
+      })
+      .resolves({ Items: [] });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: {
+          ':pk': { S: `ORG#${USER_INFO.orgId}` },
+          ':skPrefix': { S: 'ACCESSKEY#' },
+        },
+      })
+      .resolves({
+        Items: [keyItem('key-1', 'my-api-key', '2026-01-02T00:00:00Z')],
+      });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
+
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'key-key-1',
+          action: 'key.created',
+          resourceType: 'key',
+          resourceName: 'my-api-key',
+          timestamp: '2026-01-02T00:00:00Z',
+        },
+        {
+          id: 'bucket-b1',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'b1',
+          timestamp: '2026-01-01T00:00:00Z',
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
       },
     });
   });
@@ -277,14 +476,39 @@ describe('get-activity baseHandler', () => {
       })
       .resolves({ Items: [objWithCid] });
 
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    const objectActivity = body.activities.find(
-      (a: { resourceType: string }) => a.resourceType === 'object',
-    );
-    expect(objectActivity.sizeBytes).toBe(4096);
-    expect(objectActivity.cid).toBe('bafy123');
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'object-b1-file.dat',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'file.dat',
+          timestamp: '2026-01-02T00:00:00Z',
+          sizeBytes: 4096,
+          cid: 'bafy123',
+        },
+        {
+          id: 'bucket-b1',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'b1',
+          timestamp: '2026-01-01T00:00:00Z',
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
+      },
+    });
   });
 });

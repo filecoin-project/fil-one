@@ -67,9 +67,13 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.subscription.planId).toBe(PlanId.FreeTrial);
-    expect(body.subscription.status).toBe(SubscriptionStatus.Trialing);
-    expect(body.subscription.trialEndsAt).toBeDefined();
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.FreeTrial,
+        status: SubscriptionStatus.Trialing,
+        trialEndsAt: expect.any(String),
+      },
+    });
   });
 
   it('returns trial state when billing record has no stripeCustomerId', async () => {
@@ -86,8 +90,13 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.subscription.status).toBe(SubscriptionStatus.Trialing);
-    expect(body.subscription.trialEndsAt).toBe(trialEndsAt);
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.FreeTrial,
+        status: SubscriptionStatus.Trialing,
+        trialEndsAt,
+      },
+    });
   });
 
   it('transitions expired trial to grace_period (no stripe customer)', async () => {
@@ -105,8 +114,14 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.subscription.status).toBe(SubscriptionStatus.GracePeriod);
-    expect(body.subscription.gracePeriodEndsAt).toBeDefined();
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.FreeTrial,
+        status: SubscriptionStatus.GracePeriod,
+        trialEndsAt: expiredTrialEndsAt,
+        gracePeriodEndsAt: expect.any(String),
+      },
+    });
 
     // Verify UpdateItemCommand was called
     const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
@@ -140,14 +155,19 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.subscription.planId).toBe(PlanId.PayAsYouGo);
-    expect(body.subscription.status).toBe(SubscriptionStatus.Active);
-    expect(body.paymentMethod).toStrictEqual({
-      id: 'pm_789',
-      last4: '4242',
-      brand: 'visa',
-      expMonth: 12,
-      expYear: 2027,
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.PayAsYouGo,
+        status: SubscriptionStatus.Active,
+        currentPeriodEnd: '2026-04-01T00:00:00Z',
+      },
+      paymentMethod: {
+        id: 'pm_789',
+        last4: '4242',
+        brand: 'visa',
+        expMonth: 12,
+        expYear: 2027,
+      },
     });
   });
 
@@ -172,12 +192,18 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.paymentMethod).toStrictEqual({
-      id: 'pm_cached',
-      last4: '1234',
-      brand: 'mastercard',
-      expMonth: 6,
-      expYear: 2028,
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.PayAsYouGo,
+        status: SubscriptionStatus.Active,
+      },
+      paymentMethod: {
+        id: 'pm_cached',
+        last4: '1234',
+        brand: 'mastercard',
+        expMonth: 6,
+        expYear: 2028,
+      },
     });
   });
 
@@ -197,7 +223,14 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.subscription.status).toBe(SubscriptionStatus.GracePeriod);
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.PayAsYouGo,
+        status: SubscriptionStatus.GracePeriod,
+        trialEndsAt: expiredTrialEndsAt,
+        gracePeriodEndsAt: expect.any(String),
+      },
+    });
 
     const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
     expect(updateCalls).toHaveLength(1);
@@ -219,7 +252,13 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.subscription.status).toBe(SubscriptionStatus.Canceled);
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.PayAsYouGo,
+        status: SubscriptionStatus.Canceled,
+        gracePeriodEndsAt: expiredGracePeriod,
+      },
+    });
 
     const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
     expect(updateCalls).toHaveLength(1);
@@ -242,7 +281,12 @@ describe('get-billing baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body.paymentMethod).toBeUndefined();
+    expect(body).toStrictEqual({
+      subscription: {
+        planId: PlanId.PayAsYouGo,
+        status: SubscriptionStatus.Active,
+      },
+    });
   });
 
   it('queries DynamoDB with correct key', async () => {

@@ -25,6 +25,16 @@ export interface ObjectRecord {
   cid?: string;
 }
 
+/** UserInfoTable — pk: ORG#{orgId}, sk: ACCESSKEY#{id} */
+export interface AccessKeyRecord {
+  pk: string;
+  sk: string;
+  keyName: string;
+  accessKeyId: string;
+  createdAt: string;
+  status: string;
+}
+
 /** BillingTable — pk: CUSTOMER#{userId}, sk: SUBSCRIPTION */
 export interface SubscriptionRecord {
   pk: string;
