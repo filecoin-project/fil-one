@@ -17,10 +17,10 @@ export default $config({
     if (isStaging) {
       awsProvider.allowedAccountIds = ['654654381893'];
     }
-    // TODO: Set production account ID once provisioned
-    // if (isProduction) {
-    //   awsProvider.allowedAccountIds = ["<PRODUCTION_ACCOUNT_ID>"];
-    // }
+
+    if (isProduction) {
+      awsProvider.allowedAccountIds = ["811430801166"];
+    }
 
     return {
       name: 'filone',
@@ -90,9 +90,11 @@ export default $config({
     let domainName: string | undefined;
     let certArn: string | undefined;
 
-    if (stage === 'production' || stage === 'staging') {
-      domainName = stage === 'production' ? 'console.fil.one' : 'staging.fil.one';
-
+    //TODO Bring this back after we have a successful prod deployment.
+    // https://linear.app/filecoin-foundation/issue/FIL-12/console-prod-deployed-at-appfilone
+    // if (stage === 'production' || stage === 'staging') {
+      // domainName = stage === 'production' ? 'console.fil.one' : 'staging.fil.one';
+    if(stage == 'staging') {
       // ACM cert must be in us-east-1 for CloudFront
       const usEast1 = new aws.Provider('useast1', { region: 'us-east-1' });
       const cert = await aws.acm.getCertificate(
@@ -260,22 +262,21 @@ export default $config({
         .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
         .join('');
 
-      api.route(`${method} ${routePath}`, {
-        handler: `packages/backend/src/handlers/${handler}.handler`,
-        link: allResources,
-        environment: {
-          ...sharedEnv,
-          ...extraEnv,
-        },
-        permissions,
-        runtime: 'nodejs24.x',
-        timeout: '10 seconds',
-        transform: {
-          function: (args) => {
-            args.name = $interpolate`filone-${$app.stage}-${fnName}`;
+      api.route(
+        `${method} ${routePath}`,
+        {
+          handler: `packages/backend/src/handlers/${handler}.handler`,
+          name: $interpolate`filone-${$app.stage}-${fnName}`,
+          link: allResources,
+          environment: {
+            ...sharedEnv,
+            ...extraEnv,
           },
+          permissions,
+          runtime: 'nodejs24.x',
+          timeout: '10 seconds',
         },
-      });
+      );
     }
 
     // ── Data routes ──────────────────────────────────────────────────
@@ -368,8 +369,7 @@ export default $config({
     });
 
     return {
-      url: siteUrl,
-      api: api.url,
+      baseUrl: siteUrl,
     };
   },
 });
