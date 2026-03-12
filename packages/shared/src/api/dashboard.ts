@@ -1,25 +1,3 @@
-export interface DashboardStats {
-  storage: {
-    usedBytes: number;
-    limitBytes: number;
-  };
-  downloads: {
-    usedBytes: number;
-    limitBytes: number;
-  };
-  buckets: {
-    count: number;
-    limit: number;
-  };
-  objects: {
-    count: number;
-  };
-  accessKeys: {
-    count: number;
-    limit: number;
-  };
-}
-
 export interface UsageDataPoint {
   date: string;
   value: number;
@@ -48,6 +26,8 @@ export interface RecentActivity {
   resourceType: 'bucket' | 'object' | 'key';
   resourceName: string;
   timestamp: string;
+  sizeBytes?: number;
+  cid?: string;
 }
 
 export interface RecentActivityResponse {

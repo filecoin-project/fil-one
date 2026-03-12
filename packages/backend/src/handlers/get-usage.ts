@@ -10,6 +10,7 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import type { BucketRecord, ObjectRecord, SubscriptionRecord } from '../lib/dynamo-records.js';
 
 const dynamo = new DynamoDBClient({});
 const TIB_BYTES = 1099511627776;
@@ -29,27 +30,26 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       },
     }),
   );
-  const bucketItems = (bucketsResult.Items ?? []).map((item) => unmarshall(item));
-  const bucketNames = bucketItems.map((b) => b.name as string);
+  const buckets = (bucketsResult.Items ?? []).map((item) => unmarshall(item) as BucketRecord);
 
   // 2. Sum object sizes + count across all buckets
   let storageUsedBytes = 0;
   let objectCount = 0;
-  for (const bucketName of bucketNames) {
+  for (const bucket of buckets) {
     const objectsResult = await dynamo.send(
       new QueryCommand({
         TableName: uploadsTableName,
         KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
         ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${userId}#${bucketName}` },
+          ':pk': { S: `BUCKET#${userId}#${bucket.name}` },
           ':skPrefix': { S: 'OBJECT#' },
         },
         ProjectionExpression: 'sizeBytes',
       }),
     );
     for (const item of objectsResult.Items ?? []) {
-      const record = unmarshall(item);
-      storageUsedBytes += (record.sizeBytes as number) || 0;
+      const obj = unmarshall(item) as Pick<ObjectRecord, 'sizeBytes'>;
+      storageUsedBytes += obj.sizeBytes || 0;
       objectCount++;
     }
   }
@@ -78,7 +78,9 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       ProjectionExpression: 'subscriptionStatus',
     }),
   );
-  const billingRecord = billingResult.Item ? unmarshall(billingResult.Item) : null;
+  const billingRecord = billingResult.Item
+    ? (unmarshall(billingResult.Item) as Pick<SubscriptionRecord, 'subscriptionStatus'>)
+    : null;
   const isActive = billingRecord?.subscriptionStatus === 'active';
 
   const response: UsageResponse = {
@@ -91,7 +93,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       limitBytes: 10 * TIB_BYTES,
     },
     buckets: {
-      count: bucketNames.length,
+      count: buckets.length,
       limit: 100,
     },
     objects: {

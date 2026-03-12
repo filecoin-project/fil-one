@@ -10,6 +10,7 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import type { BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
 
 const dynamo = new DynamoDBClient({});
 
@@ -31,15 +32,15 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       },
     }),
   );
-  const bucketItems = (bucketsResult.Items ?? []).map((item) => unmarshall(item));
+  const buckets = (bucketsResult.Items ?? []).map((item) => unmarshall(item) as BucketRecord);
 
-  for (const bucket of bucketItems) {
+  for (const bucket of buckets) {
     activities.push({
       id: `bucket-${bucket.name}`,
       action: 'bucket.created',
       resourceType: 'bucket',
-      resourceName: bucket.name as string,
-      timestamp: bucket.createdAt as string,
+      resourceName: bucket.name,
+      timestamp: bucket.createdAt,
     });
 
     // Get objects for this bucket
@@ -55,15 +56,15 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     );
 
     for (const item of objectsResult.Items ?? []) {
-      const obj = unmarshall(item);
+      const obj = unmarshall(item) as ObjectRecord;
       activities.push({
         id: `object-${bucket.name}-${obj.key}`,
         action: 'object.uploaded',
         resourceType: 'object',
-        resourceName: obj.key as string,
-        timestamp: obj.uploadedAt as string,
-        sizeBytes: (obj.sizeBytes as number) || undefined,
-        cid: (obj.cid as string) || undefined,
+        resourceName: obj.key,
+        timestamp: obj.uploadedAt,
+        sizeBytes: obj.sizeBytes || undefined,
+        cid: obj.cid || undefined,
       });
     }
   }

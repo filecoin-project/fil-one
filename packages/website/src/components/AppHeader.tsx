@@ -1,21 +1,42 @@
+import { useEffect, useState } from 'react';
 import { DatabaseIcon, QuestionIcon, BellIcon, SignOutIcon } from '@phosphor-icons/react/dist/ssr';
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
-import { logout } from '../lib/api.js';
+import type { UsageResponse } from '@filone/shared';
+import { logout, getUsage } from '../lib/api.js';
 
 type AppHeaderProps = {
   collapsed: boolean;
 };
 
 export function AppHeader({ collapsed }: AppHeaderProps) {
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
+
+  useEffect(() => {
+    const refresh = () => {
+      getUsage()
+        .then(setUsage)
+        .catch(() => {
+          /* silent */
+        });
+    };
+    refresh();
+    window.addEventListener('billing:updated', refresh);
+    return () => window.removeEventListener('billing:updated', refresh);
+  }, []);
+
+  const storagePct =
+    usage && usage.storage.limitBytes > 0
+      ? Math.min(100, (usage.storage.usedBytes / usage.storage.limitBytes) * 100)
+      : 0;
+
   return (
     <header className="flex h-14 flex-shrink-0 items-center border-b border-zinc-200 bg-white px-4 gap-4">
-      {/* Storage usage pill — shown in header when sidebar is collapsed (sidebar shows it when expanded) */}
+      {/* Storage usage pill — shown in header when sidebar is collapsed */}
       {collapsed && (
         <div className="flex items-center gap-2">
           <DatabaseIcon size={16} className="text-zinc-400" />
-          {/* UNKNOWN: storage usage value should come from an API/context — using 0 as placeholder */}
-          <ProgressBar value={0} size="sm" className="w-24" label="Storage usage" />
-          <span className="text-xs text-zinc-500">0%</span>
+          <ProgressBar value={storagePct} size="sm" className="w-24" label="Storage usage" />
+          <span className="text-xs text-zinc-500">{storagePct.toFixed(0)}%</span>
         </div>
       )}
 
@@ -41,7 +62,6 @@ export function AppHeader({ collapsed }: AppHeaderProps) {
         </button>
 
         {/* User avatar — placeholder with initial "U" */}
-        {/* UNKNOWN: user initial and display name should come from auth context */}
         <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white">
           U
         </div>

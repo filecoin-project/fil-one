@@ -12,10 +12,10 @@ import {
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { useToast } from '@hyperspace/ui/Toast';
 
-import { SubscriptionStatus } from '@filone/shared';
-import type { BillingInfo, CreateSetupIntentResponse } from '@filone/shared';
+import { SubscriptionStatus, TIB_BYTES } from '@filone/shared';
+import type { BillingInfo, UsageResponse, CreateSetupIntentResponse } from '@filone/shared';
 
-import { apiRequest } from '../../lib/api.js';
+import { apiRequest, getUsage } from '../../lib/api.js';
 import { ChoosePlanDialog } from '../billing/ChoosePlanDialog.js';
 import { AddPaymentDialog } from '../billing/AddPaymentDialog.js';
 
@@ -62,6 +62,7 @@ export function BillingPage() {
   const { toast } = useToast();
 
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,8 +74,12 @@ export function BillingPage() {
   const fetchBilling = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiRequest<BillingInfo>('/billing');
-      setBilling(data);
+      const [billingData, usageData] = await Promise.all([
+        apiRequest<BillingInfo>('/billing'),
+        getUsage(),
+      ]);
+      setBilling(billingData);
+      setUsage(usageData);
       setError(null);
     } catch (err) {
       setError((err as Error).message);
@@ -111,10 +116,11 @@ export function BillingPage() {
     : null;
   const isTrialExpiredGrace = isGracePeriod && !!billing?.subscription.trialEndsAt;
 
-  const storageUsed = billing?.usage?.storageUsedBytes ?? 0;
-  const storageLimit = billing?.usage?.storageLimitBytes ?? 1;
+  const storageUsed = usage?.storage.usedBytes ?? 0;
+  const storageLimit = usage?.storage.limitBytes ?? 1;
   const storagePct = storageLimit > 0 ? Math.min(100, (storageUsed / storageLimit) * 100) : 0;
-  const estimatedCost = billing?.usage?.estimatedMonthlyCostCents ?? 0;
+  const PRICE_PER_TIB_CENTS = 499;
+  const estimatedCost = Math.round((storageUsed / TIB_BYTES) * PRICE_PER_TIB_CENTS);
 
   // ── Handlers ─────────────────────────────────────────────────────
 

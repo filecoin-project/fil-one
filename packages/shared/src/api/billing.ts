@@ -37,16 +37,9 @@ export interface PaymentMethod {
   expYear: number;
 }
 
-export interface UsageInfo {
-  storageUsedBytes: number;
-  storageLimitBytes: number;
-  estimatedMonthlyCostCents: number;
-}
-
 export interface BillingInfo {
   subscription: Subscription;
   paymentMethod?: PaymentMethod;
-  usage?: UsageInfo;
 }
 
 export interface CreateSetupIntentResponse {

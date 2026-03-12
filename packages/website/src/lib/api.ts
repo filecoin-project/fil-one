@@ -117,6 +117,22 @@ export function confirmOrg(orgName: string): Promise<ConfirmOrgResponse> {
   });
 }
 
+// ── Usage API ────────────────────────────────────────────────────────────
+
+import type { UsageResponse, UsageTrendsResponse, RecentActivityResponse } from '@filone/shared';
+
+export function getUsage(): Promise<UsageResponse> {
+  return apiRequest<UsageResponse>('/usage');
+}
+
+export function getDashboardTrends(period: '7d' | '30d'): Promise<UsageTrendsResponse> {
+  return apiRequest<UsageTrendsResponse>(`/dashboard/trends?period=${period}`);
+}
+
+export function getDashboardActivity(limit = 10): Promise<RecentActivityResponse> {
+  return apiRequest<RecentActivityResponse>(`/dashboard/activity?limit=${limit}`);
+}
+
 // ── Billing API ─────────────────────────────────────────────────────────
 
 import type {

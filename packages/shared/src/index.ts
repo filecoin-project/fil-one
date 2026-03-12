@@ -34,7 +34,6 @@ export type {
 } from './api/access-keys.js';
 
 export type {
-  DashboardStats,
   UsageDataPoint,
   UsageTrendsRequest,
   UsageTrendsResponse,
@@ -43,12 +42,13 @@ export type {
   RecentActivityResponse,
 } from './api/dashboard.js';
 
+export type { UsageResponse } from './api/usage.js';
+
 export { PlanId, SubscriptionStatus } from './api/billing.js';
 export type {
   Plan,
   Subscription,
   PaymentMethod,
-  UsageInfo,
   BillingInfo,
   CreateSetupIntentResponse,
   ActivateSubscriptionResponse,

@@ -10,6 +10,7 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import type { BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
 
 const dynamo = new DynamoDBClient({});
 
@@ -29,28 +30,25 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       },
     }),
   );
-  const bucketNames = (bucketsResult.Items ?? []).map((item) => unmarshall(item).name as string);
+  const buckets = (bucketsResult.Items ?? []).map((item) => unmarshall(item) as BucketRecord);
 
   // Get all objects with sizeBytes + uploadedAt
-  const allObjects: { sizeBytes: number; uploadedAt: string }[] = [];
-  for (const bucketName of bucketNames) {
+  const allObjects: Pick<ObjectRecord, 'sizeBytes' | 'uploadedAt'>[] = [];
+  for (const bucket of buckets) {
     const objectsResult = await dynamo.send(
       new QueryCommand({
         TableName: uploadsTableName,
         KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
         ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${userId}#${bucketName}` },
+          ':pk': { S: `BUCKET#${userId}#${bucket.name}` },
           ':skPrefix': { S: 'OBJECT#' },
         },
         ProjectionExpression: 'sizeBytes, uploadedAt',
       }),
     );
     for (const item of objectsResult.Items ?? []) {
-      const record = unmarshall(item);
-      allObjects.push({
-        sizeBytes: (record.sizeBytes as number) || 0,
-        uploadedAt: record.uploadedAt as string,
-      });
+      const obj = unmarshall(item) as Pick<ObjectRecord, 'sizeBytes' | 'uploadedAt'>;
+      allObjects.push(obj);
     }
   }
 

@@ -14,8 +14,8 @@ import { Link, useMatchRoute } from '@tanstack/react-router';
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { Button } from '@hyperspace/ui/Button';
 import { SubscriptionStatus } from '@filone/shared';
-import type { BillingInfo } from '@filone/shared';
-import { getBilling } from '../lib/api.js';
+import type { BillingInfo, UsageResponse } from '@filone/shared';
+import { getBilling, getUsage } from '../lib/api.js';
 
 type SidebarNavProps = {
   collapsed: boolean;
@@ -44,11 +44,17 @@ function daysRemaining(isoString: string): number {
 export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
   const matchRoute = useMatchRoute();
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
 
   useEffect(() => {
     const refresh = () => {
       getBilling()
         .then(setBilling)
+        .catch(() => {
+          /* silent */
+        });
+      getUsage()
+        .then(setUsage)
         .catch(() => {
           /* silent */
         });
@@ -71,8 +77,8 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
     : null;
   const isTrialExpiredGrace = isGracePeriod && !!billing?.subscription.trialEndsAt;
 
-  const storageUsed = billing?.usage?.storageUsedBytes ?? 0;
-  const storageLimit = billing?.usage?.storageLimitBytes ?? 1;
+  const storageUsed = usage?.storage.usedBytes ?? 0;
+  const storageLimit = usage?.storage.limitBytes ?? 1;
   const storagePct = storageLimit > 0 ? Math.min(100, (storageUsed / storageLimit) * 100) : 0;
 
   return (
