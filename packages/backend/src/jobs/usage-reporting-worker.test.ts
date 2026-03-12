@@ -9,7 +9,6 @@ import type { UsageReportingWorkerPayload } from './usage-reporting-worker.js';
 
 vi.mock('sst', () => ({
   Resource: {
-    StripeMeterEventName: { value: 'storage_usage' },
     BillingTable: { name: 'BillingTable' },
   },
 }));
@@ -29,6 +28,8 @@ vi.mock('../lib/aurora-backoffice.js', () => ({
 }));
 
 const ddbMock = mockClient(DynamoDBClient);
+
+process.env.STRIPE_METER_EVENT_NAME = 'storage_usage';
 
 import { handler } from './usage-reporting-worker.js';
 

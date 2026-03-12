@@ -385,7 +385,10 @@ export default $config({
     const usageOrchestrator = new sst.aws.Function('UsageReportingOrchestrator', {
       handler: 'packages/backend/src/jobs/usage-reporting-orchestrator.handler',
       link: [billingTable],
-      environment: { USAGE_WORKER_FUNCTION_NAME: usageWorker.name },
+      environment: {
+        USAGE_WORKER_FUNCTION_NAME: usageWorker.name,
+        STRIPE_METER_EVENT_NAME: 'tibmonthmeter',
+      },
       runtime: 'nodejs24.x',
       timeout: '300 seconds',
       memory: '256 MB',

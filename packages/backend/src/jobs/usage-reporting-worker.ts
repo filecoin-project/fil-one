@@ -38,7 +38,7 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
   if (usage.averageTib > 0) {
     const stripe = getStripeClient();
     await stripe.billing.meterEvents.create({
-      event_name: Resource.StripeMeterEventName.value,
+      event_name: process.env.STRIPE_METER_EVENT_NAME ?? '',
       payload: {
         stripe_customer_id: stripeCustomerId,
         value: String(usage.averageTib),
