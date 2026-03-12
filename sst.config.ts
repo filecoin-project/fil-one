@@ -321,13 +321,13 @@ export default $config({
       '/api/stripe/webhook',
       'stripe-webhook',
       {
-        STRIPE_WEBHOOK_SECRET_SSM_PATH: $interpolate`/hyperspace/${$app.stage}/stripe-webhook-secret`,
+        STRIPE_WEBHOOK_SECRET_SSM_PATH: $interpolate`/filone/${$app.stage}/stripe-webhook-secret`,
       },
       [
         {
           actions: ['ssm:GetParameter'],
           resources: [
-            $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/stripe-webhook-secret`,
+            $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/stripe-webhook-secret`,
           ],
         },
       ],

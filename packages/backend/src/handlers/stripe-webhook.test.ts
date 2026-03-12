@@ -7,7 +7,7 @@ import {
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { buildEvent } from '../test/lambda-test-utilities.js';
-import { SubscriptionStatus } from '@hyperspace/shared';
+import { SubscriptionStatus } from '@filone/shared';
 
 // ---------------------------------------------------------------------------
 // Mocks
