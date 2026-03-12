@@ -238,7 +238,7 @@ export function ApiKeysPage() {
 
   function handleKeyCreated(response: CreateAccessKeyResponse) {
     const newKey: AccessKey = {
-      id: response.accessKeyId,
+      id: response.id,
       keyName: response.keyName,
       accessKeyId: response.accessKeyId,
       createdAt: new Date().toISOString(),

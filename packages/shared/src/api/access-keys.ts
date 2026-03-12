@@ -18,6 +18,7 @@ export interface CreateAccessKeyRequest {
 }
 
 export interface CreateAccessKeyResponse {
+  id: string;
   keyName: string;
   accessKeyId: string;
   secretAccessKey: string;

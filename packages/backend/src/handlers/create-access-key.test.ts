@@ -87,6 +87,7 @@ describe('create-access-key baseHandler', () => {
     expect(result.statusCode).toBe(201);
     const body = JSON.parse(result.body!);
     expect(body).toStrictEqual({
+      id: 'aurora-key-1',
       keyName: 'My Key',
       accessKeyId: 'AKIA1234567890',
       secretAccessKey: 'secret-abc-123',

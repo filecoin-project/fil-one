@@ -82,9 +82,10 @@ export async function baseHandler(
   return new ResponseBuilder()
     .status(201)
     .body<CreateAccessKeyResponse>({
+      id: auroraKey.id,
       keyName,
-      accessKeyId: auroraKey.accessKeyId!,
-      secretAccessKey: auroraKey.accessKeySecret!,
+      accessKeyId: auroraKey.accessKeyId,
+      secretAccessKey: auroraKey.accessKeySecret,
     })
     .build();
 }

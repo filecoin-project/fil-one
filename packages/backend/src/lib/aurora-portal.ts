@@ -1,10 +1,10 @@
+import assert from 'node:assert';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import {
   createClient,
   postTenantsByTenantIdBucket,
   putTenantsByTenantIdAccessKeys,
 } from '@filone/aurora-portal-client';
-import type { ModelsAccessKeyFull } from '@filone/aurora-portal-client';
 
 const ssm = new SSMClient({});
 
@@ -52,13 +52,19 @@ export interface CreateAuroraAccessKeyOptions {
   tenantId: string;
   name: string;
 }
+export interface CreateAuroraAccessKeyResult {
+  id: string;
+  accessKeyId: string;
+  accessKeySecret: string;
+  createdAt: string;
+}
 
 export async function createAuroraAccessKey({
   tenantId,
   name,
-}: CreateAuroraAccessKeyOptions): Promise<ModelsAccessKeyFull> {
+}: CreateAuroraAccessKeyOptions): Promise<CreateAuroraAccessKeyResult> {
   const baseUrl = process.env.AURORA_PORTAL_URL!;
-  const stage = process.env.HYPERSPACE_STAGE!;
+  const stage = process.env.FILONE_STAGE!;
   const apiKey = await getAuroraPortalApiKey(stage, tenantId);
 
   const client = createClient({
@@ -102,16 +108,32 @@ export async function createAuroraAccessKey({
   }
 
   const accessKey = data?.accessKey;
-  if (!accessKey) {
-    console.error(
-      `Aurora API returned empty access key for tenant ${tenantId}. Full response:`,
-      JSON.stringify(data),
-    );
-    throw new Error(`Aurora API returned empty access key for tenant ${tenantId}`);
-  }
+  assert(
+    typeof accessKey === 'object' && accessKey !== null,
+    `Aurora API returned invalid access key for tenant ${tenantId}: expected an object but got ${typeof accessKey}`,
+  );
+  const { id, accessKeyId, accessKeySecret, createdAt } = accessKey;
+  assert(
+    !!id,
+    `Aurora Portal API returned empty access key "id" for tenant ${tenantId}. Full response: ${JSON.stringify(data)}`,
+  );
+  assert(
+    !!accessKeyId,
+    `Aurora Portal API returned empty access key "accessKeyId" for tenant ${tenantId}. Full response: ${JSON.stringify(data)}`,
+  );
+  assert(
+    !!accessKeySecret,
+    `Aurora Portal API returned empty access key "accessKeySecret" for tenant ${tenantId}. Full response: ${JSON.stringify(data)}`,
+  );
+  assert(
+    !!createdAt,
+    `Aurora Portal API returned empty access key "createdAt" for tenant ${tenantId}. Full response: ${JSON.stringify(data)}`,
+  );
 
-  console.log(`Aurora access key "${name}" created for tenant ${tenantId}`);
-  return accessKey;
+  console.log(
+    `Aurora access key "${name}" created for tenant ${tenantId}: accessKeyId=${accessKeyId}, createdAt=${createdAt}`,
+  );
+  return { id, accessKeyId, accessKeySecret, createdAt };
 }
 
 export async function getAuroraPortalApiKey(stage: string, tenantId: string): Promise<string> {
