@@ -249,7 +249,7 @@ export default $config({
       AURORA_REGION_ID: 'ff',
     };
 
-    const auroraApiKeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/hyperspace/${$app.stage}/aurora-portal/tenant-api-key/*`;
+    const auroraApiKeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/aurora-portal/tenant-api-key/*`;
 
     function addRoute(
       method: string,
