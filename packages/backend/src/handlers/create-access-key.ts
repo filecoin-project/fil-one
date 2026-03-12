@@ -1,9 +1,4 @@
-import {
-  DynamoDBClient,
-  GetItemCommand,
-  PutItemCommand,
-  QueryCommand,
-} from '@aws-sdk/client-dynamodb';
+import { GetItemCommand, PutItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
@@ -19,6 +14,7 @@ import {
   DuplicateKeyNameError,
   findAuroraAccessKeyByName,
 } from '../lib/aurora-portal.js';
+import { getDynamoClient } from '../lib/ddb-client.js';
 import { validateKeyName } from '../lib/key-name-validation.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
@@ -28,8 +24,6 @@ import { authMiddleware } from '../middleware/auth.js';
 import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 import { subscriptionGuardMiddleware, AccessLevel } from '../middleware/subscription-guard.js';
-
-const dynamo = new DynamoDBClient({});
 
 export async function baseHandler(
   event: AuthenticatedEvent,
@@ -56,7 +50,7 @@ export async function baseHandler(
   const { orgId } = getUserInfo(event);
 
   // Look up org profile to get auroraTenantId
-  const { Item: orgProfile } = await dynamo.send(
+  const { Item: orgProfile } = await getDynamoClient().send(
     new GetItemCommand({
       TableName: Resource.UserInfoTable.name,
       Key: { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } },
@@ -88,7 +82,7 @@ export async function baseHandler(
     throw err;
   }
 
-  await dynamo.send(
+  await getDynamoClient().send(
     new PutItemCommand({
       TableName: Resource.AccessKeysTable.name,
       Item: marshall({
@@ -119,7 +113,7 @@ async function recoverDuplicateKey(
   keyName: string,
 ): Promise<void> {
   // Check if we already have a DynamoDB record for this key
-  const { Items: existingKeys } = await dynamo.send(
+  const { Items: existingKeys } = await getDynamoClient().send(
     new QueryCommand({
       TableName: Resource.AccessKeysTable.name,
       KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
@@ -151,7 +145,7 @@ async function recoverDuplicateKey(
     return;
   }
 
-  await dynamo.send(
+  await getDynamoClient().send(
     new PutItemCommand({
       TableName: Resource.AccessKeysTable.name,
       Item: marshall({
