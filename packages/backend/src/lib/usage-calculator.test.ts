@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateAverageUsage } from './usage-calculator.js';
-import { TIB_BYTES } from '@hyperspace/shared';
+import { TIB_BYTES } from '@filone/shared';
 
 describe('calculateAverageUsage', () => {
   it('returns zeros for empty samples', () => {

@@ -1,5 +1,5 @@
-import { TIB_BYTES } from '@hyperspace/shared';
-import type { ModelStorageMetricsSample } from '@hyperspace/aurora-backoffice-client';
+import { TIB_BYTES } from '@filone/shared';
+import type { ModelStorageMetricsSample } from '@filone/aurora-backoffice-client';
 
 export interface UsageCalculationResult {
   averageBytesUsed: number;
