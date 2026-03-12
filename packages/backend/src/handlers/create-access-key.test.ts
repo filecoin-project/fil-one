@@ -138,6 +138,45 @@ describe('create-access-key baseHandler', () => {
     expect(mockCreateAuroraAccessKey).not.toHaveBeenCalled();
   });
 
+  const invalidKeyNameCases: Record<string, string> = {
+    'whitespace only': '   ',
+    'empty string': '',
+    'too long (257 chars)': 'a'.repeat(257),
+  };
+
+  for (const [desc, keyName] of Object.entries(invalidKeyNameCases)) {
+    it(`returns 400 when keyName is ${desc}`, async () => {
+      const event = buildEvent({
+        body: JSON.stringify({ keyName }),
+        userInfo: USER_INFO,
+      });
+      const result = await baseHandler(event);
+
+      expect(result.statusCode).toBe(400);
+      expect(mockCreateAuroraAccessKey).not.toHaveBeenCalled();
+    });
+  }
+
+  it('trims whitespace from keyName', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    ddbMock.on(PutItemCommand).resolves({});
+    mockCreateAuroraAccessKey.mockResolvedValue(auroraAccessKeyResponse('My Key'));
+
+    const event = buildEvent({
+      body: JSON.stringify({ keyName: '  My Key  ' }),
+      userInfo: USER_INFO,
+    });
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(201);
+    expect(mockCreateAuroraAccessKey).toHaveBeenCalledWith({
+      tenantId: 'aurora-t-1',
+      name: 'My Key',
+    });
+    const body = JSON.parse(result.body!);
+    expect(body.keyName).toBe('My Key');
+  });
+
   it('returns 400 for invalid JSON body', async () => {
     const event = buildEvent({ body: 'not-json', userInfo: USER_INFO });
     const result = await baseHandler(event);

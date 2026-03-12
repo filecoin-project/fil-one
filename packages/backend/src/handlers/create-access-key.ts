@@ -10,6 +10,7 @@ import type {
 } from '@filone/shared';
 import { Resource } from 'sst';
 import { createAuroraAccessKey } from '../lib/aurora-portal.js';
+import { validateKeyName } from '../lib/key-name-validation.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -34,13 +35,14 @@ export async function baseHandler(
       .build();
   }
 
-  const { keyName } = request;
-  if (!keyName) {
+  const keyNameResult = validateKeyName(request.keyName);
+  if (!keyNameResult.valid) {
     return new ResponseBuilder()
       .status(400)
-      .body<ErrorResponse>({ message: 'Missing required field: keyName' })
+      .body<ErrorResponse>({ message: keyNameResult.error! })
       .build();
   }
+  const keyName = keyNameResult.sanitized;
 
   const { orgId } = getUserInfo(event);
 
