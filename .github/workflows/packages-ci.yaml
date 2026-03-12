@@ -43,7 +43,7 @@ jobs:
 
   deploy-preview:
     if: github.event_name == 'pull_request'
-    needs: [check]
+    needs: [check-packages]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
