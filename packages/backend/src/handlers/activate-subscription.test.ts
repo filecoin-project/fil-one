@@ -104,7 +104,7 @@ describe('activate-subscription handler', () => {
     });
     ddbMock.on(UpdateItemCommand).resolves({});
 
-    mockSubscriptionsUpdate.mockResolvedValue(mockSubscriptionResponse());
+    mockSubscriptionsUpdate.mockResolvedValue(mockSubscriptionResponse({ status: 'active' }));
 
     const event = buildEvent({
       userInfo: { userId: 'user-1', email: 'test@example.com', orgId: 'org-1' },
@@ -116,12 +116,13 @@ describe('activate-subscription handler', () => {
 
     // Should call update, NOT create
     expect(mockSubscriptionsUpdate).toHaveBeenCalledWith('sub_trial_123', {
+      trial_end: 'now',
       default_payment_method: 'pm_test_789',
       expand: ['latest_invoice.payment_intent', 'default_payment_method'],
     });
     expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
 
-    expect(body.subscription.status).toBe(SubscriptionStatus.Trialing);
+    expect(body.subscription.status).toBe(SubscriptionStatus.Active);
   });
 
   it('creates new subscription when no subscriptionId exists (legacy path)', async () => {
@@ -153,13 +154,13 @@ describe('activate-subscription handler', () => {
     expect(body.subscription.status).toBe(SubscriptionStatus.Active);
   });
 
-  it('keeps trialEndsAt when subscription is trialing', async () => {
+  it('removes trialEndsAt when updating trial subscription (trial_end: now)', async () => {
     ddbMock.on(GetItemCommand).resolves({
       Item: buildBillingRecord({ subscriptionId: 'sub_trial_123' }),
     });
     ddbMock.on(UpdateItemCommand).resolves({});
 
-    mockSubscriptionsUpdate.mockResolvedValue(mockSubscriptionResponse({ status: 'trialing' }));
+    mockSubscriptionsUpdate.mockResolvedValue(mockSubscriptionResponse({ status: 'active' }));
 
     const event = buildEvent({
       userInfo: { userId: 'user-1', email: 'test@example.com', orgId: 'org-1' },
@@ -171,8 +172,8 @@ describe('activate-subscription handler', () => {
     const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
     expect(updateCalls).toHaveLength(1);
     const updateExpr = updateCalls[0].args[0].input.UpdateExpression as string;
-    // Should NOT contain REMOVE trialEndsAt for trialing subscriptions
-    expect(updateExpr).not.toContain('REMOVE');
+    // trial_end: 'now' makes Stripe return active, so trialEndsAt should be removed
+    expect(updateExpr).toContain('REMOVE trialEndsAt');
   });
 
   it('removes trialEndsAt when subscription is active', async () => {

@@ -83,6 +83,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   if (record.subscriptionId) {
     // Trial subscription exists — update it with payment method
     subscription = await stripe.subscriptions.update(record.subscriptionId as string, {
+      trial_end: 'now',
       default_payment_method: paymentMethodId,
       expand: ['latest_invoice.payment_intent', 'default_payment_method'],
     });
@@ -119,9 +120,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
         sk: { S: 'SUBSCRIPTION' },
       },
       UpdateExpression:
-        subscription.status === 'active'
-          ? 'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, paymentMethodId = :pmId, paymentMethodLast4 = :last4, paymentMethodBrand = :brand, paymentMethodExpMonth = :expMonth, paymentMethodExpYear = :expYear, updatedAt = :now REMOVE trialEndsAt'
-          : 'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, paymentMethodId = :pmId, paymentMethodLast4 = :last4, paymentMethodBrand = :brand, paymentMethodExpMonth = :expMonth, paymentMethodExpYear = :expYear, updatedAt = :now',
+        'SET subscriptionId = :subId, subscriptionStatus = :status, currentPeriodEnd = :periodEnd, paymentMethodId = :pmId, paymentMethodLast4 = :last4, paymentMethodBrand = :brand, paymentMethodExpMonth = :expMonth, paymentMethodExpYear = :expYear, updatedAt = :now REMOVE trialEndsAt',
       ExpressionAttributeValues: {
         ':subId': { S: subscription.id },
         ':status': { S: subscription.status },
