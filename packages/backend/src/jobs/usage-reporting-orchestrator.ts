@@ -1,4 +1,9 @@
-import { DynamoDBClient, ScanCommand, GetItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  ScanCommand,
+  GetItemCommand,
+  type AttributeValue,
+} from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { Resource } from 'sst';
