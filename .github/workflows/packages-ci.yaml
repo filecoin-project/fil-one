@@ -106,12 +106,16 @@ jobs:
         run: |
           OUTPUT=$(npx sst deploy --stage "$STAGE" 2>&1)
           echo "$OUTPUT"
-          URL=$(echo "$OUTPUT" | grep -oP 'url:\s*\K\S+' || true)
+          URL=$(echo "$OUTPUT" | grep -oP 'baseUrl:\s*\K\S+' || true)
+          if [ -z "$URL" ]; then
+            echo "::error::Failed to extract preview URL from deploy output"
+            exit 1
+          fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
   comment:
     name: Add Preview Environment Comment on PR
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && needs.deploy-preview.outputs.url != ''
     needs: [deploy-preview]
     runs-on: ubuntu-latest
     permissions:
