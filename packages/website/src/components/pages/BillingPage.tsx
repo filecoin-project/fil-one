@@ -13,7 +13,7 @@ import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { useToast } from '@hyperspace/ui/Toast';
 import { formatBytes } from '@hyperspace/ui/utils';
 
-import { SubscriptionStatus, TIB_BYTES } from '@filone/shared';
+import { SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';
 import type { BillingInfo, UsageResponse, CreateSetupIntentResponse } from '@filone/shared';
 
 import { apiRequest, getUsage } from '../../lib/api.js';
@@ -109,11 +109,12 @@ export function BillingPage() {
     : null;
   const isTrialExpiredGrace = isGracePeriod && !!billing?.subscription.trialEndsAt;
 
+  const limits = getUsageLimits(!!isActive);
   const storageUsed = usage?.storage.usedBytes ?? 0;
-  const storageLimit = usage?.storage.limitBytes ?? 1;
+  const storageLimit = limits.storageLimitBytes;
   const storagePct = storageLimit > 0 ? Math.min(100, (storageUsed / storageLimit) * 100) : 0;
-  const PRICE_PER_TIB_CENTS = 499;
-  const estimatedCost = Math.round((storageUsed / TIB_BYTES) * PRICE_PER_TIB_CENTS);
+  const PRICE_PER_TB_CENTS = 499;
+  const estimatedCost = Math.round((storageUsed / TB_BYTES) * PRICE_PER_TB_CENTS);
 
   // ── Handlers ─────────────────────────────────────────────────────
 
@@ -295,8 +296,8 @@ export function BillingPage() {
                         : isCanceled
                           ? 'Subscription inactive'
                           : trialDays !== null
-                            ? `${trialDays} days remaining — 1 TiB included`
-                            : '14-day trial — 1 TiB included'}
+                            ? `${trialDays} days remaining — 1 TB included`
+                            : '14-day trial — 1 TB included'}
                   </p>
                 </div>
               </div>
@@ -385,7 +386,7 @@ export function BillingPage() {
                 ? 'Your usage this billing period'
                 : isCanceled
                   ? 'Usage at time of cancellation'
-                  : 'Trial usage (1 TiB limit)'}
+                  : 'Trial usage (1 TB limit)'}
             </p>
 
             {/* Storage bar */}
@@ -464,7 +465,7 @@ export function BillingPage() {
               </p>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-3xl font-bold text-white">$4.99</span>
-                <span className="text-sm text-white/70">/ TiB / month</span>
+                <span className="text-sm text-white/70">/ TB / month</span>
               </div>
             </div>
 

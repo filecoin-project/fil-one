@@ -13,7 +13,7 @@ import {
 import { Link, useMatchRoute } from '@tanstack/react-router';
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { Button } from '@hyperspace/ui/Button';
-import { SubscriptionStatus } from '@filone/shared';
+import { SubscriptionStatus, getUsageLimits } from '@filone/shared';
 import type { BillingInfo, UsageResponse } from '@filone/shared';
 import { formatBytes } from '@hyperspace/ui/utils';
 import { getBilling, getUsage } from '../lib/api.js';
@@ -78,12 +78,16 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
     : null;
   const isTrialExpiredGrace = isGracePeriod && !!billing?.subscription.trialEndsAt;
 
-  const TIB = 1_099_511_627_776;
+  const isActivePaid = billing?.subscription.status === SubscriptionStatus.Active;
+  const limits = getUsageLimits(!!isActivePaid);
   const storageUsed = usage?.storage.usedBytes ?? 0;
-  const storageLimit = usage?.storage.limitBytes ?? 1;
-  const storagePct = storageLimit > 0 ? Math.min(100, (storageUsed / storageLimit) * 100) : 0;
-  const egressUsed = usage?.downloads.usedBytes ?? 0;
-  const egressPct = Math.min(100, (egressUsed / (2 * TIB)) * 100);
+  const storagePct =
+    limits.storageLimitBytes > 0
+      ? Math.min(100, (storageUsed / limits.storageLimitBytes) * 100)
+      : 0;
+  const egressUsed = usage?.egress.usedBytes ?? 0;
+  const egressPct =
+    limits.egressLimitBytes > 0 ? Math.min(100, (egressUsed / limits.egressLimitBytes) * 100) : 0;
 
   return (
     <nav className="flex h-full flex-col border-r border-zinc-200 bg-white">
@@ -149,14 +153,14 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             <div>
               <div className="mb-1 flex items-center justify-between text-[11px]">
                 <span className="text-zinc-500">Storage</span>
-                <span className="text-zinc-700">{formatBytes(storageUsed)} / 1 TiB</span>
+                <span className="text-zinc-700">{formatBytes(storageUsed)} / 1 TB</span>
               </div>
               <ProgressBar value={storagePct} size="sm" label="Storage usage" />
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between text-[11px]">
                 <span className="text-zinc-500">Egress</span>
-                <span className="text-zinc-700">{formatBytes(egressUsed)} / 2 TiB</span>
+                <span className="text-zinc-700">{formatBytes(egressUsed)} / 2 TB</span>
               </div>
               <ProgressBar value={egressPct} size="sm" label="Egress usage" />
             </div>

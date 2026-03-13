@@ -1,4 +1,4 @@
-import { QueryCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { QueryCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
@@ -11,11 +11,9 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
-import type { BucketRecord, ObjectRecord, SubscriptionRecord } from '../lib/dynamo-records.js';
-import { SubscriptionStatus } from '../lib/dynamo-records.js';
+import type { BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
 
 const dynamo = getDynamoClient();
-const TIB_BYTES = 1099511627776;
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { userId, orgId } = getUserInfo(event);
@@ -33,6 +31,10 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     }),
   );
   const buckets = (bucketsResult.Items ?? []).map((item) => unmarshall(item) as BucketRecord);
+
+  // TODO: Integrate with aurora to get the definitive form of this data.
+  // https://linear.app/filecoin-foundation/issue/FIL-68/create-a-data-summary-api
+  // This is not a scalable way to do this and currently only accounts for our console uploaded files
 
   // 2. Sum object sizes + count across all buckets
   let storageUsedBytes = 0;
@@ -69,30 +71,13 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     }),
   );
 
-  // 4. Determine storage limit based on subscription status
-  const billingResult = await dynamo.send(
-    new GetItemCommand({
-      TableName: Resource.BillingTable.name,
-      Key: {
-        pk: { S: `CUSTOMER#${userId}` },
-        sk: { S: 'SUBSCRIPTION' },
-      },
-      ProjectionExpression: 'subscriptionStatus',
-    }),
-  );
-  const billingRecord = billingResult.Item
-    ? (unmarshall(billingResult.Item) as Pick<SubscriptionRecord, 'subscriptionStatus'>)
-    : null;
-  const isActive = billingRecord?.subscriptionStatus === SubscriptionStatus.Active;
-
   const response: UsageResponse = {
     storage: {
       usedBytes: storageUsedBytes,
-      limitBytes: isActive ? -1 : TIB_BYTES,
     },
-    downloads: {
-      usedBytes: 0, // TODO: implement download tracking
-      limitBytes: 10 * TIB_BYTES,
+    egress: {
+      // TODO: implement egress: https://linear.app/filecoin-foundation/issue/FIL-82/get-egress-from-aurora
+      usedBytes: 0,
     },
     buckets: {
       count: buckets.length,

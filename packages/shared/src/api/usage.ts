@@ -1,11 +1,9 @@
 export interface UsageResponse {
   storage: {
     usedBytes: number;
-    limitBytes: number; // -1 = unlimited (active subscriber)
   };
-  downloads: {
+  egress: {
     usedBytes: number;
-    limitBytes: number;
   };
   buckets: {
     count: number;

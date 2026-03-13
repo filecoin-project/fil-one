@@ -15,7 +15,7 @@ import { Button } from '@hyperspace/ui/Button';
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { formatBytes } from '@hyperspace/ui/utils';
 
-import { PlanId, SubscriptionStatus } from '@filone/shared';
+import { PlanId, SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';
 import type { UsageResponse, BillingInfo, RecentActivity } from '@filone/shared';
 
 import { getUsage, getBilling, getActivity } from '../../lib/api.js';
@@ -23,10 +23,6 @@ import { getUsage, getBilling, getActivity } from '../../lib/api.js';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const TIB_BYTES = 1_099_511_627_776;
-const STORAGE_LIMIT = 1 * TIB_BYTES;
-const EGRESS_LIMIT = 2 * TIB_BYTES;
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -85,10 +81,10 @@ function statusBadge(status: SubscriptionStatus): { label: string; className: st
   }
 }
 
-function estimateMonthlyCost(usedBytes: number, pricePerTibCents: number): string {
+function estimateMonthlyCost(usedBytes: number, pricePerTbCents: number): string {
   if (usedBytes === 0) return '$0.00';
-  const tib = usedBytes / TIB_BYTES;
-  const cents = tib * pricePerTibCents;
+  const tb = usedBytes / TB_BYTES;
+  const cents = tb * pricePerTbCents;
   return `$${(cents / 100).toFixed(2)}`;
 }
 
@@ -140,6 +136,7 @@ export function DashboardPage() {
   }
 
   const isTrialing = billing.subscription.status === SubscriptionStatus.Trialing;
+  const isActivePaid = billing.subscription.status === SubscriptionStatus.Active;
   const trialDaysLeft =
     isTrialing && billing.subscription.trialEndsAt
       ? daysRemaining(billing.subscription.trialEndsAt)
@@ -149,13 +146,18 @@ export function DashboardPage() {
     usage.buckets.count === 0 || usage.objects.count === 0 || usage.accessKeys.count === 0;
 
   const badge = statusBadge(billing.subscription.status);
-  const pricePerTibCents = billing.subscription.planId === PlanId.PayAsYouGo ? 499 : 0;
+  const pricePerTbCents = billing.subscription.planId === PlanId.PayAsYouGo ? 499 : 0;
 
+  const limits = getUsageLimits(isActivePaid);
   const storagePct =
-    STORAGE_LIMIT > 0 ? Math.round((usage.storage.usedBytes / STORAGE_LIMIT) * 100) : 0;
+    limits.storageLimitBytes > 0
+      ? Math.round((usage.storage.usedBytes / limits.storageLimitBytes) * 100)
+      : 0;
 
   const egressPct =
-    EGRESS_LIMIT > 0 ? Math.round((usage.downloads.usedBytes / EGRESS_LIMIT) * 100) : 0;
+    limits.egressLimitBytes > 0
+      ? Math.round((usage.egress.usedBytes / limits.egressLimitBytes) * 100)
+      : 0;
 
   const quickSetupTasks = [
     {
@@ -212,7 +214,7 @@ export function DashboardPage() {
               <span className="font-medium text-zinc-900">Free trial</span>
               <span className="text-[#677183]">
                 {' '}
-                — Add a payment method to unlock unlimited storage at $4.99/TiB
+                — Add a payment method to unlock unlimited storage at $4.99/TB
               </span>
             </p>
           </div>
@@ -302,11 +304,11 @@ export function DashboardPage() {
             </span>
             {isTrialing && (
               <p className="mt-0.5 text-[11px] text-[#677183]">
-                1 TiB storage &amp; downloads included
+                1 TB storage &amp; egress included
               </p>
             )}
             {!isTrialing && (
-              <p className="mt-0.5 text-[11px] text-[#677183]">$4.99/TiB · no egress fees</p>
+              <p className="mt-0.5 text-[11px] text-[#677183]">$4.99/TB · no egress fees</p>
             )}
           </div>
           <div>
@@ -338,7 +340,7 @@ export function DashboardPage() {
               <span className="text-[30px] font-semibold leading-9 tracking-tight text-[#14181f]">
                 {formatBytes(usage.storage.usedBytes)}
               </span>
-              {isTrialing && <span className="text-[13px] text-[#677183]">/ 1 TiB</span>}
+              {isTrialing && <span className="text-[13px] text-[#677183]">/ 1 TB</span>}
             </div>
           </div>
           {isTrialing ? (
@@ -347,7 +349,7 @@ export function DashboardPage() {
             <div className="flex items-center justify-between border-t border-[#e1e4ea] pt-3">
               <span className="text-[11px] text-[#677183]">Est. monthly cost</span>
               <span className="text-[13px] font-semibold text-[#14181f]">
-                {estimateMonthlyCost(usage.storage.usedBytes, pricePerTibCents)}
+                {estimateMonthlyCost(usage.storage.usedBytes, pricePerTbCents)}
               </span>
             </div>
           )}
@@ -361,9 +363,9 @@ export function DashboardPage() {
             </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-[30px] font-semibold leading-9 tracking-tight text-[#14181f]">
-                {formatBytes(usage.downloads.usedBytes)}
+                {formatBytes(usage.egress.usedBytes)}
               </span>
-              {isTrialing && <span className="text-[13px] text-[#677183]">/ 2 TiB</span>}
+              {isTrialing && <span className="text-[13px] text-[#677183]">/ 2 TB</span>}
             </div>
           </div>
           {isTrialing ? (
