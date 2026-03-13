@@ -227,6 +227,85 @@ describe('get-activity baseHandler', () => {
     });
   });
 
+  it('defaults limit to 10 when limit is non-numeric', async () => {
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `USER#${USER_INFO.userId}` } },
+      })
+      .resolves({
+        Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
+      });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: {
+          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
+          ':skPrefix': { S: 'OBJECT#' },
+        },
+      })
+      .resolves({
+        Items: [
+          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
+          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
+        ],
+      });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
+    const event = buildEvent({
+      userInfo: USER_INFO,
+      queryStringParameters: { limit: 'abc' },
+    });
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
+
+    // Should fall back to 10, not return empty due to NaN
+    expect(body.activities).toHaveLength(3);
+  });
+
+  it('defaults limit to 10 when limit is negative', async () => {
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `USER#${USER_INFO.userId}` } },
+      })
+      .resolves({
+        Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
+      });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: {
+          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
+          ':skPrefix': { S: 'OBJECT#' },
+        },
+      })
+      .resolves({
+        Items: [
+          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
+          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
+        ],
+      });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
+    const event = buildEvent({
+      userInfo: USER_INFO,
+      queryStringParameters: { limit: '-5' },
+    });
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
+
+    expect(body.activities.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('caps limit at 50', async () => {
     ddbMock.on(QueryCommand).resolves({ Items: [] });
 
