@@ -77,6 +77,10 @@ jobs:
       - run: npx sst deploy --stage staging
 
       - if: failure()
+        id: commit-info
+        run: echo "subject=$(git log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+
+      - if: failure()
         uses: slackapi/slack-github-action@v2.1.1
         with:
           method: chat.postMessage
@@ -84,13 +88,13 @@ jobs:
           payload: |
             {
               "channel": "filone-alerts",
-              "text": "Deployment of `${{ github.event.repository.name }}` to `staging` failed",
+              "text": "Deployment of `${{ github.event.repository.name }}` to `staging` failed.\nCommit: ${{ steps.commit-info.outputs.subject }} by @${{ github.actor }}\nDetails: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": ":warning: *<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Deployment of `${{ github.event.repository.name }}` to `staging` failed>*"
+                    "text": ":warning: *Deployment of `${{ github.event.repository.name }}` to `staging` failed* · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Details>\nCommit: `${{ steps.commit-info.outputs.subject }}` by <https://github.com/${{ github.actor }}|@${{ github.actor }}>"
                   }
                 }
               ]
