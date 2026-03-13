@@ -289,7 +289,7 @@ After API changes, update the relevant Swagger spec and regenerate:
 
 **Portal client:**
 
-Download the updated Swagger spec from the Aurora Portal API docs and save it to `packages/aurora-portal-client/aurora-portal.swagger.yaml`:
+Download the updated Swagger spec from the Aurora Portal API docs and save it to `packages/aurora-portal-client/aurora-portal.swagger.json`:
 
 ```bash
 curl https://portal-ff.dev.aur.lu/api/docs/swagger.json -o packages/aurora-portal-client/aurora-portal.swagger.json
