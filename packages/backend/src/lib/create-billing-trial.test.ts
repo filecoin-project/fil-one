@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQSEvent } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   DynamoDBClient,
@@ -15,7 +14,7 @@ import { SubscriptionStatus } from '@filone/shared';
 const mockCustomersCreate = vi.fn();
 const mockSubscriptionsCreate = vi.fn();
 
-vi.mock('../lib/stripe-client.js', () => ({
+vi.mock('./stripe-client.js', () => ({
   getStripeClient: () => ({
     customers: { create: mockCustomersCreate },
     subscriptions: { create: mockSubscriptionsCreate },
@@ -36,39 +35,16 @@ vi.mock('sst', () => ({
 
 const ddbMock = mockClient(DynamoDBClient);
 
-import { handler } from './billing-trial-setup.js';
-import { buildContext } from '../test/lambda-test-utilities.js';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function buildSQSEvent(body: object): SQSEvent {
-  return {
-    Records: [
-      {
-        messageId: 'msg-1',
-        receiptHandle: 'handle-1',
-        body: JSON.stringify(body),
-        attributes: {} as SQSEvent['Records'][0]['attributes'],
-        messageAttributes: {},
-        md5OfBody: '',
-        eventSource: 'aws:sqs',
-        eventSourceARN: 'arn:aws:sqs:us-east-1:123:queue',
-        awsRegion: 'us-east-1',
-      },
-    ],
-  };
-}
+import { createBillingTrial } from './create-billing-trial.js';
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('billing-trial-setup handler', () => {
+describe('createBillingTrial', () => {
   beforeEach(() => {
     ddbMock.reset();
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
 
     mockCustomersCreate.mockResolvedValue({ id: 'cus_test_123' });
     mockSubscriptionsCreate.mockResolvedValue({
@@ -79,11 +55,10 @@ describe('billing-trial-setup handler', () => {
     });
   });
 
-  it('creates Stripe customer, subscription, and trial record for new user', async () => {
+  it('creates Stripe customer, subscription, and DynamoDB trial record', async () => {
     ddbMock.on(PutItemCommand).resolves({});
 
-    const message = { userId: 'user-1', orgId: 'org-1', email: 'test@example.com' };
-    await handler(buildSQSEvent(message), buildContext());
+    await createBillingTrial({ userId: 'user-1', orgId: 'org-1', email: 'test@example.com' });
 
     // Verify Stripe customer creation
     expect(mockCustomersCreate).toHaveBeenCalledWith(
@@ -124,7 +99,32 @@ describe('billing-trial-setup handler', () => {
     expect(item.updatedAt).toBeDefined();
   });
 
-  it('no-ops when record already exists (ConditionalCheckFailedException)', async () => {
+  it('sets trial_end to 14 days from now', async () => {
+    ddbMock.on(PutItemCommand).resolves({});
+
+    await createBillingTrial({ userId: 'user-1', orgId: 'org-1' });
+
+    const trialEnd = mockSubscriptionsCreate.mock.calls[0][0].trial_end;
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const fourteenDaysInSeconds = 14 * 24 * 60 * 60;
+
+    // Allow 5 seconds of tolerance for test execution time
+    expect(trialEnd).toBeGreaterThanOrEqual(nowUnix + fourteenDaysInSeconds - 5);
+    expect(trialEnd).toBeLessThanOrEqual(nowUnix + fourteenDaysInSeconds + 5);
+  });
+
+  it('passes undefined email when not provided', async () => {
+    ddbMock.on(PutItemCommand).resolves({});
+
+    await createBillingTrial({ userId: 'user-1', orgId: 'org-1' });
+
+    expect(mockCustomersCreate).toHaveBeenCalledWith(
+      { email: undefined, metadata: { userId: 'user-1', orgId: 'org-1' } },
+      { idempotencyKey: 'billing-trial-user-1' },
+    );
+  });
+
+  it('no-ops when DynamoDB record already exists', async () => {
     ddbMock.on(PutItemCommand).rejects(
       new ConditionalCheckFailedException({
         message: 'The conditional request failed',
@@ -132,34 +132,42 @@ describe('billing-trial-setup handler', () => {
       }),
     );
 
-    const message = { userId: 'user-1', orgId: 'org-1' };
     // Should not throw
-    await handler(buildSQSEvent(message), buildContext());
+    await createBillingTrial({ userId: 'user-1', orgId: 'org-1' });
+
+    // Stripe calls should still have been made (idempotent on Stripe side)
+    expect(mockCustomersCreate).toHaveBeenCalledOnce();
+    expect(mockSubscriptionsCreate).toHaveBeenCalledOnce();
   });
 
-  it('throws when batch contains more than one record', async () => {
-    const event = buildSQSEvent({ userId: 'user-1', orgId: 'org-1' });
-    event.Records.push({ ...event.Records[0], messageId: 'msg-2' });
-
-    await expect(handler(event, buildContext())).rejects.toThrow(
-      'Expected exactly 1 SQS record, got 2',
-    );
-  });
-
-  it('propagates Stripe errors', async () => {
+  it('propagates Stripe customer creation errors', async () => {
     mockCustomersCreate.mockRejectedValue(new Error('Stripe API error'));
 
-    const message = { userId: 'user-1', orgId: 'org-1' };
-    await expect(handler(buildSQSEvent(message), buildContext())).rejects.toThrow(
+    await expect(createBillingTrial({ userId: 'user-1', orgId: 'org-1' })).rejects.toThrow(
       'Stripe API error',
     );
+
+    // Should not attempt subscription or DynamoDB
+    expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+    expect(ddbMock.commandCalls(PutItemCommand)).toHaveLength(0);
+  });
+
+  it('propagates Stripe subscription creation errors', async () => {
+    mockSubscriptionsCreate.mockRejectedValue(new Error('Subscription failed'));
+
+    await expect(createBillingTrial({ userId: 'user-1', orgId: 'org-1' })).rejects.toThrow(
+      'Subscription failed',
+    );
+
+    // Customer was created but DynamoDB should not have been called
+    expect(mockCustomersCreate).toHaveBeenCalledOnce();
+    expect(ddbMock.commandCalls(PutItemCommand)).toHaveLength(0);
   });
 
   it('propagates unexpected DynamoDB errors', async () => {
     ddbMock.on(PutItemCommand).rejects(new Error('Service unavailable'));
 
-    const message = { userId: 'user-1', orgId: 'org-1' };
-    await expect(handler(buildSQSEvent(message), buildContext())).rejects.toThrow(
+    await expect(createBillingTrial({ userId: 'user-1', orgId: 'org-1' })).rejects.toThrow(
       'Service unavailable',
     );
   });

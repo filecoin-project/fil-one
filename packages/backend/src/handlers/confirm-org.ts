@@ -15,6 +15,7 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 import { sqsClient } from '../lib/sqs-client.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { createBillingTrial } from '../lib/create-billing-trial.js';
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { orgId, userId, email } = getUserInfo(event);
@@ -61,12 +62,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     );
   }
 
-  await sqsClient.send(
-    new SendMessageCommand({
-      QueueUrl: Resource.BillingTrialSetupQueue.url,
-      MessageBody: JSON.stringify({ userId, orgId, email }),
-    }),
-  );
+  await createBillingTrial({ userId, orgId, email });
 
   const responseBody: ConfirmOrgResponse = {
     orgId,

@@ -401,18 +401,6 @@ export default $config({
       treatMissingData: 'notBreaching',
     });
 
-    // ── Billing trial setup consumer ──────────────────────────────
-    billingTrialQueue.subscribe(
-      {
-        handler: 'packages/backend/src/handlers/billing-trial-setup.handler',
-        link: [billingTable, stripeSecretKey, stripePriceId],
-        environment: { ...sharedEnv },
-        runtime: 'nodejs24.x',
-        timeout: '30 seconds',
-      },
-      { batch: { size: 1 } },
-    );
-
     new aws.cloudwatch.MetricAlarm('BillingTrialSetupDlqAlarm', {
       alarmDescription:
         'Messages in billing-trial-setup DLQ — failed trial creation needs investigation',

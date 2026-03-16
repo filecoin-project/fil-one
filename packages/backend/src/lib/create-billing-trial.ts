@@ -1,13 +1,11 @@
-import assert from 'node:assert';
-import type { SQSEvent, Context } from 'aws-lambda';
 import { ConditionalCheckFailedException, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { SubscriptionStatus } from '@filone/shared';
 import { Resource } from 'sst';
-import { getDynamoClient } from '../lib/ddb-client.js';
-import { getStripeClient, getBillingSecrets } from '../lib/stripe-client.js';
+import { getDynamoClient } from './ddb-client.js';
+import { getStripeClient, getBillingSecrets } from './stripe-client.js';
 
-export interface BillingTrialSetupMessage {
+export interface CreateBillingTrialParams {
   userId: string;
   orgId: string;
   email?: string;
@@ -15,14 +13,11 @@ export interface BillingTrialSetupMessage {
 
 const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
-export async function handler(event: SQSEvent, _context: Context): Promise<void> {
-  assert.equal(
-    event.Records.length,
-    1,
-    `Expected exactly 1 SQS record, got ${event.Records.length}`,
-  );
-
-  const { userId, orgId, email } = JSON.parse(event.Records[0].body) as BillingTrialSetupMessage;
+export async function createBillingTrial({
+  userId,
+  orgId,
+  email,
+}: CreateBillingTrialParams): Promise<void> {
   const now = new Date();
   const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_MS);
   const trialEndsAtUnix = Math.floor(trialEndsAt.getTime() / 1000);
