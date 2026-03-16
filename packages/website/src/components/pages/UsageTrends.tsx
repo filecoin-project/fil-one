@@ -12,7 +12,7 @@ import {
 
 import type { UsageTrendsResponse } from '@filone/shared';
 
-import { formatBytes, formatBytesShort } from '@hyperspace/ui/utils';
+import { formatBytes, formatBytesShort } from '@filone/shared';
 import { getActivity } from '../../lib/api.js';
 
 // ---------------------------------------------------------------------------

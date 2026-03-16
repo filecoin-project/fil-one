@@ -12,15 +12,15 @@ import {
   KeyIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
-import { Button } from '@hyperspace/ui/Button';
-import { Input } from '@hyperspace/ui/Input';
-import { Modal, ModalHeader, ModalBody, ModalFooter } from '@hyperspace/ui/Modal';
-import { Tabs, TabList, Tab, TabPanels, TabPanel } from '@hyperspace/ui/Tabs';
-import { Breadcrumb } from '@hyperspace/ui/Breadcrumb';
-import { Spinner } from '@hyperspace/ui/Spinner';
-import { ProgressBar } from '@hyperspace/ui/ProgressBar';
-import { useToast } from '@hyperspace/ui/Toast';
-import { formatBytes } from '@hyperspace/ui/utils';
+import { Button } from '../../ui/components/Button';
+import { Input } from '../../ui/components/Input';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from '../../ui/components/Modal';
+import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../../ui/components/Tabs';
+import { Breadcrumb } from '../../ui/components/Breadcrumb';
+import { Spinner } from '../../ui/components/Spinner';
+import { ProgressBar } from '../../ui/components/ProgressBar';
+import { useToast } from '../../ui/components/Toast';
+import { formatBytes } from '@filone/shared';
 
 import type {
   S3Object,

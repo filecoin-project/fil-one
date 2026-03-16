@@ -1,4 +1,2 @@
 @import 'tailwindcss';
-@import '@hyperspace/ui/styles';
-
-@source "../../ui/src";
+@import './ui/styles/globals.css';

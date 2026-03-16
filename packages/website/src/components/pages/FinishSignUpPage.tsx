@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Input } from '@hyperspace/ui/Input';
-import { Button } from '@hyperspace/ui/Button';
+import { Input } from '../../ui/components/Input';
+import { Button } from '../../ui/components/Button';
 import { confirmOrg, logout } from '../../lib/api.js';
 import type { MeResponse } from '@filone/shared';
 

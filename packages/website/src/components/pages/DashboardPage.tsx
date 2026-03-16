@@ -11,9 +11,9 @@ import { Link } from '@tanstack/react-router';
 
 const UsageTrends = lazy(() => import('./UsageTrends'));
 
-import { Button } from '@hyperspace/ui/Button';
-import { ProgressBar } from '@hyperspace/ui/ProgressBar';
-import { formatBytes } from '@hyperspace/ui/utils';
+import { Button } from '../../ui/components/Button';
+import { ProgressBar } from '../../ui/components/ProgressBar';
+import { formatBytes } from '@filone/shared';
 
 import { PlanId, SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';
 import type { UsageResponse, BillingInfo, RecentActivity } from '@filone/shared';

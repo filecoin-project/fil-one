@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 
 import { KeyIcon, PlusIcon, PowerIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
-import { Button } from '@hyperspace/ui/Button';
-import { CodeBlock } from '@hyperspace/ui/CodeBlock';
-import { Spinner } from '@hyperspace/ui/Spinner';
-import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@hyperspace/ui/Tabs';
-import { useToast } from '@hyperspace/ui/Toast';
+import { Button } from '../../ui/components/Button';
+import { CodeBlock } from '../../ui/components/CodeBlock';
+import { Spinner } from '../../ui/components/Spinner';
+import { Tab, TabList, TabPanel, TabPanels, Tabs } from '../../ui/components/Tabs';
+import { useToast } from '../../ui/components/Toast';
 
 import type { AccessKey, CreateAccessKeyResponse, ListAccessKeysResponse } from '@filone/shared';
 

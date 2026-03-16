@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
-import { Button } from '@hyperspace/ui/Button';
-import { Input } from '@hyperspace/ui/Input';
-import { Modal, ModalHeader, ModalBody, ModalFooter } from '@hyperspace/ui/Modal';
-import { Spinner } from '@hyperspace/ui/Spinner';
-import { useToast } from '@hyperspace/ui/Toast';
-import { formatBytes } from '@hyperspace/ui/utils';
+import { Button } from '../../ui/components/Button';
+import { Input } from '../../ui/components/Input';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from '../../ui/components/Modal';
+import { Spinner } from '../../ui/components/Spinner';
+import { useToast } from '../../ui/components/Toast';
+import { formatBytes } from '@filone/shared';
 
 import type {
   Bucket,

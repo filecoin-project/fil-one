@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Input } from '@hyperspace/ui/Input';
-import { Button } from '@hyperspace/ui/Button';
-import { DividerWithLabel } from '@hyperspace/ui/DividerWithLabel';
+import { Input } from '../../ui/components/Input';
+import { Button } from '../../ui/components/Button';
+import { DividerWithLabel } from '../../ui/components/DividerWithLabel';
 import { redirectToLogin } from '../../lib/api.js';
 
 export function SignUpPage() {
