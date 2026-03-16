@@ -9,8 +9,8 @@ import {
   CloudIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
-import { ProgressBar } from '../../ui/components/ProgressBar';
-import { useToast } from '../../ui/components/Toast';
+import { ProgressBar } from '../primitives/ProgressBar';
+import { useToast } from '../primitives/Toast';
 import { formatBytes } from '@filone/shared';
 
 import { SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';

@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
-import { Button } from '../../ui/components/Button';
-import { Input } from '../../ui/components/Input';
-import { Modal, ModalHeader, ModalBody, ModalFooter } from '../../ui/components/Modal';
-import { Spinner } from '../../ui/components/Spinner';
-import { useToast } from '../../ui/components/Toast';
+import { Button } from '../primitives/Button';
+import { Input } from '../primitives/Input';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from '../primitives/Modal';
+import { Spinner } from '../primitives/Spinner';
+import { useToast } from '../primitives/Toast';
 import { formatBytes } from '@filone/shared';
 
 import type {

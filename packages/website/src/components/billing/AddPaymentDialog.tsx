@@ -11,7 +11,7 @@ import {
 } from '@stripe/react-stripe-js';
 import type { Stripe, StripeCardNumberElementChangeEvent } from '@stripe/stripe-js';
 
-import { Modal, ModalBody, ModalHeader } from '../../ui/components/Modal';
+import { Modal, ModalBody, ModalHeader } from '../primitives/Modal';
 
 import { getStripe } from '../../lib/stripe.js';
 

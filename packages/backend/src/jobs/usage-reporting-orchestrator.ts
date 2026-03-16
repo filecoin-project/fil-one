@@ -1,5 +1,4 @@
 import {
-  DynamoDBClient,
   ScanCommand,
   GetItemCommand,
   type AttributeValue,

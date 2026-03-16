@@ -12,14 +12,14 @@ import {
   KeyIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
-import { Button } from '../../ui/components/Button';
-import { Input } from '../../ui/components/Input';
-import { Modal, ModalHeader, ModalBody, ModalFooter } from '../../ui/components/Modal';
-import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../../ui/components/Tabs';
-import { Breadcrumb } from '../../ui/components/Breadcrumb';
-import { Spinner } from '../../ui/components/Spinner';
-import { ProgressBar } from '../../ui/components/ProgressBar';
-import { useToast } from '../../ui/components/Toast';
+import { Button } from '../primitives/Button';
+import { Input } from '../primitives/Input';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from '../primitives/Modal';
+import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../primitives/Tabs';
+import { Breadcrumb } from '../primitives/Breadcrumb';
+import { Spinner } from '../primitives/Spinner';
+import { ProgressBar } from '../primitives/ProgressBar';
+import { useToast } from '../primitives/Toast';
 import { formatBytes } from '@filone/shared';
 
 import type {

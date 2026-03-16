@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Input } from '../../ui/components/Input';
-import { Button } from '../../ui/components/Button';
+import { Input } from '../primitives/Input';
+import { Button } from '../primitives/Button';
 import { confirmOrg, logout } from '../../lib/api.js';
 import type { MeResponse } from '@filone/shared';
 
