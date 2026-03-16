@@ -114,15 +114,41 @@ describe('activate-subscription handler', () => {
     const result = await handler(event, {} as never);
     const body = JSON.parse((result as { body: string }).body);
 
-    // Should call update, NOT create
-    expect(mockSubscriptionsUpdate).toHaveBeenCalledWith('sub_trial_123', {
-      trial_end: 'now',
-      default_payment_method: 'pm_test_789',
-      expand: ['latest_invoice.payment_intent', 'default_payment_method'],
-    });
+    // Should call update twice (attach PM, then end trial), NOT create
+    expect(mockSubscriptionsUpdate).toHaveBeenCalledTimes(2);
     expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
 
     expect(body.subscription.status).toBe(SubscriptionStatus.Active);
+  });
+
+  it('attaches payment method before ending trial to prevent cancellation', async () => {
+    // This test covers a bug where sending trial_end and default_payment_method
+    // in a single call caused Stripe's missing_payment_method:'cancel' behavior
+    // to fire before the payment method was fully attached, canceling the subscription.
+    ddbMock.on(GetItemCommand).resolves({
+      Item: buildBillingRecord({ subscriptionId: 'sub_trial_123' }),
+    });
+    ddbMock.on(UpdateItemCommand).resolves({});
+
+    mockSubscriptionsUpdate.mockResolvedValue(mockSubscriptionResponse({ status: 'active' }));
+
+    const event = buildEvent({
+      userInfo: { userId: 'user-1', email: 'test@example.com', orgId: 'org-1' },
+      method: 'POST',
+      rawPath: '/api/billing/activate',
+    });
+    await handler(event, {} as never);
+
+    // Step 1: Attach payment method only
+    expect(mockSubscriptionsUpdate).toHaveBeenNthCalledWith(1, 'sub_trial_123', {
+      default_payment_method: 'pm_test_789',
+    });
+
+    // Step 2: End trial separately — payment method is already attached
+    expect(mockSubscriptionsUpdate).toHaveBeenNthCalledWith(2, 'sub_trial_123', {
+      trial_end: 'now',
+      expand: ['latest_invoice.payment_intent', 'default_payment_method'],
+    });
   });
 
   it('creates new subscription when no subscriptionId exists (legacy path)', async () => {

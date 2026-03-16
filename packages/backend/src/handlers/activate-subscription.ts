@@ -81,10 +81,13 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   // 3. Create or update subscription
   let subscription;
   if (record.subscriptionId) {
-    // Trial subscription exists — update it with payment method
+    // Step 1: Attach payment method first
+    await stripe.subscriptions.update(record.subscriptionId as string, {
+      default_payment_method: paymentMethodId,
+    });
+    // Step 2: End trial — payment method already attached, so cancel behavior won't fire
     subscription = await stripe.subscriptions.update(record.subscriptionId as string, {
       trial_end: 'now',
-      default_payment_method: paymentMethodId,
       expand: ['latest_invoice.payment_intent', 'default_payment_method'],
     });
   } else {
