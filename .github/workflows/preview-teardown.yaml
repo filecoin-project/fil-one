@@ -22,7 +22,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@3b1e0a8ff9e8cbbd91cce0ed6f246d1068188b1b
 
       - uses: actions/setup-node@v4
         with:
