@@ -185,7 +185,7 @@ export default $config({
 
     // ── Deploy-time setup (Stripe webhook + Auth0 callbacks) ────────
     const setupFn = new sst.aws.Function('SetupIntegrations', {
-      handler: 'packages/backend/src/handlers/setup-integrations.handler',
+      handler: 'packages/backend/src/jobs/stack-setup/setup-integrations.handler',
       link: [stripeSecretKey, auth0MgmtClientId, auth0MgmtClientSecret, auth0ClientId],
       environment: {
         AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
@@ -409,7 +409,7 @@ export default $config({
 
     const usageOrchestrator = new sst.aws.Function('UsageReportingOrchestrator', {
       handler: 'packages/backend/src/jobs/usage-reporting-orchestrator.handler',
-      link: [billingTable],
+      link: [billingTable, userInfoTable],
       environment: {
         USAGE_WORKER_FUNCTION_NAME: usageWorker.name,
         STRIPE_METER_EVENT_NAME: 'tibmonthmeter',
