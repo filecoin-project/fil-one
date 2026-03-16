@@ -17,7 +17,7 @@ import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
-  const { orgId } = getUserInfo(event);
+  const { orgId, userId, email } = getUserInfo(event);
   const body = JSON.parse(event.body ?? '{}') as Partial<ConfirmOrgRequest>;
 
   // Validate and sanitize org name
@@ -60,6 +60,13 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       }),
     );
   }
+
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: Resource.BillingTrialSetupQueue.url,
+      MessageBody: JSON.stringify({ userId, orgId, email }),
+    }),
+  );
 
   const responseBody: ConfirmOrgResponse = {
     orgId,

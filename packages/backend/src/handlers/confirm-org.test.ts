@@ -16,6 +16,7 @@ vi.mock('sst', () => ({
     Auth0ClientSecret: { value: 'test-client-secret' },
     AuroraBackofficeToken: { value: 'test-aurora-token' },
     AuroraTenantSetupQueue: { url: 'https://sqs.us-east-1.amazonaws.com/123/setup-queue' },
+    BillingTrialSetupQueue: { url: 'https://sqs.us-east-1.amazonaws.com/123/billing-trial-queue' },
   },
 }));
 
@@ -156,12 +157,16 @@ describe('POST /api/org/confirm handler', () => {
 
     // Verify SQS enqueue
     const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
-    expect(sqsCalls).toHaveLength(1);
+    expect(sqsCalls).toHaveLength(2);
     expect(sqsCalls[0].args[0].input).toStrictEqual({
       QueueUrl: MOCK_QUEUE_URL,
       MessageBody: JSON.stringify({ orgId: MOCK_ORG_ID, orgName: 'Acme Corp' }),
       MessageGroupId: MOCK_ORG_ID,
       MessageDeduplicationId: MOCK_ORG_ID,
+    });
+    expect(sqsCalls[1].args[0].input).toStrictEqual({
+      QueueUrl: 'https://sqs.us-east-1.amazonaws.com/123/billing-trial-queue',
+      MessageBody: JSON.stringify({ userId: MOCK_USER_ID, orgId: MOCK_ORG_ID, email: MOCK_EMAIL }),
     });
   });
 
@@ -184,8 +189,13 @@ describe('POST /api/org/confirm handler', () => {
 
     expect(result).toMatchObject({ statusCode: 200 });
 
-    // Should NOT enqueue because setup is already complete
-    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+    // Aurora queue should be skipped, but billing trial should still fire
+    const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
+    expect(sqsCalls).toHaveLength(1);
+    expect(sqsCalls[0].args[0].input).toStrictEqual({
+      QueueUrl: 'https://sqs.us-east-1.amazonaws.com/123/billing-trial-queue',
+      MessageBody: JSON.stringify({ userId: MOCK_USER_ID, orgId: MOCK_ORG_ID, email: MOCK_EMAIL }),
+    });
   });
 
   it('returns 400 when orgName is missing', async () => {
