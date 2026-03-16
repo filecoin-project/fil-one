@@ -10,7 +10,19 @@ export default defineConfig({
     typeAware: true,
     typeCheck: true,
   },
-  ignorePatterns: ['.sst', 'infra', 'packages/ui', '**/dist', '**/generated', '**/sst-env.d.ts'],
+  ignorePatterns: [
+    '.sst',
+    'infra',
+    'packages/ui',
+    '**/dist',
+    '**/generated',
+    '**/sst-env.d.ts',
+    'test-results',
+    'playwright-report',
+    'blob-report',
+    'playwright/.cache',
+    'playwright/.auth',
+  ],
   overrides: [
     {
       // sst.config.ts must use a triple-slash reference for SST's generated types
