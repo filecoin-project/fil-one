@@ -1,27 +1,37 @@
-import type { AnchorHTMLAttributes, ComponentProps } from 'react';
+import type { AnchorHTMLAttributes } from 'react';
 
-import { getUIConfig, type UIConfig } from '../../lib/ui-config';
-import { isInternalLink } from '../../lib/linkUtils';
+import { Link } from '@tanstack/react-router';
 
-export type BaseLinkProps =
-  | ComponentProps<UIConfig['Link']>
-  | ({
-      href: string;
-    } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>);
+export type BaseLinkProps = {
+  href: string;
+  children?: React.ReactNode;
+  className?: string;
+} & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>;
 
-export function BaseLink({ href, ...rest }: BaseLinkProps) {
-  const { baseDomain, Link } = getUIConfig();
+function isInternalLink(href: string): boolean {
+  return href.startsWith('/') || href.startsWith('#');
+}
 
-  const isInternal = isInternalLink(href, baseDomain);
-  const isMailto = href.startsWith('mailto:');
-
-  if (isInternal) {
-    return <Link href={href} {...rest} />;
+export function BaseLink({ href, children, ...rest }: BaseLinkProps) {
+  if (href.startsWith('mailto:')) {
+    return (
+      <a href={href} {...rest}>
+        {children}
+      </a>
+    );
   }
 
-  if (isMailto) {
-    return <a href={href} {...rest} />;
+  if (isInternalLink(href)) {
+    return (
+      <Link to={href} {...rest}>
+        {children}
+      </Link>
+    );
   }
 
-  return <a rel="noopener noreferrer" href={href} target="_blank" {...rest} />;
+  return (
+    <a rel="noopener noreferrer" href={href} target="_blank" {...rest}>
+      {children}
+    </a>
+  );
 }

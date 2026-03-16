@@ -1,9 +1,6 @@
 import { ArrowUpRightIcon } from '@phosphor-icons/react/dist/ssr';
 import { clsx } from 'clsx';
 
-import { getUIConfig } from '../../lib/ui-config';
-import { isExternalLink } from '../../lib/linkUtils';
-
 import { BaseLink, type BaseLinkProps } from './BaseLink';
 import { Icon as IconComponent, type IconProps } from './Icon';
 
@@ -30,6 +27,10 @@ const sizeClasses = {
   compact: 'button--compact',
 } as const;
 
+function isExternalHref(href: string): boolean {
+  return !href.startsWith('/') && !href.startsWith('#') && !href.startsWith('mailto:');
+}
+
 export function Button({
   variant,
   className,
@@ -50,11 +51,9 @@ export function Button({
     );
   }
 
-  const { baseDomain } = getUIConfig();
-
   return (
     <BaseLink className={classes} href={href}>
-      <ButtonInner isExternalLink={isExternalLink(href, baseDomain)} icon={icon}>
+      <ButtonInner isExternalLink={isExternalHref(href)} icon={icon}>
         {children}
       </ButtonInner>
     </BaseLink>

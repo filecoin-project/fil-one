@@ -1,19 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Breadcrumb } from './Breadcrumb';
-import { setUIConfig, resetUIConfig, type MinimalLinkProps } from '../../lib/ui-config';
 
-beforeEach(() => {
-  resetUIConfig();
-  setUIConfig({
-    baseDomain: 'localhost',
-    Link: ({ href, children, ...rest }: MinimalLinkProps) => (
-      <a href={href} {...rest}>
-        {children}
-      </a>
-    ),
-  });
-});
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 describe('Breadcrumb', () => {
   it('renders all items', () => {
