@@ -58,12 +58,10 @@ describe('subscriptionGuardMiddleware', () => {
     mockCreateBillingTrial.mockResolvedValue(undefined);
 
     const { before } = subscriptionGuardMiddleware(AccessLevel.Write);
-    const result = await before(
-      buildMiddyRequest(
-        buildEvent({
-          userInfo: { userId: USER_ID, orgId: 'test-org-uuid', email: 'test@example.com' },
-        }),
-      ),
+    const request = buildMiddyRequest(
+      buildEvent({
+        userInfo: { userId: USER_ID, orgId: 'test-org-uuid', email: 'test@example.com' },
+      }),
     );
     const result = await before(request);
 
