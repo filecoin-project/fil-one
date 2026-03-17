@@ -1,6 +1,6 @@
 import { createRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { Route as rootRoute } from './__root.js';
-import { VerifyEmailPage } from '../components/pages/VerifyEmailPage.js';
+import { VerifyEmailPage } from '../pages/VerifyEmailPage.js';
 import { getMe } from '../lib/api.js';
 import { useState, useEffect } from 'react';
 import type { MeResponse } from '@filone/shared';

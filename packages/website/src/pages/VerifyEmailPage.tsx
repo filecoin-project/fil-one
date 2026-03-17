@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button } from '../primitives/Button';
-import { logout, getMe } from '../../lib/api.js';
+import { Button } from '../components/Button';
+import { logout, getMe } from '../lib/api.js';
 import type { MeResponse } from '@filone/shared';
 
 type VerifyEmailPageProps = {
