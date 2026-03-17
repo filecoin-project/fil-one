@@ -172,7 +172,10 @@ export function subscriptionGuardMiddleware(accessLevel: AccessLevel) {
       try {
         await request.internal.billingTrialPromise;
       } catch (error) {
-        console.error('Failed to create billing trial in subscription guard fallback:', error);
+        console.error(
+          '[subscription-guard] Failed to create billing trial in subscription guard fallback:',
+          error,
+        );
       }
     }
   };
