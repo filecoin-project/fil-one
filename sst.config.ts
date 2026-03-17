@@ -187,7 +187,13 @@ export default $config({
     // ── Deploy-time setup (Stripe webhook + Auth0 callbacks) ────────
     const setupFn = new sst.aws.Function('SetupIntegrations', {
       handler: 'packages/backend/src/jobs/stack-setup/setup-integrations.handler',
-      link: [stripeSecretKey, auth0MgmtClientId, auth0MgmtClientSecret, auth0ClientId, sendGridApiKey],
+      link: [
+        stripeSecretKey,
+        auth0MgmtClientId,
+        auth0MgmtClientSecret,
+        auth0ClientId,
+        sendGridApiKey,
+      ],
       environment: {
         AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
       },

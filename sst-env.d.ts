@@ -42,15 +42,15 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Dynamo"
     }
+    "SendGridApiKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "SetupIntegrations": {
       "name": string
       "type": "sst.aws.Function"
     }
     "StripePriceId": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "SendGridApiKey": {
       "type": "sst.sst.Secret"
       "value": string
     }
