@@ -227,7 +227,7 @@ export default $config({
       AUTH0_AUDIENCE: 'https://staging.fil.one',
       // OTel + Grafana Cloud observability
       OTEL_RESOURCE_ATTRIBUTES: $interpolate`deployment.environment.name=${$app.stage},service.namespace=filone`,
-      OTEL_SERVICE_NAME: 'filone-backend',
+      OTEL_SERVICE_NAME: $interpolate`filone-${$app.stage}`,
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       AWS_LAMBDA_EXEC_WRAPPER: '/opt/otel-handler',

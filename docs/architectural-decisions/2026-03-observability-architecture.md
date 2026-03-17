@@ -94,7 +94,7 @@ do not use the HTTP-specific `tracingMiddleware`.
 # OTel auto-instrumentation
 AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=<stage>,service.namespace=filone
-OTEL_SERVICE_NAME=filone-backend
+OTEL_SERVICE_NAME=filone-<stage>
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_NODE_ENABLED_INSTRUMENTATIONS=aws-sdk,undici,aws-lambda
