@@ -9,6 +9,7 @@ import { GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynam
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { Resource } from 'sst';
 import type { UserInfo } from '../lib/user-context.js';
+import { getRequestSpan } from './tracing.js';
 import { ApiErrorCode, OrgRole } from '@filone/shared';
 import type { ErrorResponse } from '@filone/shared';
 import {
@@ -62,6 +63,13 @@ function getJWKS(domain: string): ReturnType<typeof createRemoteJWKSet> {
 
 import { parseCookies } from '../lib/cookies.js';
 import { CSRF_COOKIE_NAME } from '@filone/shared';
+
+function enrichSpanWithIdentity(request: AuthMiddlewareRequest, userInfo: UserInfo) {
+  const span = getRequestSpan(request);
+  if (!span) return;
+  span.setAttribute('filone.user_id', userInfo.userId);
+  span.setAttribute('filone.org_id', userInfo.orgId);
+}
 
 function unauthorizedResponse(): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder().status(401).body<ErrorResponse>({ message: 'Unauthorized' }).build();
@@ -117,22 +125,26 @@ async function extractEmailFromIdToken({
  * or undefined to let the request continue.
  */
 async function attachIdentity({
+  request,
   event,
   sub,
   email,
 }: {
+  request: AuthMiddlewareRequest;
   event: APIGatewayProxyEventV2;
   sub: string;
   email: string | null;
 }): Promise<APIGatewayProxyStructuredResultV2 | null> {
   const resolved = await resolveUserAndOrg(sub, email);
-  (
-    event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }
-  ).userInfo = {
+  const userInfo: UserInfo = {
     userId: resolved.userId,
     orgId: resolved.orgId,
     email: resolved.email ?? undefined,
   };
+  (
+    event.requestContext as APIGatewayProxyEventV2['requestContext'] & { userInfo: UserInfo }
+  ).userInfo = userInfo;
+  enrichSpanWithIdentity(request, userInfo);
   if (!resolved.orgConfirmed && !ORG_CONFIRM_BYPASS_ROUTES.has(event.rawPath)) {
     return orgNotConfirmedResponse();
   }
@@ -296,7 +308,7 @@ export function authMiddleware() {
           clientId: secrets.AUTH0_CLIENT_ID,
           issuer,
         });
-        const blocked = await attachIdentity({ event, sub, email });
+        const blocked = await attachIdentity({ request, event, sub, email });
         if (blocked) return blocked;
         return; // Valid — continue to handler
       } catch (err) {
@@ -341,7 +353,12 @@ export function authMiddleware() {
             issuer,
           });
           console.warn('[auth] Token refresh succeeded');
-          const blocked = await attachIdentity({ event, sub: refreshedSub, email: refreshedEmail });
+          const blocked = await attachIdentity({
+            request,
+            event,
+            sub: refreshedSub,
+            email: refreshedEmail,
+          });
           if (blocked) return blocked;
           return; // Continue to handler
         }

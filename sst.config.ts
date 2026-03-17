@@ -40,7 +40,17 @@ export default $config({
     const stripeSecretKey = new sst.Secret('StripeSecretKey');
     const stripePriceId = new sst.Secret('StripePriceId');
     const auroraBackofficeToken = new sst.Secret('AuroraBackofficeToken');
+    const grafanaCloudInstanceId = new sst.Secret('GrafanaCloudInstanceId');
+    const grafanaCloudApiKey = new sst.Secret('GrafanaCloudApiKey');
     const AWS_CACHING_DISABLED_POLICY = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
+
+    // ── OTel Lambda Layers ─────────────────────────────────────────────
+    const awsRegion = aws.getRegionOutput().name;
+    // https://github.com/grafana/collector-lambda-extension/releases/tag/v0.138.0%2Bgrafana
+    const otelCollectorLayer = $interpolate`arn:aws:lambda:${awsRegion}:050451360540:layer:opentelemetry-collector-grafana-amd64-v0_138_0:2`;
+    // https://github.com/open-telemetry/opentelemetry-lambda/releases/tag/layer-nodejs%2F0.20.0
+    const otelNodejsLayer = $interpolate`arn:aws:lambda:${awsRegion}:184161586896:layer:opentelemetry-nodejs-0_20_0:1`;
+    const otelLayers = [otelCollectorLayer, otelNodejsLayer];
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
     const uploadsTable = new sst.aws.Dynamo('UploadsTable', {
@@ -183,13 +193,46 @@ export default $config({
 
     const siteUrl = router.url;
 
+    // ── Shared function config ───────────────────────────────────────
+    const allResources = [
+      uploadsTable,
+      billingTable,
+      userInfoTable,
+      userFilesBucket,
+      tenantSetupQueue,
+      auth0ClientId,
+      auth0ClientSecret,
+      stripeSecretKey,
+      stripePriceId,
+      grafanaCloudInstanceId,
+      grafanaCloudApiKey,
+    ];
+
+    const sharedEnv: Record<string, $util.Input<string>> = {
+      FILONE_STAGE: $app.stage,
+      AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
+      AUTH0_AUDIENCE: 'https://staging.fil.one',
+      // OTel + Grafana Cloud observability
+      OTEL_RESOURCE_ATTRIBUTES: $interpolate`deployment.environment.name=${$app.stage},service.namespace=filone`,
+      OTEL_SERVICE_NAME: 'filone-backend',
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      AWS_LAMBDA_EXEC_WRAPPER: '/opt/otel-handler',
+      OTEL_NODE_ENABLED_INSTRUMENTATIONS: 'aws-sdk,undici,aws-lambda',
+      GRAFANA_CLOUD_INSTANCE_ID: grafanaCloudInstanceId.value,
+      GRAFANA_CLOUD_API_KEY: grafanaCloudApiKey.value,
+      GRAFANA_CLOUD_OTLP_ENDPOINT: 'https://otlp-gateway-prod-us-central-0.grafana.net/otlp',
+    };
+
     // ── Deploy-time setup (Stripe webhook + Auth0 callbacks) ────────
     const setupFn = new sst.aws.Function('SetupIntegrations', {
       handler: 'packages/backend/src/jobs/stack-setup/setup-integrations.handler',
       link: [stripeSecretKey, auth0MgmtClientId, auth0MgmtClientSecret, auth0ClientId],
       environment: {
+        ...sharedEnv,
         AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
       },
+      layers: otelLayers,
       permissions: [
         {
           actions: ['ssm:GetParameter', 'ssm:PutParameter', 'ssm:DeleteParameter'],
@@ -215,25 +258,6 @@ export default $config({
         },
       }),
     });
-
-    // ── Shared function config ───────────────────────────────────────
-    const allResources = [
-      uploadsTable,
-      billingTable,
-      userInfoTable,
-      userFilesBucket,
-      tenantSetupQueue,
-      auth0ClientId,
-      auth0ClientSecret,
-      stripeSecretKey,
-      stripePriceId,
-    ];
-
-    const sharedEnv: Record<string, $util.Input<string>> = {
-      FILONE_STAGE: $app.stage,
-      AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
-      AUTH0_AUDIENCE: 'https://staging.fil.one',
-    };
 
     if (isProduction) {
       throw new Error(
@@ -272,6 +296,7 @@ export default $config({
           ...sharedEnv,
           ...extraEnv,
         },
+        layers: otelLayers,
         permissions,
         runtime: 'nodejs24.x',
         timeout: '10 seconds',
@@ -370,6 +395,7 @@ export default $config({
           ...auroraEnv,
           ...sharedEnv,
         },
+        layers: otelLayers,
         permissions: [
           {
             actions: ['ssm:PutParameter'],
@@ -401,7 +427,8 @@ export default $config({
     const usageWorker = new sst.aws.Function('UsageReportingWorker', {
       handler: 'packages/backend/src/jobs/usage-reporting-worker.handler',
       link: [billingTable, stripeSecretKey, auroraBackofficeToken],
-      environment: { ...auroraEnv, STRIPE_METER_EVENT_NAME: 'tibmonthmeter' },
+      environment: { ...sharedEnv, ...auroraEnv, STRIPE_METER_EVENT_NAME: 'tibmonthmeter' },
+      layers: otelLayers,
       runtime: 'nodejs24.x',
       timeout: '60 seconds',
       memory: '256 MB',
@@ -411,9 +438,11 @@ export default $config({
       handler: 'packages/backend/src/jobs/usage-reporting-orchestrator.handler',
       link: [billingTable, userInfoTable],
       environment: {
+        ...sharedEnv,
         USAGE_WORKER_FUNCTION_NAME: usageWorker.name,
         STRIPE_METER_EVENT_NAME: 'tibmonthmeter',
       },
+      layers: otelLayers,
       runtime: 'nodejs24.x',
       timeout: '300 seconds',
       memory: '256 MB',

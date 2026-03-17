@@ -16,6 +16,7 @@ import { ApiErrorCode, OrgRole } from '@filone/shared';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 import { expectErrorResponse } from '../test/assert-helpers.js';
+import type { Span } from '@opentelemetry/api';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -593,6 +594,69 @@ describe('authMiddleware', () => {
         audience: process.env.AUTH0_AUDIENCE,
         issuer: `https://${process.env.AUTH0_DOMAIN}/`,
       });
+    });
+  });
+
+  describe('tracing integration', () => {
+    function setupExistingUserMocks() {
+      mockJwtVerify.mockResolvedValueOnce({ payload: { sub: MOCK_SUB } });
+
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
+        })
+        .resolves({
+          Item: {
+            userId: { S: MOCK_USER_ID },
+            orgId: { S: MOCK_ORG_ID },
+            email: { S: MOCK_EMAIL },
+          },
+        });
+
+      ddbMock
+        .on(GetItemCommand, {
+          Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+        })
+        .resolves({
+          Item: {
+            orgConfirmed: { BOOL: true },
+            setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
+          },
+        });
+    }
+
+    it('sets filone.user_id and filone.org_id span attributes after successful auth', async () => {
+      setupExistingUserMocks();
+
+      const setAttributeMock = vi.fn();
+      const mockSpan = { setAttribute: setAttributeMock } as unknown as Span;
+
+      const { before } = authMiddleware();
+      const event = buildEvent({
+        cookies: [`hs_access_token=valid-token`],
+      });
+      const request = buildMiddyRequest(event, {
+        internal: { __traceSpan: mockSpan },
+      });
+
+      await before(request);
+
+      expect(setAttributeMock).toHaveBeenCalledWith('filone.user_id', MOCK_USER_ID);
+      expect(setAttributeMock).toHaveBeenCalledWith('filone.org_id', MOCK_ORG_ID);
+    });
+
+    it('does not fail when no tracing span is present', async () => {
+      setupExistingUserMocks();
+
+      const { before } = authMiddleware();
+      const event = buildEvent({
+        cookies: [`hs_access_token=valid-token`],
+      });
+      const request = buildMiddyRequest(event);
+
+      const result = await before(request);
+
+      expect(result).toBeUndefined();
     });
   });
 

@@ -12,6 +12,7 @@ import {
 import { parseCookies } from '../lib/cookies.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import { tracingMiddleware } from '../middleware/tracing.js';
 import { resolveOrigin } from '../lib/resolve-origin.js';
 
 function redirect(location: string, cookies: string[] = []): APIGatewayProxyStructuredResultV2 {
@@ -93,4 +94,7 @@ async function baseHandler(
   return redirect(`${origin}/dashboard`, responseCookies);
 }
 
-export const handler = middy(baseHandler).use(httpHeaderNormalizer()).use(errorHandlerMiddleware());
+export const handler = middy(baseHandler)
+  .use(tracingMiddleware())
+  .use(httpHeaderNormalizer())
+  .use(errorHandlerMiddleware());

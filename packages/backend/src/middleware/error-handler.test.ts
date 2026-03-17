@@ -1,8 +1,37 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request } from '@middy/core';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from 'aws-lambda';
+import { trace, context } from '@opentelemetry/api';
+import {
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+  InMemorySpanExporter,
+} from '@opentelemetry/sdk-trace-node';
 import { errorHandlerMiddleware } from './error-handler.js';
-import { buildEvent } from '../test/lambda-test-utilities.js';
+import { tracingMiddleware } from './tracing.js';
+import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
+
+// ---------------------------------------------------------------------------
+// OTel test infrastructure
+// ---------------------------------------------------------------------------
+
+const exporter = new InMemorySpanExporter();
+const provider = new NodeTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(exporter)],
+});
+provider.register();
+
+beforeEach(() => {
+  exporter.reset();
+});
+
+function withActiveSpan<T>(
+  fn: (span: ReturnType<ReturnType<typeof trace.getTracer>['startSpan']>) => T,
+): T {
+  const tracer = trace.getTracer('test');
+  const span = tracer.startSpan('test-request');
+  return context.with(trace.setSpan(context.active(), span), () => fn(span));
+}
 
 type ErrorRequest = Request<APIGatewayProxyEventV2, APIGatewayProxyResultV2, Error, Context>;
 
@@ -79,5 +108,24 @@ describe('errorHandlerMiddleware', () => {
     await onError!(request);
 
     expect((request.response as { statusCode: number }).statusCode).toBe(500);
+  });
+
+  it('records the exception on the active OTel span', async () => {
+    await withActiveSpan(async (span) => {
+      const tracing = tracingMiddleware();
+      const { onError } = errorHandlerMiddleware();
+      const request = buildMiddyRequest(buildEvent());
+      request.error = new Error('something broke');
+
+      // tracingMiddleware.before stashes the span
+      tracing.before!(request);
+      await onError!(request);
+      span.end();
+
+      const finished = exporter.getFinishedSpans();
+      expect(finished).toHaveLength(1);
+      expect(finished[0].events).toHaveLength(1);
+      expect(finished[0].events[0].name).toBe('exception');
+    });
   });
 });

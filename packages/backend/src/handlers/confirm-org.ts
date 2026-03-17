@@ -12,6 +12,7 @@ import { validateOrgName } from '../lib/org-name-validation.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import { tracingMiddleware } from '../middleware/tracing.js';
 import { sqsClient } from '../lib/sqs-client.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
@@ -71,6 +72,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
 
 // This route is in the ORG_CONFIRM_BYPASS_ROUTES allowlist in auth middleware
 export const handler = middy(baseHandler)
+  .use(tracingMiddleware())
   .use(httpHeaderNormalizer())
   .use(authMiddleware())
   .use(csrfMiddleware())

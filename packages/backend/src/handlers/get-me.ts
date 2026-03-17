@@ -10,6 +10,7 @@ import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import { tracingMiddleware } from '../middleware/tracing.js';
 import { suggestOrgName } from '../lib/suggest-org-name.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
 
@@ -47,6 +48,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
 }
 
 export const handler = middy(baseHandler)
+  .use(tracingMiddleware())
   .use(httpHeaderNormalizer())
   .use(authMiddleware())
   .use(errorHandlerMiddleware());

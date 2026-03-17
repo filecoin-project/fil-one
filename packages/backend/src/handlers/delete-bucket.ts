@@ -12,6 +12,7 @@ import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
+import { tracingMiddleware } from '../middleware/tracing.js';
 import { subscriptionGuardMiddleware, AccessLevel } from '../middleware/subscription-guard.js';
 
 const dynamo = getDynamoClient();
@@ -78,6 +79,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
 }
 
 export const handler = middy(baseHandler)
+  .use(tracingMiddleware())
   .use(httpHeaderNormalizer())
   .use(authMiddleware())
   .use(csrfMiddleware())

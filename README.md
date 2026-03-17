@@ -102,11 +102,15 @@ pnpx sst secret set Auth0MgmtClientSecret <value> [--stage <stage>]
 pnpx sst secret set StripeSecretKey <value> [--stage <stage>]
 pnpx sst secret set StripePriceId <value> [--stage <stage>]
 pnpx sst secret set AuroraBackofficeToken <value> [--stage <stage>]
+pnpx sst secret set GrafanaCloudInstanceId <value> [--stage <stage>]
+pnpx sst secret set GrafanaCloudApiKey <value> [--stage <stage>]
 ```
 
 Omit `--stage` to set for your personal dev stage (defaults to OS username).
 
 The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Machine (M2M) application** in Auth0 — see the [Auth0 M2M Setup](#auth0-machine-to-machine-m2m-application) section below. The `AuroraBackofficeToken` is from the Aurora Back Office dashboard — see the [API token](#api-token) section below.
+
+The Grafana Cloud credentials are found in your Grafana Cloud portal under **Connections > OpenTelemetry**. The instance ID is numeric and the API key is a Grafana Cloud API token with `MetricsPublisher`, `LogsPublisher`, and `TracesPublisher` scopes.
 
 ## Commands
 
@@ -274,6 +278,12 @@ The frontend needs the **publishable key** in its env:
 # packages/website/.env.local
 VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxxxx
 ```
+
+## Observability
+
+All Lambda functions export traces, metrics, and logs to Grafana Cloud via OpenTelemetry. Telemetry is tagged with `deployment.environment.name` set to the SST stage (e.g., `bajtos`, `staging`). Use this resource attribute in Grafana to filter by stage.
+
+See [ADR for Observability Architecture](docs/architectural-decisions/2026-03-observability-architecture.md) for the full design rationale.
 
 ## Aurora API Clients
 
