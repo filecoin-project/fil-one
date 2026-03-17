@@ -20,7 +20,7 @@ export enum AccessLevel {
   Write = 'write',
 }
 
-interface GuardInternal extends Record<string, unknown> {
+export interface GuardInternal extends Record<string, unknown> {
   billingTrialPromise?: Promise<void>;
 }
 
