@@ -11,7 +11,7 @@ import {
 } from '@stripe/react-stripe-js';
 import type { Stripe, StripeCardNumberElementChangeEvent } from '@stripe/stripe-js';
 
-import { Modal, ModalBody, ModalHeader } from '@hyperspace/ui/Modal';
+import { Modal, ModalBody, ModalHeader } from '../Modal/index.js';
 
 import { getStripe } from '../../lib/stripe.js';
 
@@ -98,7 +98,7 @@ function PaymentForm({
     <form onSubmit={handleSubmit}>
       <ModalHeader onClose={onClose}>Add payment method</ModalHeader>
       <ModalBody>
-        <p className="text-sm text-[#677183] mb-4">Pay as you go — $4.99/TiB/month</p>
+        <p className="text-sm text-[#677183] mb-4">Pay as you go — $4.99/TB/month</p>
 
         {/* Security banner */}
         <div className="flex items-center gap-2 rounded-lg bg-[#f0f6ff] px-3 py-2.5 mb-5">
