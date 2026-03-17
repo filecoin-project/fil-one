@@ -4,14 +4,13 @@ import { SubscriptionStatus } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from './ddb-client.js';
 import { getStripeClient, getBillingSecrets } from './stripe-client.js';
+import { TRIAL_DURATION_MS } from '@filone/shared/src/constants.js';
 
 export interface CreateBillingTrialParams {
   userId: string;
   orgId: string;
   email?: string;
 }
-
-const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 export async function createBillingTrial({
   userId,
