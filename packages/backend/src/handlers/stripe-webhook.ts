@@ -5,6 +5,7 @@ import Stripe from 'stripe';
 import { SubscriptionStatus } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { logger } from '../lib/logger.js';
 import { getStripeClient, getWebhookSecret } from '../lib/stripe-client.js';
 
 const dynamo = getDynamoClient();
@@ -40,7 +41,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       await getWebhookSecret(),
     );
   } catch (err) {
-    console.error('[stripe-webhook] Signature verification failed:', (err as Error).message);
+    logger.error('[stripe-webhook] Signature verification failed', { error: (err as Error).message });
     return { statusCode: 400, body: JSON.stringify({ message: 'Invalid signature' }) };
   }
 
@@ -63,10 +64,10 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     );
   } catch (err) {
     if ((err as { name?: string }).name === 'ConditionalCheckFailedException') {
-      console.warn('[stripe-webhook] Already processed event:', stripeEvent.id);
+      logger.warn('[stripe-webhook] Already processed event', { eventId: stripeEvent.id });
       return { statusCode: 200, body: JSON.stringify({ received: true }) };
     }
-    console.error('[stripe-webhook] Idempotency check failed:', (err as Error).message);
+    logger.error('[stripe-webhook] Idempotency check failed', { error: (err as Error).message });
     return { statusCode: 500, body: JSON.stringify({ message: 'Idempotency check error' }) };
   }
 
@@ -86,7 +87,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       }
       case 'customer.subscription.trial_will_end': {
         const subscription = stripeEvent.data.object as Stripe.Subscription;
-        console.log('[stripe-webhook] Trial ending soon for customer:', subscription.customer);
+        logger.info('[stripe-webhook] Trial ending soon for customer', { customer: getCustomerIdString(subscription.customer) });
         break;
       }
       case 'invoice.payment_succeeded': {
@@ -100,18 +101,17 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         break;
       }
       default:
-        console.log('[stripe-webhook] Unhandled event type:', stripeEvent.type);
+        logger.info('[stripe-webhook] Unhandled event type', { eventType: stripeEvent.type });
     }
   } catch (err) {
-    console.error('[stripe-webhook] Error processing event:', (err as Error).message);
+    logger.error('[stripe-webhook] Error processing event', { error: (err as Error).message });
     // Release idempotency claim so Stripe retries can reprocess
     try {
       await dynamo.send(new DeleteItemCommand({ TableName: tableName, Key: idempotencyKey }));
     } catch (deleteErr) {
-      console.error(
-        '[stripe-webhook] Failed to release idempotency claim:',
-        (deleteErr as Error).message,
-      );
+      logger.error('[stripe-webhook] Failed to release idempotency claim', {
+        error: (deleteErr as Error).message,
+      });
     }
     return { statusCode: 500, body: JSON.stringify({ message: 'Processing error' }) };
   }
@@ -137,12 +137,12 @@ async function handleSubscriptionUpdate(
     const stripe = getStripeClient();
     const customer = await stripe.customers.retrieve(customerId);
     if ('deleted' in customer && customer.deleted) {
-      console.warn('[stripe-webhook] Customer deleted, skipping subscription update');
+      logger.warn('[stripe-webhook] Customer deleted, skipping subscription update');
       return;
     }
     const metaUserId = customer.metadata?.userId;
     if (!metaUserId) {
-      console.warn('[stripe-webhook] No userId in metadata for customer:', customerId);
+      logger.warn('[stripe-webhook] No userId in metadata for customer', { customerId });
       return;
     }
     await updateBillingRecord(tableName, metaUserId, subscription);

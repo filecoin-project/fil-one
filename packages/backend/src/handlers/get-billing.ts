@@ -7,6 +7,7 @@ import { PlanId, SubscriptionStatus } from '@filone/shared';
 import type { BillingInfo } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { logger } from '../lib/logger.js';
 import { getStripeClient } from '../lib/stripe-client.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -114,7 +115,7 @@ export async function baseHandler(
         };
       }
     } catch (err) {
-      console.warn('[get-billing] Failed to fetch Stripe subscription', {
+      logger.warn('[get-billing] Failed to fetch Stripe subscription', {
         error: (err as Error).message,
       });
     }

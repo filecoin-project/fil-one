@@ -8,6 +8,7 @@ import {
   type ModelStorageMetricsSample,
 } from '@filone/aurora-backoffice-client';
 import { getAuroraBackofficeSecrets } from './auth-secrets.js';
+import { logger } from './logger.js';
 
 export type { ModelStorageMetricsSample };
 
@@ -50,7 +51,7 @@ export async function createAuroraTenant({
   if (error) {
     const status = response?.status;
     if (status === 409) {
-      console.log(`Aurora tenant already exists for org ${orgId}, looking up existing tenant`);
+      logger.info('Aurora tenant already exists, looking up existing tenant', { orgId });
       try {
         return await findAuroraTenantByOrgId({ client, partnerId, orgId });
       } catch (cause) {
@@ -59,7 +60,7 @@ export async function createAuroraTenant({
         });
       }
     }
-    console.error('Failed to create Aurora tenant:', error);
+    logger.error('Failed to create Aurora tenant', { orgId, error: JSON.stringify(error) });
     throw new Error(`Aurora tenant creation failed for org ${orgId}`, {
       cause: error,
     });
@@ -70,7 +71,7 @@ export async function createAuroraTenant({
     throw new Error(`Aurora API did not return a tenant id for org ${orgId}`);
   }
 
-  console.log(`Aurora tenant created for org ${orgId}:`, JSON.stringify(data));
+  logger.info('Aurora tenant created', { orgId, auroraTenantId });
   return { auroraTenantId };
 }
 
@@ -102,7 +103,7 @@ async function findAuroraTenantByOrgId({
     throw new Error(`Aurora tenant not found for org ${orgId}`);
   }
 
-  console.log(`Found Aurora tenant for org ${orgId}:`, JSON.stringify(tenant));
+  logger.info('Found Aurora tenant', { orgId, auroraTenantId: tenant.id });
   return { auroraTenantId: tenant.id };
 }
 
@@ -138,7 +139,7 @@ export async function setupAuroraTenant({
   });
 
   if (error) {
-    console.error('Failed to setup Aurora tenant:', error);
+    logger.error('Failed to setup Aurora tenant', { tenantId, error: JSON.stringify(error) });
     throw new Error(`Aurora tenant setup failed for tenant ${tenantId}`, {
       cause: error,
     });
@@ -148,7 +149,7 @@ export async function setupAuroraTenant({
     throw new Error(`Aurora API did not return setup data for tenant ${tenantId}`);
   }
 
-  console.log(`Aurora tenant ${tenantId} setup response:`, JSON.stringify(data));
+  logger.info('Aurora tenant setup complete', { tenantId, lastSetupStep: data.lastSetupStep });
   return { id: data.id!, lastSetupStep: data.lastSetupStep! };
 }
 
@@ -185,7 +186,7 @@ export async function createAuroraTenantApiKey({
   });
 
   if (error) {
-    console.error('Failed to create Aurora API key:', error);
+    logger.error('Failed to create Aurora API key', { orgId, error: JSON.stringify(error) });
     throw new Error(`Aurora API key creation failed for org ${orgId}`, {
       cause: error,
     });
@@ -203,7 +204,7 @@ export async function createAuroraTenantApiKey({
     );
   }
 
-  console.log(`Aurora API key created for org ${orgId}: tokenId=${tokenId}`);
+  logger.info('Aurora API key created', { orgId, tokenId });
   return { token: apiToken, tokenId };
 }
 

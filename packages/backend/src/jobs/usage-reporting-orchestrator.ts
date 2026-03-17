@@ -1,6 +1,7 @@
 import { ScanCommand, GetItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { logger } from '../lib/logger.js';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { Resource } from 'sst';
 import type { UsageReportingWorkerPayload } from './usage-reporting-worker.js';
@@ -20,7 +21,7 @@ export async function handler(): Promise<void> {
   const workerFunctionName = process.env.USAGE_WORKER_FUNCTION_NAME!;
   const reportDate = new Date().toISOString().split('T')[0];
 
-  console.log('[usage-orchestrator] Starting usage reporting', { reportDate });
+  logger.info('[usage-orchestrator] Starting usage reporting', { reportDate });
 
   // Step 1: Scan for non-canceled subscriptions
   const records: SubscriptionRecord[] = [];
@@ -44,12 +45,12 @@ export async function handler(): Promise<void> {
       const record = unmarshall(item);
 
       if (!record.orgId) {
-        console.warn('[usage-orchestrator] Missing orgId, skipping', { pk: record.pk });
+        logger.warn('[usage-orchestrator] Missing orgId, skipping', { pk: record.pk });
         continue;
       }
 
       if (!record.currentPeriodStart) {
-        console.warn('[usage-orchestrator] Missing currentPeriodStart, skipping', {
+        logger.warn('[usage-orchestrator] Missing currentPeriodStart, skipping', {
           orgId: record.orgId,
         });
         continue;
@@ -66,7 +67,7 @@ export async function handler(): Promise<void> {
     lastEvaluatedKey = result.LastEvaluatedKey;
   } while (lastEvaluatedKey);
 
-  console.log('[usage-orchestrator] Found subscriptions', { count: records.length });
+  logger.info('[usage-orchestrator] Found subscriptions', { count: records.length });
 
   if (records.length === 0) return;
 
@@ -85,7 +86,7 @@ export async function handler(): Promise<void> {
         existing.subscriptionId !== record.subscriptionId ||
         existing.stripeCustomerId !== record.stripeCustomerId
       ) {
-        console.warn('[usage-orchestrator] Conflicting duplicate for orgId', {
+        logger.warn('[usage-orchestrator] Conflicting duplicate for orgId', {
           orgId: record.orgId,
           first: {
             subscriptionId: existing.subscriptionId,
@@ -119,7 +120,7 @@ export async function handler(): Promise<void> {
     const auroraTenantId = profileResult.Item?.auroraTenantId?.S;
     if (!auroraTenantId) {
       skippedNoTenant++;
-      console.warn('[usage-orchestrator] Missing auroraTenantId, skipping', {
+      logger.warn('[usage-orchestrator] Missing auroraTenantId, skipping', {
         orgId: record.orgId,
       });
       continue;
@@ -146,14 +147,14 @@ export async function handler(): Promise<void> {
       invoked++;
     } catch (error) {
       failed++;
-      console.error('[usage-orchestrator] Failed to invoke worker', {
+      logger.error('[usage-orchestrator] Failed to invoke worker', {
         orgId: record.orgId,
         error: (error as Error).message,
       });
     }
   }
 
-  console.log('[usage-orchestrator] Complete', {
+  logger.info('[usage-orchestrator] Complete', {
     totalSubscriptions: records.length,
     uniqueOrgs: orgSeen.size,
     invoked,

@@ -76,7 +76,7 @@ describe('errorHandlerMiddleware', () => {
     expect(body).not.toContain('hunter2');
   });
 
-  it('logs the full error to console.error', async () => {
+  it('logs the error message to console.error via logger', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { onError } = errorHandlerMiddleware();
     const error = new Error('something broke');
@@ -84,7 +84,7 @@ describe('errorHandlerMiddleware', () => {
 
     await onError!(request);
 
-    expect(spy).toHaveBeenCalledWith('Unhandled handler error:', error);
+    expect(spy).toHaveBeenCalledWith('Unhandled handler error', { error: 'something broke' });
     spy.mockRestore();
   });
 

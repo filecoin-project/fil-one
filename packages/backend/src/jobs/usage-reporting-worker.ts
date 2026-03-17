@@ -1,6 +1,7 @@
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { logger } from '../lib/logger.js';
 import { Resource } from 'sst';
 import { TB_BYTES } from '@filone/shared';
 import { getStripeClient } from '../lib/stripe-client.js';
@@ -28,7 +29,7 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
     reportDate,
   } = event;
 
-  console.log('[usage-worker] Processing', { orgId, subscriptionId, reportDate });
+  logger.info('[usage-worker] Processing', { orgId, subscriptionId, reportDate });
 
   const now = new Date().toISOString();
   const samples = await getStorageSamples({
@@ -40,7 +41,7 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
   const usage = calculateAverageUsage(samples);
   const averageStorageTbUsed = usage.averageStorageBytesUsed / TB_BYTES;
 
-  console.log('[usage-worker] Usage calculated', {
+  logger.info('[usage-worker] Usage calculated', {
     orgId,
     sampleCount: usage.sampleCount,
     averageStorageTbUsed,
@@ -56,7 +57,7 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
       },
       timestamp: Math.floor(Date.now() / 1000),
     });
-    console.log('[usage-worker] Stripe meter event created', {
+    logger.info('[usage-worker] Stripe meter event created', {
       stripeCustomerId,
       averageStorageTbUsed,
     });
@@ -85,5 +86,5 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
     }),
   );
 
-  console.log('[usage-worker] Audit record written', { orgId, reportDate });
+  logger.info('[usage-worker] Audit record written', { orgId, reportDate });
 }

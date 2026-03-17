@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import { logger } from './logger.js';
 import {
   createClient,
   getV1TenantsByTenantIdAccessKeys,
@@ -44,9 +45,7 @@ export async function createAuroraBucket({
 
   if (error) {
     if (response?.status === 409) {
-      console.log(
-        `Aurora bucket "${bucketName}" already exists for tenant ${tenantId}, treating as success`,
-      );
+      logger.info('Aurora bucket already exists, treating as success', { bucketName, tenantId });
       return;
     }
     throw new Error(`Failed to create Aurora bucket "${bucketName}" for tenant ${tenantId}`, {
@@ -54,7 +53,7 @@ export async function createAuroraBucket({
     });
   }
 
-  console.log(`Aurora bucket "${bucketName}" created for tenant ${tenantId}`);
+  logger.info('Aurora bucket created', { bucketName, tenantId });
 }
 
 export interface CreateAuroraAccessKeyOptions {
@@ -110,10 +109,7 @@ export async function createAuroraAccessKey({
     if (response?.status === 409) {
       throw new DuplicateKeyNameError();
     }
-    console.error(
-      `Aurora access key creation failed for tenant ${tenantId}:`,
-      JSON.stringify(error),
-    );
+    logger.error('Aurora access key creation failed', { tenantId, error: JSON.stringify(error) });
     throw new Error(`Failed to create Aurora access key "${keyName}" for tenant ${tenantId}`, {
       cause: error,
     });
@@ -142,9 +138,7 @@ export async function createAuroraAccessKey({
     `Aurora Portal API returned empty access key "createdAt" for tenant ${tenantId}. Full response: ${JSON.stringify(data)}`,
   );
 
-  console.log(
-    `Aurora access key "${keyName}" created for tenant ${tenantId}: accessKeyId=${accessKeyId}, createdAt=${createdAt}`,
-  );
+  logger.info('Aurora access key created', { keyName, tenantId, accessKeyId, createdAt });
   return { id, accessKeyId, accessKeySecret, createdAt };
 }
 

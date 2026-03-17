@@ -33,7 +33,7 @@ We need an architecture that carries rich, high-cardinality event data from Lamb
 
 4. **Signal routing.** The collector configuration exports:
    - **Traces → Tempo** — wide-event spans with all business context as attributes, queryable via TraceQL.
-   - **Logs → Loki** — lean stdout/stderr output only, with low-cardinality labels (service, environment, log level). No wide-event fields in Loki labels.
+   - **Logs → Loki** — application logs (via `@opentelemetry/api-logs`) with trace context (trace_id, span_id) for correlation, plus Lambda platform events (cold starts, billed duration). Logs carry structured attributes but use low-cardinality Loki labels (service, environment, log level).
    - **Metrics → Mimir** — RED metrics (rate, errors, duration) auto-derived from spans via Tempo's metrics-generator or OTel's `spanmetrics` connector.
 
 5. **Sampling.** Head-based sampling is configurable via the `OTEL_TRACES_SAMPLER` environment variable. For tail-based sampling (keep all errors, sample successful requests at a lower rate), we can run a small OTel Collector gateway that Lambda layers export to, which makes sampling decisions before forwarding to Tempo. This is out of the scope of the initial implementation.
@@ -44,14 +44,14 @@ We need an architecture that carries rich, high-cardinality event data from Lamb
 
 We use **two** Lambda layers in combination:
 
-1. **Grafana Collector Extension** (`opentelemetry-collector-grafana-amd64`) — runs
+1. **Upstream OTel Collector Extension** (`opentelemetry-collector-amd64`) — runs
    an OTel Collector as a Lambda extension process. It receives telemetry on
-   `localhost:4318` and exports to Grafana Cloud. We chose Grafana's distribution
-   over the upstream OTel collector layer because it includes built-in Grafana
-   Cloud authentication via `GRAFANA_CLOUD_INSTANCE_ID` and
-   `GRAFANA_CLOUD_API_KEY_ARN` environment variables — no custom `collector.yaml`
-   required. The API key is stored in AWS Secrets Manager and the extension
-   fetches it at startup using the ARN.
+   `localhost:4317` (gRPC) and `localhost:4318` (HTTP) and exports to Grafana
+   Cloud. We use the upstream OTel collector layer (not Grafana's distribution)
+   with custom collector configs that include `basicauth/grafana_cloud` for
+   authentication via `GRAFANA_CLOUD_INSTANCE_ID` and a Secrets Manager lookup
+   for the API key (`GRAFANA_CLOUD_API_KEY_ARN`). The config file path is set
+   via `OPENTELEMETRY_COLLECTOR_CONFIG_URI`.
 
 2. **OTel Node.js Auto-Instrumentation** (`opentelemetry-nodejs`) — wraps the
    Lambda handler via `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler`. It
@@ -63,6 +63,47 @@ We use **two** Lambda layers in combination:
 We selectively enable instrumentations via
 `OTEL_NODE_ENABLED_INSTRUMENTATIONS=aws-sdk,undici,aws-lambda` to minimize cold
 start overhead (the layer ships with many instrumentations disabled by default).
+
+### Custom collector configs
+
+We maintain two collector configs to handle different Lambda invocation patterns:
+
+1. **`otel/collector-async.yaml`** — for API route handlers (latency-sensitive).
+   Uses `batch` + `decouple` processors for async flush: telemetry is buffered
+   and flushed on the next invocation, so the Lambda returns immediately without
+   waiting for the export. The `telemetryapi` receiver is limited to `platform`
+   events only (cold starts, billed duration) — `function` events
+   (stdout/stderr) are excluded to prevent duplicate log export since we send
+   logs via the OTel Logs SDK.
+
+2. **`otel/collector-sync.yaml`** — for background Lambdas (SQS handlers, cron
+   jobs). Uses `batch` processor only — **no `decouple`** — so telemetry flushes
+   synchronously at the end of each invocation. This adds a few hundred ms
+   latency, which is acceptable for background work. Without this, telemetry
+   from infrequently-invoked Lambdas would sit unflushed until the next
+   invocation, which may never come.
+
+Both configs are bundled into every Lambda function via `copyFiles` in
+`sst.config.ts`. API handlers default to the async config; background Lambdas
+override via `OPENTELEMETRY_COLLECTOR_CONFIG_URI`.
+
+### Log-trace correlation
+
+Application logs are emitted via a thin logger helper
+(`packages/backend/src/lib/logger.ts`) built on `@opentelemetry/api-logs`. Each
+log call:
+
+1. Emits an OTel log record via `otelLogger.emit()` with the appropriate
+   severity, message body, and structured attributes. Trace context (trace_id,
+   span_id) is attached automatically by the OTel Logs SDK when there's an
+   active span — no manual wiring needed.
+2. Also calls `console.log/warn/error` so stdout still goes to CloudWatch as a
+   fallback.
+
+The collector's `logs` pipeline receives log records from both the
+`telemetryapi` receiver (platform events) and the `otlp` receiver (application
+logs from the Logs SDK), and exports them to Grafana Cloud where they appear in
+Loki with `trace_id` and `span_id` fields for correlation with Tempo traces.
 
 ### Attribute enrichment pattern
 
@@ -99,7 +140,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_NODE_ENABLED_INSTRUMENTATIONS=aws-sdk,undici,aws-lambda
 
-# Grafana Cloud (used by collector extension layer)
+# Collector config (custom YAML bundled via copyFiles)
+OPENTELEMETRY_COLLECTOR_CONFIG_URI=/var/task/otel/collector-async.yaml  # API handlers
+OPENTELEMETRY_COLLECTOR_CONFIG_URI=/var/task/otel/collector-sync.yaml   # background Lambdas
+
+# Grafana Cloud (used by collector config's basicauth extension)
 GRAFANA_CLOUD_INSTANCE_ID=<instance_id>
 GRAFANA_CLOUD_API_KEY_ARN=arn:aws:secretsmanager:<region>:<account>:secret:filone/<stage>/grafana-cloud-api-key-<suffix>
 GRAFANA_CLOUD_OTLP_ENDPOINT=https://otlp-gateway-prod-us-central-0.grafana.net/otlp
@@ -172,7 +217,7 @@ Use AWS-native observability: CloudWatch Logs for wide events, X-Ray for traces,
 
 - **Cold start overhead.** The OTel Lambda Extension Layer adds ~100-300ms to cold starts for collector initialization. Mitigate with provisioned concurrency for latency-sensitive functions.
 - **Tempo is not an analytics engine.** Complex aggregate queries (GROUP BY across multiple high-cardinality dimensions over 30 days) will be slower than a columnar store like ClickHouse. Acceptable for now; ClickHouse can be added later as a secondary store if needed.
-- **Delayed telemetry for infrequent functions.** For Lambda functions invoked rarely, the decouple processor may hold data until the next invocation or shutdown — telemetry for a single invocation could be delayed by minutes or hours if the function goes cold.
+- **Delayed telemetry for infrequent functions (mitigated).** API handlers use the `decouple` processor for async flush, which delays telemetry until the next invocation. For background Lambdas (SQS handlers, cron jobs) that may not be invoked again for hours, we use a separate collector config without `decouple` — telemetry flushes synchronously at the cost of a few hundred ms latency per invocation.
 - **Sampling complexity for tail-based.** Head-based sampling is trivial (env var). Tail-based sampling requires a separate OTel Collector gateway, adding one more component to operate.
 
 ---

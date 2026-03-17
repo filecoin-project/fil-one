@@ -1,5 +1,6 @@
 import { Resource } from 'sst';
 import Stripe from 'stripe';
+import { logger } from '../../lib/logger.js';
 import {
   SSMClient,
   GetParameterCommand,
@@ -275,7 +276,7 @@ export async function handler(event: SetupEvent): Promise<void> {
         teardownAuth0Callbacks(process.env.AUTH0_DOMAIN!, siteUrl),
       ]);
 
-      console.log('Teardown complete:', { siteUrl, stage: Stage });
+      logger.info('Teardown complete', { siteUrl, stage: Stage });
 
       await sendCfnResponse(event, {
         Status: 'SUCCESS',
@@ -306,7 +307,7 @@ export async function handler(event: SetupEvent): Promise<void> {
       setupAuth0Callbacks(process.env.AUTH0_DOMAIN!, siteUrl),
     ]);
 
-    console.log('Setup complete:', {
+    logger.info('Setup complete', {
       webhookEndpointId: stripeResult.webhookEndpointId,
       siteUrl,
       stage: Stage,
@@ -324,7 +325,7 @@ export async function handler(event: SetupEvent): Promise<void> {
       },
     });
   } catch (err: unknown) {
-    console.error('Setup/teardown failed:', err);
+    logger.error('Setup/teardown failed', { error: err instanceof Error ? err.message : String(err) });
 
     await sendCfnResponse(event, {
       Status: 'FAILED',

@@ -49,9 +49,11 @@ export const PUBLIC_EMAIL_DOMAINS = new Set([
   '126.com',
 ]);
 
+import { logger } from './logger.js';
+
 export function suggestOrgName(email: string | undefined, userId: string): string | undefined {
   if (!email) {
-    console.warn('[suggest-org-name] No email available for org name suggestion', { userId });
+    logger.warn('[suggest-org-name] No email available for org name suggestion', { userId });
     return undefined;
   }
 

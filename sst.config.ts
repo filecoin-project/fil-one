@@ -44,11 +44,23 @@ export default $config({
 
     // ── OTel Lambda Layers ─────────────────────────────────────────────
     const awsRegion = aws.getRegionOutput().name;
-    // https://github.com/grafana/collector-lambda-extension/releases/tag/v0.138.0%2Bgrafana
-    const otelCollectorLayer = $interpolate`arn:aws:lambda:${awsRegion}:050451360540:layer:opentelemetry-collector-grafana-amd64-v0_138_0:2`;
+    // https://github.com/open-telemetry/opentelemetry-lambda/releases/tag/layer-collector%2F0.20.0
+    const otelCollectorLayer = $interpolate`arn:aws:lambda:${awsRegion}:184161586896:layer:opentelemetry-collector-amd64-0_20_0:1`;
     // https://github.com/open-telemetry/opentelemetry-lambda/releases/tag/layer-nodejs%2F0.20.0
     const otelNodejsLayer = $interpolate`arn:aws:lambda:${awsRegion}:184161586896:layer:opentelemetry-nodejs-0_20_0:1`;
     const otelLayers = [otelCollectorLayer, otelNodejsLayer];
+
+    // ── OTel Collector config via $transform ──────────────────────────
+    // All Lambda functions get both collector configs bundled via copyFiles.
+    // API handlers use collector-async.yaml (with decouple processor).
+    // Background Lambdas override to collector-sync.yaml (no decouple).
+    $transform(sst.aws.Function, (args) => {
+      args.copyFiles = $output(args.copyFiles).apply((files) => [
+        ...(files ?? []),
+        { from: 'otel/collector-async.yaml', to: 'otel/collector-async.yaml' },
+        { from: 'otel/collector-sync.yaml', to: 'otel/collector-sync.yaml' },
+      ]);
+    });
 
     // The Grafana Collector Extension reads the API key from Secrets Manager
     // via GRAFANA_CLOUD_API_KEY_ARN. Create and populate once per stage:
@@ -226,6 +238,7 @@ export default $config({
       AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
       AUTH0_AUDIENCE: 'https://staging.fil.one',
       // OTel + Grafana Cloud observability
+      OPENTELEMETRY_COLLECTOR_CONFIG_URI: '/var/task/otel/collector-async.yaml',
       OTEL_RESOURCE_ATTRIBUTES: $interpolate`deployment.environment.name=${$app.stage},service.namespace=filone`,
       OTEL_SERVICE_NAME: $interpolate`filone-${$app.stage}`,
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
@@ -401,6 +414,10 @@ export default $config({
     );
 
     // ── Tenant setup consumer ──────────────────────────────────────
+    const syncCollectorEnv = {
+      OPENTELEMETRY_COLLECTOR_CONFIG_URI: '/var/task/otel/collector-sync.yaml',
+    };
+
     tenantSetupQueue.subscribe(
       {
         handler: 'packages/backend/src/handlers/aurora-tenant-setup.handler',
@@ -408,6 +425,7 @@ export default $config({
         environment: {
           ...auroraEnv,
           ...sharedEnv,
+          ...syncCollectorEnv,
         },
         layers: otelLayers,
         permissions: [
@@ -442,7 +460,7 @@ export default $config({
     const usageWorker = new sst.aws.Function('UsageReportingWorker', {
       handler: 'packages/backend/src/jobs/usage-reporting-worker.handler',
       link: [billingTable, stripeSecretKey, auroraBackofficeToken],
-      environment: { ...sharedEnv, ...auroraEnv, STRIPE_METER_EVENT_NAME: 'tibmonthmeter' },
+      environment: { ...sharedEnv, ...auroraEnv, ...syncCollectorEnv, STRIPE_METER_EVENT_NAME: 'tibmonthmeter' },
       layers: otelLayers,
       permissions: otelPermissions,
       runtime: 'nodejs24.x',
@@ -455,6 +473,7 @@ export default $config({
       link: [billingTable, userInfoTable],
       environment: {
         ...sharedEnv,
+        ...syncCollectorEnv,
         USAGE_WORKER_FUNCTION_NAME: usageWorker.name,
         STRIPE_METER_EVENT_NAME: 'tibmonthmeter',
       },

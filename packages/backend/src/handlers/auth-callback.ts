@@ -11,6 +11,7 @@ import {
 } from '../lib/response-builder.js';
 import { parseCookies } from '../lib/cookies.js';
 import { getAuthSecrets } from '../lib/auth-secrets.js';
+import { logger } from '../lib/logger.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 import { tracingMiddleware } from '../middleware/tracing.js';
 import { resolveOrigin } from '../lib/resolve-origin.js';
@@ -35,7 +36,7 @@ async function baseHandler(
   // Auth0 sends error + error_description if the user denied access or something failed
   if (error ?? !code) {
     const reason = error_description ?? error ?? 'Authentication failed';
-    console.error('Auth0 callback error:', { error, error_description });
+    logger.error('Auth0 callback error', { error, error_description });
     return redirect(`${signInUrl}?error=${encodeURIComponent(reason)}`);
   }
 
@@ -43,7 +44,7 @@ async function baseHandler(
   const cookies = parseCookies(event.cookies);
   const storedState = cookies[OAUTH_STATE_COOKIE];
   if (!state || !storedState || state !== storedState) {
-    console.error('OAuth state mismatch', { state, storedState: !!storedState });
+    logger.error('OAuth state mismatch', { state, storedState: !!storedState });
     return redirect(`${signInUrl}?error=${encodeURIComponent('Invalid state')}`, [
       makeClearCookieHeader(OAUTH_STATE_COOKIE),
     ]);
@@ -69,7 +70,7 @@ async function baseHandler(
 
   if (!tokenRes.ok) {
     const errorBody = await tokenRes.text();
-    console.error('Auth0 token exchange failed:', { status: tokenRes.status, body: errorBody });
+    logger.error('Auth0 token exchange failed', { status: tokenRes.status, body: errorBody });
     return redirect(`${signInUrl}?error=${encodeURIComponent('Token exchange failed')}`);
   }
 

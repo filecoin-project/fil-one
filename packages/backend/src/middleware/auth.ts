@@ -10,6 +10,7 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose';
 import { Resource } from 'sst';
 import type { UserInfo } from '../lib/user-context.js';
 import { getRequestSpan } from './tracing.js';
+import { logger } from '../lib/logger.js';
 import { ApiErrorCode, OrgRole } from '@filone/shared';
 import type { ErrorResponse } from '@filone/shared';
 import {
@@ -111,7 +112,7 @@ async function extractEmailFromIdToken({
     const { payload } = await jwtVerify(idToken, jwks, { audience: clientId, issuer });
     return (payload.email as string) ?? null;
   } catch (err) {
-    console.warn('[auth] ID token verification failed, continuing without email', {
+    logger.warn('[auth] ID token verification failed, continuing without email', {
       error: (err as Error).message,
     });
     return null;
@@ -295,7 +296,7 @@ export function authMiddleware() {
       idToken: !!idToken,
       refreshToken: !!refreshToken,
     };
-    console.warn('[auth] Starting auth check', { hasCookies });
+    logger.warn('[auth] Starting auth check', { hasCookies });
 
     // Step 1: Validate existing access token
     if (accessToken) {
@@ -313,7 +314,7 @@ export function authMiddleware() {
         return; // Valid — continue to handler
       } catch (err) {
         // Expired or invalid — fall through to refresh
-        console.warn('[auth] Access token verification failed', { error: (err as Error).message });
+        logger.warn('[auth] Access token verification failed', { error: (err as Error).message });
       }
     }
 
@@ -352,7 +353,7 @@ export function authMiddleware() {
             clientId: secrets.AUTH0_CLIENT_ID,
             issuer,
           });
-          console.warn('[auth] Token refresh succeeded');
+          logger.warn('[auth] Token refresh succeeded');
           const blocked = await attachIdentity({
             request,
             event,
@@ -363,14 +364,14 @@ export function authMiddleware() {
           return; // Continue to handler
         }
         const refreshBody = await tokenRes.text().catch(() => '');
-        console.warn('[auth] Token refresh failed', { status: tokenRes.status, body: refreshBody });
+        logger.warn('[auth] Token refresh failed', { status: tokenRes.status, body: refreshBody });
       } catch (err) {
         // Refresh failed — fall through
-        console.warn('[auth] Token refresh threw', { error: (err as Error).message });
+        logger.warn('[auth] Token refresh threw', { error: (err as Error).message });
       }
     }
 
-    console.warn('[auth] Returning 401 — no valid tokens');
+    logger.warn('[auth] Returning 401 — no valid tokens');
     return unauthorizedResponse();
   };
 

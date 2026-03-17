@@ -15,6 +15,7 @@ import {
   findAuroraAccessKeyByName,
 } from '../lib/aurora-portal.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { logger } from '../lib/logger.js';
 import { validateKeyName } from '../lib/key-name-validation.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
@@ -141,9 +142,10 @@ async function recoverDuplicateKey(
   if (!auroraKey) {
     // Shouldn't happen — Aurora returned 409 but key not found in list.
     // Just return and let the user see the 409 message.
-    console.error(
-      `Aurora returned 409 for key "${keyName}" but key not found in Aurora list for tenant ${auroraTenantId}`,
-    );
+    logger.error('Aurora returned 409 for key but key not found in Aurora list', {
+      keyName,
+      tenantId: auroraTenantId,
+    });
     return;
   }
 
@@ -161,9 +163,11 @@ async function recoverDuplicateKey(
     }),
   );
 
-  console.log(
-    `Recovered DynamoDB record for Aurora access key "${keyName}" (id=${auroraKey.id}) for org ${orgId}`,
-  );
+  logger.info('Recovered DynamoDB record for Aurora access key', {
+    keyName,
+    keyId: auroraKey.id,
+    orgId,
+  });
 }
 
 export const handler = middy(baseHandler)
