@@ -20,6 +20,7 @@ import { Breadcrumb } from '@hyperspace/ui/Breadcrumb';
 import { Spinner } from '@hyperspace/ui/Spinner';
 import { ProgressBar } from '@hyperspace/ui/ProgressBar';
 import { useToast } from '@hyperspace/ui/Toast';
+import { formatBytes } from '@hyperspace/ui/utils';
 
 import type {
   S3Object,
@@ -29,6 +30,7 @@ import type {
   UploadObjectResponse,
 } from '@filone/shared';
 import { apiRequest } from '../../lib/api.js';
+import { formatDate } from '../../lib/time.js';
 
 // ---------------------------------------------------------------------------
 // Mock data (access keys — placeholder, out of scope)
@@ -48,14 +50,6 @@ const MOCK_ACCESS_KEYS: AccessKey[] = [
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
 
 type BrowseEntry =
   | { kind: 'folder'; name: string; prefix: string }
@@ -463,7 +457,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                                   {entry.object.contentType}
                                 </td>
                                 <td className="px-4 py-3 text-zinc-600">
-                                  {new Date(entry.object.lastModified).toLocaleDateString()}
+                                  {formatDate(entry.object.lastModified)}
                                 </td>
                                 <td className="px-4 py-3">
                                   {entry.object.cid ? (
@@ -568,11 +562,9 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                           <td className="px-4 py-3 font-mono text-xs text-zinc-600">
                             {maskAccessKeyId(key.accessKeyId)}
                           </td>
+                          <td className="px-4 py-3 text-zinc-600">{formatDate(key.createdAt)}</td>
                           <td className="px-4 py-3 text-zinc-600">
-                            {new Date(key.createdAt).toLocaleDateString()}
-                          </td>
-                          <td className="px-4 py-3 text-zinc-600">
-                            {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : '—'}
+                            {key.lastUsedAt ? formatDate(key.lastUsedAt) : '—'}
                           </td>
                           <td className="px-4 py-3">
                             {key.status === 'active' ? (
