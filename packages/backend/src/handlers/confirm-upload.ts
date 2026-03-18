@@ -1,12 +1,15 @@
+// Temporary workaround: after the browser uploads directly to Aurora S3 Gateway,
+// this endpoint stores object metadata in our DynamoDB. This will be replaced once
+// we implement proper synchronisation between FilOne Console and Aurora S3 Gateway.
+
 import { GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
-import type { APIGatewayProxyResultV2 } from 'aws-lambda';
-import type { ErrorResponse, UploadObjectRequest, UploadObjectResponse } from '@filone/shared';
+import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
+import type { ErrorResponse, ConfirmUploadRequest, ConfirmUploadResponse } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
-import { FileStorageClient } from '../lib/file-storage-client.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
@@ -17,7 +20,9 @@ import { subscriptionGuardMiddleware, AccessLevel } from '../middleware/subscrip
 
 const dynamo = getDynamoClient();
 
-async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
+export async function baseHandler(
+  event: AuthenticatedEvent,
+): Promise<APIGatewayProxyStructuredResultV2> {
   const bucketName = event.pathParameters?.name;
   if (!bucketName) {
     return new ResponseBuilder()
@@ -26,9 +31,9 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       .build();
   }
 
-  let request: UploadObjectRequest;
+  let request: ConfirmUploadRequest;
   try {
-    request = JSON.parse(event.body ?? '{}') as UploadObjectRequest;
+    request = JSON.parse(event.body ?? '{}') as ConfirmUploadRequest;
   } catch {
     return new ResponseBuilder()
       .status(400)
@@ -36,12 +41,12 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       .build();
   }
 
-  const { key, fileBase64, fileName, contentType, description } = request;
-  if (!key || !fileBase64 || !fileName || !contentType) {
+  const { key, fileName, contentType, sizeBytes, etag, description } = request;
+  if (!key || !fileName || !contentType || sizeBytes == null) {
     return new ResponseBuilder()
       .status(400)
       .body<ErrorResponse>({
-        message: 'Missing required fields: key, fileBase64, fileName, contentType',
+        message: 'Missing required fields: key, fileName, contentType, sizeBytes',
       })
       .build();
   }
@@ -64,14 +69,10 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       .build();
   }
 
-  // Upload file to S3
-  const fileBuffer = Buffer.from(fileBase64, 'base64');
-  const s3Key = `${bucketName}/${key}`;
-  const storage = new FileStorageClient(Resource.UserFilesBucket.name);
-  const { etag } = await storage.put(s3Key, fileBuffer, contentType);
-
   // Store metadata in DynamoDB
   const now = new Date().toISOString();
+  const s3Key = `${bucketName}/${key}`;
+
   await dynamo.send(
     new PutItemCommand({
       TableName: tableName,
@@ -81,9 +82,9 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
         key,
         fileName,
         contentType,
-        sizeBytes: fileBuffer.length,
+        sizeBytes,
         uploadedAt: now,
-        etag,
+        ...(etag && { etag }),
         s3Key,
         ...(description && { description }),
       }),
@@ -92,14 +93,13 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
 
   return new ResponseBuilder()
     .status(201)
-    .body<UploadObjectResponse>({
-      uploadUrl: '',
+    .body<ConfirmUploadResponse>({
       object: {
         key,
-        sizeBytes: fileBuffer.length,
+        sizeBytes,
         lastModified: now,
-        etag,
         contentType,
+        ...(etag && { etag }),
         ...(description && { description }),
       },
     })

@@ -19,7 +19,7 @@ export interface ObjectRecord {
   contentType: string;
   sizeBytes: number;
   uploadedAt: string;
-  etag: string;
+  etag?: string;
   s3Key: string;
   description?: string;
   cid?: string;

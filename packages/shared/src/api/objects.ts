@@ -2,7 +2,7 @@ export interface S3Object {
   key: string;
   sizeBytes: number;
   lastModified: string;
-  etag: string;
+  etag?: string;
   contentType: string;
   cid?: string;
   description?: string;
@@ -23,18 +23,26 @@ export interface ListObjectsResponse {
   isTruncated: boolean;
 }
 
-export interface UploadObjectRequest {
-  bucketName: string;
+export interface PresignUploadRequest {
   key: string;
-  fileBase64: string;
+  contentType: string;
+}
+
+export interface PresignUploadResponse {
+  url: string;
+  key: string;
+}
+
+export interface ConfirmUploadRequest {
+  key: string;
   fileName: string;
   contentType: string;
   sizeBytes: number;
+  etag?: string;
   description?: string;
 }
 
-export interface UploadObjectResponse {
-  uploadUrl: string;
+export interface ConfirmUploadResponse {
   object: S3Object;
 }
 

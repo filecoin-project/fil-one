@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -88,7 +89,7 @@ describe('GET /api/me handler', () => {
       });
   });
 
-  it('returns orgSetupComplete: true when setupStatus is AURORA_TENANT_API_KEY_CREATED', async () => {
+  it('returns orgSetupComplete: true when setupStatus is AURORA_S3_ACCESS_KEY_CREATED', async () => {
     ddbMock
       .on(GetItemCommand, {
         TableName: 'UserInfoTable',
@@ -100,7 +101,7 @@ describe('GET /api/me handler', () => {
           sk: { S: 'PROFILE' },
           name: { S: 'Example Corp' },
           orgConfirmed: { BOOL: true },
-          setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
+          setupStatus: { S: FINAL_SETUP_STATUS },
         },
       });
 

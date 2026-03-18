@@ -26,8 +26,8 @@ import type {
   S3Object,
   AccessKey,
   ListObjectsResponse,
-  UploadObjectRequest,
-  UploadObjectResponse,
+  PresignUploadResponse,
+  ConfirmUploadResponse,
 } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
 import { formatDate } from '../lib/time.js';
@@ -91,19 +91,6 @@ function maskAccessKeyId(id: string): string {
   return `${id.slice(0, 4)}...XXXX`;
 }
 
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1] ?? '';
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Upload step type
 // ---------------------------------------------------------------------------
@@ -157,9 +144,6 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
   // Track whether the user has manually edited the object name
   const userEditedName = useRef(false);
 
-  // Upload timer ref (for cleanup)
-  const uploadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Fetch objects on mount
   useEffect(() => {
     let cancelled = false;
@@ -193,10 +177,6 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
     setObjectDescription('');
     setUploadProgress(0);
     userEditedName.current = false;
-    if (uploadTimerRef.current) {
-      clearInterval(uploadTimerRef.current);
-      uploadTimerRef.current = null;
-    }
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -215,46 +195,70 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
     setUploadStep('uploading');
     setUploadProgress(0);
 
-    // Simulate progress while uploading
-    let progress = 0;
-    uploadTimerRef.current = setInterval(() => {
-      progress = Math.min(progress + 5, 90);
-      setUploadProgress(progress);
-    }, 100);
-
     try {
-      const fileBase64 = await readFileAsBase64(selectedFile);
-      const body: UploadObjectRequest = {
-        bucketName,
-        key: objectName.trim(),
-        fileBase64,
-        fileName: selectedFile.name,
-        contentType: selectedFile.type || 'application/octet-stream',
-        sizeBytes: selectedFile.size,
-        ...(objectDescription.trim() && { description: objectDescription.trim() }),
-      };
+      const key = objectName.trim();
+      const contentType = selectedFile.type || 'application/octet-stream';
 
-      const data = await apiRequest<UploadObjectResponse>(
-        `/buckets/${encodeURIComponent(bucketName)}/objects/upload`,
+      // Step 1: Get presigned URL (0-5%)
+      setUploadProgress(2);
+      const presignData = await apiRequest<PresignUploadResponse>(
+        `/buckets/${encodeURIComponent(bucketName)}/objects/presign`,
         {
           method: 'POST',
-          body: JSON.stringify(body),
+          body: JSON.stringify({ key, contentType }),
+        },
+      );
+      setUploadProgress(5);
+
+      // Step 2: Upload directly to Aurora S3 via XHR for real progress (5-95%)
+      const etag = await new Promise<string | null>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = 5 + (e.loaded / e.total) * 90;
+            setUploadProgress(Math.round(pct));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(xhr.getResponseHeader('etag'));
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.open('PUT', presignData.url);
+        xhr.setRequestHeader('Content-Type', contentType);
+        xhr.send(selectedFile);
+      });
+
+      // Step 3: Confirm upload metadata (95-100%)
+      // Temporary workaround: we tell our backend about the uploaded object so it
+      // can track metadata in DynamoDB. This will go away once we implement proper
+      // sync between FilOne Console and Aurora S3 Gateway. It's fine to trust the
+      // frontend here — if the PUT succeeded but confirm fails, the object still
+      // lives in Aurora S3 and will be picked up once sync is in place.
+      setUploadProgress(95);
+      const confirmData = await apiRequest<ConfirmUploadResponse>(
+        `/buckets/${encodeURIComponent(bucketName)}/objects/confirm`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            key,
+            fileName: selectedFile.name,
+            contentType,
+            sizeBytes: selectedFile.size,
+            ...(etag && { etag }),
+            ...(objectDescription.trim() && { description: objectDescription.trim() }),
+          }),
         },
       );
 
-      if (uploadTimerRef.current) {
-        clearInterval(uploadTimerRef.current);
-        uploadTimerRef.current = null;
-      }
       setUploadProgress(100);
       setUploadStep('done');
-      setObjects((prev) => [data.object, ...prev]);
+      setObjects((prev) => [confirmData.object, ...prev]);
       toast.success(`${selectedFile.name} uploaded successfully`);
     } catch (err) {
-      if (uploadTimerRef.current) {
-        clearInterval(uploadTimerRef.current);
-        uploadTimerRef.current = null;
-      }
       handleCloseUploadModal();
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     }

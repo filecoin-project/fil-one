@@ -60,7 +60,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       key: record.key as string,
       sizeBytes: record.sizeBytes as number,
       lastModified: record.uploadedAt as string,
-      etag: record.etag as string,
+      etag: record.etag as string | undefined,
       contentType: record.contentType as string,
       cid: record.cid as string | undefined,
       description: record.description as string | undefined,

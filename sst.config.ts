@@ -249,7 +249,10 @@ export default $config({
       AURORA_REGION_ID: 'ff',
     };
 
+    const auroraS3GatewayUrl = 'https://s3.dev.aur.lu';
+
     const auroraApiKeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/aurora-portal/tenant-api-key/*`;
+    const auroraS3KeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/aurora-s3/*`;
 
     function addRoute(
       method: string,
@@ -279,7 +282,6 @@ export default $config({
     }
 
     // ── Data routes ──────────────────────────────────────────────────
-    addRoute('POST', '/api/upload', 'upload');
     addRoute('GET', '/api/buckets', 'list-buckets');
     addRoute(
       'POST',
@@ -312,7 +314,21 @@ export default $config({
       ],
     );
     addRoute('GET', '/api/buckets/{name}/objects', 'list-objects');
-    addRoute('POST', '/api/buckets/{name}/objects/upload', 'upload-object');
+    addRoute(
+      'POST',
+      '/api/buckets/{name}/objects/presign',
+      'presign-upload',
+      {
+        AURORA_S3_GATEWAY_URL: auroraS3GatewayUrl,
+      },
+      [
+        {
+          actions: ['ssm:GetParameter'],
+          resources: [auroraS3KeySsmArn],
+        },
+      ],
+    );
+    addRoute('POST', '/api/buckets/{name}/objects/confirm', 'confirm-upload');
     addRoute('GET', '/api/buckets/{name}/objects/download', 'download-object');
     addRoute('DELETE', '/api/buckets/{name}/objects', 'delete-object');
 
@@ -373,7 +389,7 @@ export default $config({
         permissions: [
           {
             actions: ['ssm:PutParameter'],
-            resources: [auroraApiKeySsmArn],
+            resources: [auroraApiKeySsmArn, auroraS3KeySsmArn],
           },
         ],
         runtime: 'nodejs24.x',
