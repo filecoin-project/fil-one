@@ -4,14 +4,15 @@ import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
 import type { MeResponse } from '@filone/shared';
 import { Resource } from 'sst';
+import { getDynamoClient } from '../lib/ddb-client.js';
+import { triggerTenantSetup } from '../lib/trigger-tenant-setup.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
+import { suggestOrgName } from '../lib/suggest-org-name.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
-import { suggestOrgName } from '../lib/suggest-org-name.js';
-import { getDynamoClient } from '../lib/ddb-client.js';
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { userId, orgId, email } = getUserInfo(event);
@@ -29,6 +30,10 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   const setupStatus = Item?.setupStatus?.S;
   const orgName = Item?.name?.S ?? '';
   const orgConfirmed = Item?.orgConfirmed?.BOOL === true;
+
+  if (orgConfirmed && !isOrgSetupComplete(setupStatus)) {
+    await triggerTenantSetup({ orgId, orgName });
+  }
 
   const body: MeResponse = {
     orgId,

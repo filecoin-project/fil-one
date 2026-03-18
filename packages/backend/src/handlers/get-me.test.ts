@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
@@ -14,7 +13,6 @@ vi.mock('sst', () => ({
     Auth0ClientId: { value: 'test-client-id' },
     Auth0ClientSecret: { value: 'test-client-secret' },
     AuroraBackofficeToken: { value: 'test-aurora-token' },
-    AuroraTenantSetupQueue: { url: 'https://sqs.us-east-1.amazonaws.com/123/setup-queue' },
   },
 }));
 
@@ -25,6 +23,11 @@ vi.mock('../lib/auth-secrets.js', () => ({
   }),
 }));
 
+const mockTriggerTenantSetup = vi.fn();
+vi.mock('../lib/trigger-tenant-setup.js', () => ({
+  triggerTenantSetup: (...args: unknown[]) => mockTriggerTenantSetup(...args),
+}));
+
 const mockJwtVerify = vi.fn();
 vi.mock('jose', () => ({
   jwtVerify: (token: unknown, jwks: unknown, opts: unknown) => mockJwtVerify(token, jwks, opts),
@@ -33,7 +36,6 @@ vi.mock('jose', () => ({
 }));
 
 const ddbMock = mockClient(DynamoDBClient);
-const sqsMock = mockClient(SQSClient);
 
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
@@ -65,8 +67,7 @@ describe('GET /api/me handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
-    sqsMock.reset();
-    sqsMock.on(SendMessageCommand).resolves({});
+    mockTriggerTenantSetup.mockResolvedValue({});
 
     mockJwtVerify.mockResolvedValue({
       payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
@@ -176,5 +177,71 @@ describe('GET /api/me handler', () => {
         orgSetupComplete: false,
       }),
     });
+  });
+
+  it('triggers tenant setup when org is confirmed but setup is incomplete', async () => {
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
+          setupStatus: { S: 'FILONE_ORG_CREATED' },
+        },
+      });
+
+    await handler(authenticatedEvent(), buildContext());
+
+    expect(mockTriggerTenantSetup).toHaveBeenCalledWith({
+      orgId: MOCK_ORG_ID,
+      orgName: 'Example Corp',
+    });
+  });
+
+  it('does not trigger tenant setup when setup is already complete', async () => {
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
+          setupStatus: { S: FINAL_SETUP_STATUS },
+        },
+      });
+
+    await handler(authenticatedEvent(), buildContext());
+
+    expect(mockTriggerTenantSetup).not.toHaveBeenCalled();
+  });
+
+  it('does not trigger tenant setup when org is not confirmed', async () => {
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: false },
+          setupStatus: { S: 'FILONE_ORG_CREATED' },
+        },
+      });
+
+    await handler(authenticatedEvent(), buildContext());
+
+    expect(mockTriggerTenantSetup).not.toHaveBeenCalled();
   });
 });
