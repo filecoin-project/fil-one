@@ -8,14 +8,19 @@ export type AccessKeyPermission = (typeof ACCESS_KEY_PERMISSIONS)[number];
 export const ACCESS_KEY_BUCKET_SCOPES = ['all', 'specific'] as const;
 export type AccessKeyBucketScope = (typeof ACCESS_KEY_BUCKET_SCOPES)[number];
 
-export const KEY_NAME_MAX_LENGTH = 256;
+export const KEY_NAME_MAX_LENGTH = 64;
+export const KEY_NAME_PATTERN = /^[a-zA-Z0-9 _\-.]+$/;
 
 export const CreateAccessKeySchema = z.object({
   keyName: z
     .string()
     .trim()
     .min(1, 'Key name is required')
-    .max(KEY_NAME_MAX_LENGTH, `Key name must be at most ${KEY_NAME_MAX_LENGTH} characters`),
+    .max(KEY_NAME_MAX_LENGTH, `Key name must be at most ${KEY_NAME_MAX_LENGTH} characters`)
+    .regex(
+      KEY_NAME_PATTERN,
+      'Key name can only contain letters, numbers, spaces, hyphens, underscores, and periods',
+    ),
   permissions: z
     .array(z.enum(ACCESS_KEY_PERMISSIONS))
     .min(1, 'At least one permission is required'),

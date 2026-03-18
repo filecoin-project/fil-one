@@ -7,6 +7,7 @@ import { CreateAccessKeySchema } from '@filone/shared';
 import type { CreateAccessKeyResponse, ErrorResponse } from '@filone/shared';
 import { Resource } from 'sst';
 import {
+  AuroraValidationError,
   createAuroraAccessKey,
   DuplicateKeyNameError,
   findAuroraAccessKeyByName,
@@ -88,6 +89,12 @@ export async function baseHandler(
       return new ResponseBuilder()
         .status(409)
         .body<ErrorResponse>({ message: 'An access key with this name already exists' })
+        .build();
+    }
+    if (err instanceof AuroraValidationError) {
+      return new ResponseBuilder()
+        .status(400)
+        .body<ErrorResponse>({ message: err.message })
         .build();
     }
     throw err;

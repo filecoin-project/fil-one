@@ -17,7 +17,7 @@ import { useToast } from '../components/Toast';
 
 import type { AccessKey, ListAccessKeysResponse } from '@filone/shared';
 
-import { S3_ENDPOINT } from '@filone/shared';
+import { S3_ENDPOINT, S3_REGION } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
 import { formatDate } from '../lib/time.js';
 
@@ -223,7 +223,7 @@ s3 = boto3.client(
     endpoint_url="${S3_ENDPOINT}",
     aws_access_key_id="YOUR_ACCESS_KEY",
     aws_secret_access_key="YOUR_SECRET_KEY",
-    region_name="us-east-1",
+    region_name="${S3_REGION}",
 )
 
 # Upload
@@ -242,7 +242,7 @@ import { createReadStream } from "fs";
 
 const s3 = new S3Client({
   endpoint: "${S3_ENDPOINT}",
-  region: "us-east-1",
+  region: "${S3_REGION}",
   credentials: {
     accessKeyId: "YOUR_ACCESS_KEY",
     secretAccessKey: "YOUR_SECRET_KEY",
@@ -264,7 +264,7 @@ await s3.send(new PutObjectCommand({
 )
 
 cfg, _ := config.LoadDefaultConfig(context.TODO(),
-    config.WithRegion("us-east-1"),
+    config.WithRegion("${S3_REGION}"),
     config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
         "YOUR_ACCESS_KEY", "YOUR_SECRET_KEY", "",
     )),
@@ -313,9 +313,9 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
         <div className="flex items-center px-4 py-3">
           <span className="w-28 shrink-0 text-sm text-zinc-500">Region</span>
           <span className="flex-1 font-mono text-sm text-zinc-900">
-            us-east-1 <span className="text-zinc-400">— US East (N. Virginia)</span>
+            {S3_REGION}
           </span>
-          <CopyButton value="us-east-1" />
+          <CopyButton value={S3_REGION} />
         </div>
       </div>
 
@@ -337,7 +337,7 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
             {
               n: 1,
               title: 'Configure your S3 client',
-              code: `aws configure set aws_access_key_id YOUR_ACCESS_KEY\naws configure set aws_secret_access_key YOUR_SECRET_KEY\naws configure set default.region us-east-1`,
+              code: `aws configure set aws_access_key_id YOUR_ACCESS_KEY\naws configure set aws_secret_access_key YOUR_SECRET_KEY\naws configure set default.region ${S3_REGION}`,
             },
             {
               n: 2,
@@ -443,7 +443,7 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
                   fil: 'Fil One key + secret',
                   highlight: true,
                 },
-                { label: 'Region', aws: 'Any AWS region', fil: 'us-east-1', highlight: false },
+                { label: 'Region', aws: 'Any AWS region', fil: S3_REGION, highlight: false },
                 {
                   label: 'Path style',
                   aws: 'Optional',

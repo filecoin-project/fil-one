@@ -161,7 +161,8 @@ describe('create-access-key baseHandler', () => {
   const invalidKeyNameCases: Record<string, string> = {
     'whitespace only': '   ',
     'empty string': '',
-    'too long (257 chars)': 'a'.repeat(257),
+    'too long (65 chars)': 'a'.repeat(65),
+    'special characters': 'key()!*$&@name',
   };
 
   for (const [desc, keyName] of Object.entries(invalidKeyNameCases)) {

@@ -19,6 +19,13 @@ export class DuplicateKeyNameError extends Error {
   }
 }
 
+export class AuroraValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuroraValidationError';
+  }
+}
+
 export interface CreateAuroraBucketOptions {
   tenantId: string;
   bucketName: string;
@@ -124,6 +131,15 @@ export async function createAuroraAccessKey({
   if (error) {
     if (response?.status === 409) {
       throw new DuplicateKeyNameError();
+    }
+    if (response?.status === 400) {
+      const detail =
+        typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as { message: string }).message)
+          : undefined;
+      throw new AuroraValidationError(
+        detail ?? 'Invalid access key request. Check the key name and try again.',
+      );
     }
     console.error(
       `Aurora access key creation failed for tenant ${tenantId}:`,

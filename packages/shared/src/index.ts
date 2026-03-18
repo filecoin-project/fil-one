@@ -38,6 +38,7 @@ export {
   ACCESS_KEY_PERMISSIONS,
   ACCESS_KEY_BUCKET_SCOPES,
   KEY_NAME_MAX_LENGTH,
+  KEY_NAME_PATTERN,
   CreateAccessKeySchema,
 } from './api/access-keys.js';
 export type {
