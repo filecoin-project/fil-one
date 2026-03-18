@@ -339,7 +339,13 @@ export default $config({
       auroraS3GatewayEnv,
       auroraS3GatewayPermissions,
     );
-    addRoute('DELETE', '/api/buckets/{name}/objects', 'delete-object');
+    addRoute(
+      'DELETE',
+      '/api/buckets/{name}/objects',
+      'delete-object',
+      auroraS3GatewayEnv,
+      auroraS3GatewayPermissions,
+    );
 
     // ── Auth routes ──────────────────────────────────────────────────
     const allowedRedirectOrigins = allowedOrigins.join(',');

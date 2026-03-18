@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
@@ -103,5 +108,36 @@ export async function getPresignedGetObjectUrl(
       Key: key,
     }),
     { expiresIn },
+  );
+}
+
+export async function deleteObject(
+  endpointUrl: string,
+  credentials: AuroraS3Credentials,
+  bucket: string,
+  key: string,
+): Promise<void> {
+  const s3 = new S3Client({
+    endpoint: endpointUrl,
+    region: 'auto',
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+    },
+    forcePathStyle: true,
+  });
+
+  console.log('[aurora-s3] Deleting object', {
+    endpoint: endpointUrl,
+    bucket,
+    key,
+    accessKeyId: credentials.accessKeyId,
+  });
+
+  await s3.send(
+    new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    }),
   );
 }
