@@ -1,4 +1,6 @@
 export {
+  S3_ENDPOINT,
+  S3_REGION,
   OAUTH_STATE_COOKIE,
   CSRF_COOKIE_NAME,
   TB_BYTES,
@@ -34,13 +36,13 @@ export type {
 
 export type {
   AccessKeyStatus,
+  AccessKeyPermission,
+  AccessKeyBucketScope,
   AccessKey,
   ListAccessKeysResponse,
   CreateAccessKeyRequest,
   CreateAccessKeyResponse,
   DeleteAccessKeyRequest,
-  UpdateAccessKeyRequest,
-  UpdateAccessKeyResponse,
 } from './api/access-keys.js';
 
 export type {

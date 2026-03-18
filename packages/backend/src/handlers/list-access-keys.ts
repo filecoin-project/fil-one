@@ -37,6 +37,15 @@ export async function baseHandler(
       accessKeyId: record.accessKeyId as string,
       createdAt: record.createdAt as string,
       status: record.status as AccessKey['status'],
+      permissions: (record.permissions as AccessKey['permissions']) ?? [
+        'read',
+        'write',
+        'list',
+        'delete',
+      ],
+      bucketScope: (record.bucketScope as AccessKey['bucketScope']) ?? 'all',
+      buckets: record.buckets as string[] | undefined,
+      expiresAt: (record.expiresAt as string | undefined) ?? null,
     };
   });
 

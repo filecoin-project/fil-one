@@ -65,6 +65,9 @@ describe('list-access-keys baseHandler', () => {
           accessKeyId: 'AKIA1111',
           createdAt: '2026-01-01T00:00:00Z',
           status: 'active',
+          permissions: ['read', 'write', 'list', 'delete'],
+          bucketScope: 'all',
+          expiresAt: null,
         },
         {
           id: 'key-2',
@@ -72,6 +75,9 @@ describe('list-access-keys baseHandler', () => {
           accessKeyId: 'AKIA2222',
           createdAt: '2026-02-01T00:00:00Z',
           status: 'active',
+          permissions: ['read', 'write', 'list', 'delete'],
+          bucketScope: 'all',
+          expiresAt: null,
         },
       ],
     });

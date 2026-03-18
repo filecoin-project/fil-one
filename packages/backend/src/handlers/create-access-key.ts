@@ -47,6 +47,41 @@ export async function baseHandler(
   }
   const keyName = keyNameResult.sanitized;
 
+  const permissions = request.permissions;
+  if (!Array.isArray(permissions) || permissions.length === 0) {
+    return new ResponseBuilder()
+      .status(400)
+      .body<ErrorResponse>({ message: 'At least one permission is required' })
+      .build();
+  }
+
+  const validPermissions = new Set(['read', 'write', 'list', 'delete']);
+  for (const p of permissions) {
+    if (!validPermissions.has(p)) {
+      return new ResponseBuilder()
+        .status(400)
+        .body<ErrorResponse>({ message: `Invalid permission: ${p}` })
+        .build();
+    }
+  }
+
+  const bucketScope = request.bucketScope ?? 'all';
+  if (bucketScope !== 'all' && bucketScope !== 'specific') {
+    return new ResponseBuilder()
+      .status(400)
+      .body<ErrorResponse>({ message: 'bucketScope must be "all" or "specific"' })
+      .build();
+  }
+
+  const buckets = bucketScope === 'specific' ? (request.buckets ?? []) : undefined;
+  const expiresAt = request.expiresAt ?? null;
+  if (expiresAt !== null && !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+    return new ResponseBuilder()
+      .status(400)
+      .body<ErrorResponse>({ message: 'expiresAt must be in YYYY-MM-DD format' })
+      .build();
+  }
+
   const { orgId } = getUserInfo(event);
 
   // Look up org profile to get auroraTenantId
@@ -70,7 +105,13 @@ export async function baseHandler(
 
   let auroraKey;
   try {
-    auroraKey = await createAuroraAccessKey({ tenantId: auroraTenantId, keyName });
+    auroraKey = await createAuroraAccessKey({
+      tenantId: auroraTenantId,
+      keyName,
+      permissions,
+      buckets,
+      expiresAt: expiresAt ? `${expiresAt}T00:00:00Z` : null,
+    });
   } catch (err) {
     if (err instanceof DuplicateKeyNameError) {
       await recoverDuplicateKey(orgId, auroraTenantId, keyName);
@@ -92,6 +133,10 @@ export async function baseHandler(
         accessKeyId: auroraKey.accessKeyId,
         createdAt: auroraKey.createdAt,
         status: 'active',
+        permissions,
+        bucketScope,
+        ...(buckets ? { buckets } : {}),
+        ...(expiresAt ? { expiresAt } : {}),
       }),
     }),
   );

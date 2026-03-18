@@ -318,6 +318,20 @@ export default $config({
         },
       ],
     );
+    addRoute(
+      'DELETE',
+      '/api/access-keys/{keyId}',
+      'delete-access-key',
+      {
+        AURORA_PORTAL_URL: auroraEnv.AURORA_PORTAL_URL,
+      },
+      [
+        {
+          actions: ['ssm:GetParameter'],
+          resources: [auroraApiKeySsmArn],
+        },
+      ],
+    );
     addRoute('GET', '/api/buckets/{name}/objects', 'list-objects');
     addRoute('POST', '/api/buckets/{name}/objects/upload', 'upload-object');
     addRoute('GET', '/api/buckets/{name}/objects/download', 'download-object');

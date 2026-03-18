@@ -1,5 +1,9 @@
 export type AccessKeyStatus = 'active' | 'inactive';
 
+export type AccessKeyPermission = 'read' | 'write' | 'list' | 'delete';
+
+export type AccessKeyBucketScope = 'all' | 'specific';
+
 export interface AccessKey {
   id: string;
   keyName: string;
@@ -7,6 +11,10 @@ export interface AccessKey {
   createdAt: string;
   lastUsedAt?: string;
   status: AccessKeyStatus;
+  permissions: AccessKeyPermission[];
+  bucketScope: AccessKeyBucketScope;
+  buckets?: string[];
+  expiresAt?: string | null;
 }
 
 export interface ListAccessKeysResponse {
@@ -15,6 +23,10 @@ export interface ListAccessKeysResponse {
 
 export interface CreateAccessKeyRequest {
   keyName: string;
+  permissions: AccessKeyPermission[];
+  bucketScope: AccessKeyBucketScope;
+  buckets?: string[];
+  expiresAt?: string | null;
 }
 
 export interface CreateAccessKeyResponse {
@@ -27,13 +39,4 @@ export interface CreateAccessKeyResponse {
 
 export interface DeleteAccessKeyRequest {
   keyId: string;
-}
-
-export interface UpdateAccessKeyRequest {
-  keyId: string;
-  status: AccessKeyStatus;
-}
-
-export interface UpdateAccessKeyResponse {
-  key: AccessKey;
 }

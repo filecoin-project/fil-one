@@ -47,19 +47,10 @@ describe('validateKeyName', () => {
     expect(result.error).toContain(`at most ${KEY_NAME_MAX_LENGTH}`);
   });
 
-  it('escapes HTML entities', () => {
-    const result = validateKeyName('key<script>');
+  it('preserves special characters without HTML-encoding them', () => {
+    const result = validateKeyName("joe's key & <stuff>");
     expect(result.valid).toBe(true);
-    expect(result.sanitized).toBe('key&lt;script&gt;');
-  });
-
-  it('rejects name that exceeds max length after escaping', () => {
-    // Each '<' becomes '&lt;' (4 chars), so a string of '<' chars near the
-    // max length will expand beyond it after escaping.
-    const input = '<'.repeat(KEY_NAME_MAX_LENGTH);
-    const result = validateKeyName(input);
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain(`at most ${KEY_NAME_MAX_LENGTH}`);
+    expect(result.sanitized).toBe("joe's key & <stuff>");
   });
 
   it('accepts a name exactly at max length', () => {
