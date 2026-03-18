@@ -49,24 +49,32 @@ export const PUBLIC_EMAIL_DOMAINS = new Set([
   '126.com',
 ]);
 
-export function suggestOrgName(email: string | undefined, userId: string): string | undefined {
-  if (!email) {
-    console.warn('[suggest-org-name] No email available for org name suggestion', { userId });
-    return undefined;
-  }
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
-  const domain = email.split('@')[1]?.toLowerCase();
-  if (!domain) return undefined;
+export function suggestOrgName(email: string): string | undefined {
+  const [localPart, rawDomain] = email.split('@');
+  const domain = rawDomain?.toLowerCase();
+  if (!domain || !localPart) return undefined;
 
   if (PUBLIC_EMAIL_DOMAINS.has(domain)) {
-    return undefined;
+    // Public provider — use the local part as a best-effort name.
+    // e.g. "alice@gmail.com" → "Alice"
+    return capitalize(localPart.toLowerCase());
   }
 
-  // Use the domain without TLD as the suggestion, capitalised.
-  // e.g. "acme.com" → "Acme"
+  // Corporate domain — use the second-level domain label as the org name.
+  // e.g. "alice@acme.com" → "Acme", "dev@eng.bigcorp.co.uk" → "Bigcorp"
   const parts = domain.split('.');
-  const name = parts[0];
+  const COMPOUND_TLDS = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'edu']);
+  // Walk backwards: skip the TLD, skip compound SLD (co.uk, com.au, etc.)
+  let idx = parts.length - 2;
+  if (idx > 0 && COMPOUND_TLDS.has(parts[idx]!)) {
+    idx--;
+  }
+  const name = parts[idx];
   if (!name) return undefined;
 
-  return name.charAt(0).toUpperCase() + name.slice(1);
+  return capitalize(name);
 }

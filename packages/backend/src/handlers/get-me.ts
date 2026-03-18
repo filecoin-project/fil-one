@@ -39,8 +39,8 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   };
 
   // Only include suggested name if org is not yet confirmed
-  if (!orgConfirmed) {
-    body.suggestedOrgName = suggestOrgName(email, userId);
+  if (!orgConfirmed && email) {
+    body.suggestedOrgName = suggestOrgName(email);
   }
 
   return new ResponseBuilder().status(200).body(body).build();
