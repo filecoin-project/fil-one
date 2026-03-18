@@ -9,6 +9,7 @@ import type {
 import { apiRequest } from '../lib/api.js';
 import { AccessKeyExpirationFields } from './AccessKeyExpirationFields.js';
 import type { ExpirationOption } from './AccessKeyExpirationFields.js';
+import { AccessKeyBucketScopeFields } from './AccessKeyBucketScopeFields.js';
 import { AccessKeyPermissionsFields } from './AccessKeyPermissionsFields.js';
 import { Button } from './Button.js';
 import { Input } from './Input.js';
@@ -57,6 +58,7 @@ export function CreateAccessKeyModal({ open, onClose, onDone }: CreateAccessKeyM
     'delete',
   ]);
   const [bucketScope, setBucketScope] = useState<AccessKeyBucketScope>('all');
+  const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
   const [expiration, setExpiration] = useState<ExpirationOption>('never');
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -67,6 +69,7 @@ export function CreateAccessKeyModal({ open, onClose, onDone }: CreateAccessKeyM
     setKeyName('');
     setPermissions(['read', 'write', 'list', 'delete']);
     setBucketScope('all');
+    setSelectedBuckets([]);
     setExpiration('never');
     setCustomDate(null);
     setCreating(false);
@@ -88,6 +91,7 @@ export function CreateAccessKeyModal({ open, onClose, onDone }: CreateAccessKeyM
           keyName: keyName.trim(),
           permissions,
           bucketScope,
+          buckets: bucketScope === 'specific' ? selectedBuckets : undefined,
           expiresAt: expiresAtFromForm(expiration, customDate),
         }),
       });
@@ -116,7 +120,8 @@ export function CreateAccessKeyModal({ open, onClose, onDone }: CreateAccessKeyM
     );
   }
 
-  const canSubmit = keyName.trim().length > 0 && permissions.length > 0 && !creating;
+  const bucketsValid = bucketScope === 'all' || selectedBuckets.length > 0;
+  const canSubmit = keyName.trim().length > 0 && permissions.length > 0 && bucketsValid && !creating;
 
   return (
     <Modal open={open} onClose={handleClose} size="lg">
@@ -151,26 +156,12 @@ export function CreateAccessKeyModal({ open, onClose, onDone }: CreateAccessKeyM
               <p className="text-xs text-zinc-500">
                 Restrict access to specific buckets or allow all.
               </p>
-              <div className="flex gap-3">
-                {(['all', 'specific'] as const).map((scope) => (
-                  <label
-                    key={scope}
-                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm hover:bg-zinc-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"
-                  >
-                    <input
-                      type="radio"
-                      name="bucket-scope"
-                      value={scope}
-                      checked={bucketScope === scope}
-                      onChange={() => setBucketScope(scope)}
-                      className="accent-brand-600"
-                    />
-                    <span className="font-medium text-zinc-900 capitalize">
-                      {scope === 'all' ? 'All buckets' : 'Specific buckets'}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <AccessKeyBucketScopeFields
+                bucketScope={bucketScope}
+                onBucketScopeChange={setBucketScope}
+                selectedBuckets={selectedBuckets}
+                onSelectedBucketsChange={setSelectedBuckets}
+              />
             </div>
 
             {/* Expiration */}

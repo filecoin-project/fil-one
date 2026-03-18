@@ -10,6 +10,7 @@ import type {
 import { apiRequest } from '../lib/api.js';
 import { AccessKeyExpirationFields } from '../components/AccessKeyExpirationFields.js';
 import type { ExpirationOption } from '../components/AccessKeyExpirationFields.js';
+import { AccessKeyBucketScopeFields } from '../components/AccessKeyBucketScopeFields.js';
 import { AccessKeyPermissionsFields } from '../components/AccessKeyPermissionsFields.js';
 import { Button } from '../components/Button.js';
 import { Input } from '../components/Input.js';
@@ -41,6 +42,7 @@ export function CreateApiKeyPage() {
   const [keyName, setKeyName] = useState('');
   const [permissions, setPermissions] = useState<AccessKeyPermission[]>(['read', 'write', 'list']);
   const [bucketScope, setBucketScope] = useState<AccessKeyBucketScope>('all');
+  const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
   const [expiration, setExpiration] = useState<ExpirationOption>('never');
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -60,6 +62,7 @@ export function CreateApiKeyPage() {
           keyName: keyName.trim(),
           permissions,
           bucketScope,
+          buckets: bucketScope === 'specific' ? selectedBuckets : undefined,
           expiresAt: expiresAtFromForm(expiration, customDate),
         }),
       });
@@ -78,7 +81,8 @@ export function CreateApiKeyPage() {
     void navigate({ to: '/api-keys' });
   }
 
-  const canSubmit = keyName.trim().length > 0 && permissions.length > 0 && !creating;
+  const bucketsValid = bucketScope === 'all' || selectedBuckets.length > 0;
+  const canSubmit = keyName.trim().length > 0 && permissions.length > 0 && bucketsValid && !creating;
 
   return (
     <>
@@ -140,26 +144,12 @@ export function CreateApiKeyPage() {
                   <p className="text-xs text-zinc-500">
                     Restrict access to specific buckets or allow all
                   </p>
-                  <div className="flex gap-3">
-                    {(['all', 'specific'] as const).map((scope) => (
-                      <label
-                        key={scope}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm hover:bg-zinc-50 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"
-                      >
-                        <input
-                          type="radio"
-                          name="bucket-scope"
-                          value={scope}
-                          checked={bucketScope === scope}
-                          onChange={() => setBucketScope(scope)}
-                          className="accent-brand-600"
-                        />
-                        <span className="font-medium text-zinc-900">
-                          {scope === 'all' ? 'All buckets' : 'Specific buckets'}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                  <AccessKeyBucketScopeFields
+                    bucketScope={bucketScope}
+                    onBucketScopeChange={setBucketScope}
+                    selectedBuckets={selectedBuckets}
+                    onSelectedBucketsChange={setSelectedBuckets}
+                  />
                 </div>
 
                 {/* Expiration */}
