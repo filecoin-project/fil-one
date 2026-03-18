@@ -327,10 +327,14 @@ export async function handler(event: SetupEvent): Promise<void> {
       }
     }
 
+    const isStagingOrProd = Stage === 'staging' || Stage === 'production';
+
     const [stripeResult] = await Promise.all([
       setupStripeWebhook(stripe, siteUrl, Stage),
       setupAuth0Callbacks(process.env.AUTH0_DOMAIN!, siteUrl),
-      setupAuth0EmailProvider(process.env.AUTH0_DOMAIN!, Stage === 'production'),
+      ...(isStagingOrProd
+        ? [setupAuth0EmailProvider(process.env.AUTH0_DOMAIN!, Stage === 'production')]
+        : []),
     ]);
 
     console.log('Setup complete:', {
