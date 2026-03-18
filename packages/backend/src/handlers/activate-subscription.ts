@@ -1,4 +1,4 @@
-import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
@@ -6,6 +6,7 @@ import type { APIGatewayProxyResultV2 } from 'aws-lambda';
 import { PlanId, SubscriptionStatus } from '@filone/shared';
 import type { ActivateSubscriptionResponse } from '@filone/shared';
 import { Resource } from 'sst';
+import { getDynamoClient } from '../lib/ddb-client.js';
 import { getStripeClient, getBillingSecrets } from '../lib/stripe-client.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -14,7 +15,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
-const dynamo = new DynamoDBClient({});
+const dynamo = getDynamoClient();
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { userId } = getUserInfo(event);
@@ -78,13 +79,30 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       .build();
   }
 
-  // 3. Create subscription
-  const subscription = await stripe.subscriptions.create({
-    customer: stripeCustomerId,
-    items: [{ price: secrets.STRIPE_PRICE_ID }],
-    default_payment_method: paymentMethodId,
-    expand: ['latest_invoice.payment_intent', 'default_payment_method'],
-  });
+  // 3. Create or update subscription
+  let subscription;
+  if (record.subscriptionId) {
+    // Step 1: Attach payment method first
+    await stripe.subscriptions.update(record.subscriptionId as string, {
+      default_payment_method: paymentMethodId,
+    });
+    // Step 2: End trial — payment method already attached, so cancel behavior won't fire
+    subscription = await stripe.subscriptions.update(record.subscriptionId as string, {
+      trial_end: 'now',
+      expand: ['latest_invoice.payment_intent', 'default_payment_method'],
+    });
+  } else {
+    console.warn('[activate-subscription] No existing subscription found for user, creating new', {
+      userId,
+    });
+    // No subscription yet (legacy path) — create new
+    subscription = await stripe.subscriptions.create({
+      customer: stripeCustomerId,
+      items: [{ price: secrets.STRIPE_PRICE_ID }],
+      default_payment_method: paymentMethodId,
+      expand: ['latest_invoice.payment_intent', 'default_payment_method'],
+    });
+  }
 
   // 4. Get payment method details
   const pm = subscription.default_payment_method;

@@ -1,10 +1,11 @@
-import { DynamoDBClient, ScanCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
+import { ScanCommand, GetItemCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { getDynamoClient } from '../lib/ddb-client.js';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { Resource } from 'sst';
 import type { UsageReportingWorkerPayload } from './usage-reporting-worker.js';
 
-const dynamo = new DynamoDBClient({});
+const dynamo = getDynamoClient();
 const lambda = new LambdaClient({});
 
 interface SubscriptionRecord {
@@ -69,10 +70,12 @@ export async function handler(): Promise<void> {
 
   if (records.length === 0) return;
 
-  // Step 2: Build payloads, deduplicate by orgId
+  // Step 2: Deduplicate by orgId, resolve auroraTenantId, invoke workers
   const orgSeen = new Map<string, { subscriptionId: string; stripeCustomerId: string }>();
-  const payloads: UsageReportingWorkerPayload[] = [];
   let skippedDuplicate = 0;
+  let skippedNoTenant = 0;
+  let invoked = 0;
+  let failed = 0;
 
   for (const record of records) {
     const existing = orgSeen.get(record.orgId);
@@ -101,20 +104,37 @@ export async function handler(): Promise<void> {
       stripeCustomerId: record.stripeCustomerId,
     });
 
-    payloads.push({
+    // Resolve auroraTenantId
+    const profileResult = await dynamo.send(
+      new GetItemCommand({
+        TableName: Resource.UserInfoTable.name,
+        Key: {
+          pk: { S: `ORG#${record.orgId}` },
+          sk: { S: 'PROFILE' },
+        },
+        ProjectionExpression: 'auroraTenantId',
+      }),
+    );
+
+    const auroraTenantId = profileResult.Item?.auroraTenantId?.S;
+    if (!auroraTenantId) {
+      skippedNoTenant++;
+      console.warn('[usage-orchestrator] Missing auroraTenantId, skipping', {
+        orgId: record.orgId,
+      });
+      continue;
+    }
+
+    // Invoke worker
+    const payload: UsageReportingWorkerPayload = {
       orgId: record.orgId,
+      auroraTenantId,
       subscriptionId: record.subscriptionId,
       stripeCustomerId: record.stripeCustomerId,
       currentPeriodStart: record.currentPeriodStart,
       reportDate,
-    });
-  }
+    };
 
-  // Step 3: Invoke workers
-  let invoked = 0;
-  let failed = 0;
-
-  for (const payload of payloads) {
     try {
       await lambda.send(
         new InvokeCommand({
@@ -127,7 +147,7 @@ export async function handler(): Promise<void> {
     } catch (error) {
       failed++;
       console.error('[usage-orchestrator] Failed to invoke worker', {
-        orgId: payload.orgId,
+        orgId: record.orgId,
         error: (error as Error).message,
       });
     }
@@ -135,9 +155,10 @@ export async function handler(): Promise<void> {
 
   console.log('[usage-orchestrator] Complete', {
     totalSubscriptions: records.length,
-    uniqueOrgs: payloads.length,
+    uniqueOrgs: orgSeen.size,
     invoked,
     failed,
     skippedDuplicate,
+    skippedNoTenant,
   });
 }

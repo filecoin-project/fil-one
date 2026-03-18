@@ -1,0 +1,71 @@
+name: Preview Teardown
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  teardown:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: preview-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_REGION: us-east-2
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@3b1e0a8ff9e8cbbd91cce0ed6f246d1068188b1b
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::654654381893:role/filone-infra-staging-github
+          aws-region: us-east-2
+
+      - name: Remove SST stage
+        id: remove
+        continue-on-error: true
+        run: pnpm exec sst remove --stage "pr-${{ github.event.pull_request.number }}"
+
+      - name: Notify Slack on teardown failure
+        if: steps.remove.outcome == 'failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            {
+              "channel": "filone-alerts",
+              "text": ${{ toJSON(format('Preview teardown failed for PR #{0}. Details: {1}/{2}/actions/runs/{3}', github.event.pull_request.number, github.server_url, github.repository, github.run_id)) }},
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ${{ toJSON(format(':warning: *Preview teardown failed for PR <{1}/{2}/pull/{0}|#{0}>* · <{1}/{2}/actions/runs/{3}|Details>', github.event.pull_request.number, github.server_url, github.repository, github.run_id)) }}
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ${{ toJSON(format('Stage `pr-{0}` may have orphaned resources that need manual cleanup.', github.event.pull_request.number)) }}
+                  }
+                }
+              ]
+            }
