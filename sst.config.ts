@@ -388,7 +388,7 @@ export default $config({
         },
         permissions: [
           {
-            actions: ['ssm:PutParameter'],
+            actions: ['ssm:GetParameter', 'ssm:PutParameter'],
             resources: [auroraApiKeySsmArn, auroraS3KeySsmArn],
           },
         ],
