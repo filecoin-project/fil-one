@@ -1,7 +1,29 @@
 import { QuestionIcon, BellIcon, SignOutIcon } from '@phosphor-icons/react/dist/ssr';
-import { logout } from '../lib/api.js';
+import { useEffect, useState } from 'react';
+import { logout, getMe } from '../lib/api.js';
+import { getGravatarUrl } from '../lib/gravatar.js';
 
 export function AppHeader() {
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void getMe()
+      .then((me) => {
+        if (!isMounted) return;
+        setAvatarUrl(getGravatarUrl(me.email));
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setAvatarUrl(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <header className="flex h-14 flex-shrink-0 items-center border-b border-zinc-200 bg-white px-4 gap-4">
       {/* Spacer pushes right-side icons to the right */}
@@ -25,10 +47,18 @@ export function AppHeader() {
           <BellIcon size={18} />
         </button>
 
-        {/* User avatar — placeholder with initial "U" */}
-        <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white">
-          U
-        </div>
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt="User avatar"
+            referrerPolicy="no-referrer"
+            className="ml-1 h-8 w-8 rounded-full"
+          />
+        ) : (
+          <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white">
+            U
+          </div>
+        )}
 
         <button
           type="button"
