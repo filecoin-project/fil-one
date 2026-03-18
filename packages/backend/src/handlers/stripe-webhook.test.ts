@@ -3,9 +3,11 @@ import { mockClient } from 'aws-sdk-client-mock';
 import {
   DynamoDBClient,
   DeleteItemCommand,
+  GetItemCommand,
   PutItemCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
+import { marshall } from '@aws-sdk/util-dynamodb';
 import { buildEvent } from '../test/lambda-test-utilities.js';
 import { SubscriptionStatus } from '@filone/shared';
 
@@ -109,6 +111,9 @@ describe('stripe-webhook handler', () => {
   beforeEach(() => {
     ddbMock.reset();
     ddbMock.on(PutItemCommand).resolves({});
+    ddbMock.on(GetItemCommand).resolves({
+      Item: marshall({ subscriptionStatus: SubscriptionStatus.Active }),
+    });
     ddbMock.on(UpdateItemCommand).resolves({});
     ddbMock.on(DeleteItemCommand).resolves({});
     mockConstructEvent.mockReset();
@@ -495,6 +500,28 @@ describe('stripe-webhook handler', () => {
       expect(graceDate).toBeGreaterThanOrEqual(before + thirtyDays - 5000);
       expect(graceDate).toBeLessThanOrEqual(after + thirtyDays + 5000);
       expect(mockCustomersRetrieve).toHaveBeenCalledWith(MOCK_CUSTOMER_ID);
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+    });
+
+    it('sets GracePeriod status with 7-day grace window for trialing subscriptions', async () => {
+      setupStripeEvent('customer.subscription.deleted', mockSubscription());
+      setupCustomerRetrieve();
+      ddbMock.on(GetItemCommand).resolves({
+        Item: marshall({ subscriptionStatus: SubscriptionStatus.Trialing }),
+      });
+
+      const before = Date.now();
+      const result = await handler(buildWebhookEvent('{}'));
+      const after = Date.now();
+
+      const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
+      expect(updateCalls).toHaveLength(1);
+
+      const input = updateCalls[0].args[0].input;
+      const graceDate = new Date(input.ExpressionAttributeValues![':grace'].S!).getTime();
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      expect(graceDate).toBeGreaterThanOrEqual(before + sevenDays - 5000);
+      expect(graceDate).toBeLessThanOrEqual(after + sevenDays + 5000);
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
 
