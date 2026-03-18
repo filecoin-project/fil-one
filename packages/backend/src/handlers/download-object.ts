@@ -1,5 +1,5 @@
 import { GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { marshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
@@ -93,9 +93,6 @@ export async function baseHandler(
       .build();
   }
 
-  const record = unmarshall(objectRecord.Item);
-  const s3Key = record.s3Key as string;
-
   const stage = process.env.FILONE_STAGE!;
   const gatewayUrl = process.env.AURORA_S3_GATEWAY_URL!;
 
@@ -104,7 +101,7 @@ export async function baseHandler(
     gatewayUrl,
     credentials,
     bucketName,
-    s3Key,
+    objectKey,
     PRESIGN_EXPIRY_SECONDS,
   );
 

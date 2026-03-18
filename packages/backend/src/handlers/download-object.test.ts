@@ -112,7 +112,7 @@ describe('download-object baseHandler', () => {
       'https://s3.dev.aur.lu',
       { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
       'my-bucket',
-      'org-1/my-bucket/photos/cat.jpg',
+      'photos/cat.jpg',
       3600,
     );
   });
