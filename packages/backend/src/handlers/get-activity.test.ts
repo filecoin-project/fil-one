@@ -105,7 +105,8 @@ describe('get-activity baseHandler', () => {
       .resolves({ Item: orgProfileItem(auroraTenantId) });
   }
 
-  it('returns 200 with empty activities and empty trends when no buckets exist', async () => {
+  it('returns 200 with empty activities and zero-filled trends when no buckets exist', async () => {
+    vi.setSystemTime(new Date('2026-01-08T12:00:00Z'));
     mockOrgProfile(AURORA_TENANT_ID);
     ddbMock.on(QueryCommand).resolves({ Items: [] });
 
@@ -114,37 +115,44 @@ describe('get-activity baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
-    expect(body).toStrictEqual({
-      activities: [],
-      trends: { storage: [], objects: [] },
-    });
+    expect(body.activities).toStrictEqual([]);
+    // Default period is 7d → 8 entries (from Jan 1 through Jan 8)
+    expect(body.trends.storage.length).toBe(8);
+    expect(body.trends.storage.every((p: { value: number }) => p.value === 0)).toBe(true);
+    expect(body.trends.objects.length).toBe(8);
+    expect(body.trends.objects.every((p: { value: number }) => p.value === 0)).toBe(true);
+    vi.useRealTimers();
   });
 
-  it('returns trends from Aurora storage samples', async () => {
+  it('returns trends from Aurora with missing days zero-filled', async () => {
+    vi.setSystemTime(new Date('2026-01-05T12:00:00Z'));
     mockOrgProfile(AURORA_TENANT_ID);
     ddbMock.on(QueryCommand).resolves({ Items: [] });
+    // Only provide samples for Jan 1 and Jan 3 — gaps on Jan 2, 4, 5
     mockGetStorageSamples.mockResolvedValue([
-      storageSample('2026-01-01T00:00:00Z', 1000, 5),
-      storageSample('2026-01-02T00:00:00Z', 2000, 10),
+      storageSample('2025-12-29T00:00:00.000Z', 1000, 5),
+      storageSample('2025-12-31T00:00:00.000Z', 2000, 10),
     ]);
 
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.trends).toStrictEqual({
-      storage: [
-        { date: '2026-01-01T00:00:00Z', value: 1000 },
-        { date: '2026-01-02T00:00:00Z', value: 2000 },
-      ],
-      objects: [
-        { date: '2026-01-01T00:00:00Z', value: 5 },
-        { date: '2026-01-02T00:00:00Z', value: 10 },
-      ],
-    });
+    // 7-day period from Dec 29 through Jan 5 = 8 entries
+    expect(body.trends.storage.length).toBe(8);
+    expect(body.trends.storage[0]).toStrictEqual({ date: '2025-12-29T00:00:00.000Z', value: 1000 });
+    expect(body.trends.storage[1]).toStrictEqual({ date: '2025-12-30T00:00:00.000Z', value: 0 });
+    expect(body.trends.storage[2]).toStrictEqual({ date: '2025-12-31T00:00:00.000Z', value: 2000 });
+    expect(body.trends.storage[3]).toStrictEqual({ date: '2026-01-01T00:00:00.000Z', value: 0 });
+
+    expect(body.trends.objects[0]).toStrictEqual({ date: '2025-12-29T00:00:00.000Z', value: 5 });
+    expect(body.trends.objects[2]).toStrictEqual({ date: '2025-12-31T00:00:00.000Z', value: 10 });
+    expect(body.trends.objects[3]).toStrictEqual({ date: '2026-01-01T00:00:00.000Z', value: 0 });
+    vi.useRealTimers();
   });
 
-  it('returns empty trends when auroraTenantId is missing', async () => {
+  it('returns zero-filled trends when auroraTenantId is missing', async () => {
+    vi.setSystemTime(new Date('2026-01-08T12:00:00Z'));
     mockOrgProfile(); // no auroraTenantId
     ddbMock.on(QueryCommand).resolves({ Items: [] });
 
@@ -152,8 +160,31 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.trends).toStrictEqual({ storage: [], objects: [] });
+    // Still get a full series of zeroes
+    expect(body.trends.storage.length).toBe(8);
+    expect(body.trends.storage.every((p: { value: number }) => p.value === 0)).toBe(true);
     expect(mockGetStorageSamples).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('fills correct number of entries for 30d period', async () => {
+    vi.setSystemTime(new Date('2026-01-31T12:00:00Z'));
+    mockOrgProfile(AURORA_TENANT_ID);
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    const event = buildEvent({
+      userInfo: USER_INFO,
+      queryStringParameters: { period: '30d' },
+    });
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
+
+    // 30-day period from Jan 1 through Jan 31 = 31 entries
+    expect(body.trends.storage.length).toBe(31);
+    expect(body.trends.objects.length).toBe(31);
+    // First entry should be Jan 1 midnight UTC
+    expect(body.trends.storage[0].date).toBe('2026-01-01T00:00:00.000Z');
+    vi.useRealTimers();
   });
 
   it('returns bucket and object activities sorted most-recent-first', async () => {

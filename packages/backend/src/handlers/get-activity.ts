@@ -115,8 +115,8 @@ export async function baseHandler(
   // Fetch time series data from Aurora
   const now = new Date();
   const from = new Date(now);
-  from.setDate(from.getDate() - period);
-  from.setHours(0, 0, 0, 0);
+  from.setUTCDate(from.getUTCDate() - period);
+  from.setUTCHours(0, 0, 0, 0);
 
   const storageSamples = auroraTenantId
     ? await getStorageSamples({
@@ -127,15 +127,20 @@ export async function baseHandler(
       })
     : [];
 
-  const storageSeries: UsageDataPoint[] = storageSamples.map((s) => ({
-    date: s.timestamp!,
-    value: s.bytesUsed ?? 0,
-  }));
+  // Index Aurora samples by date
+  const samplesByDate = new Map(
+    storageSamples.filter((s) => s.timestamp).map((s) => [s.timestamp!.slice(0, 10), s] as const),
+  );
 
-  const objectsSeries: UsageDataPoint[] = storageSamples.map((s) => ({
-    date: s.timestamp!,
-    value: s.objectCount ?? 0,
-  }));
+  // Build full date range with gap-filling
+  const storageSeries: UsageDataPoint[] = [];
+  const objectsSeries: UsageDataPoint[] = [];
+  for (const d = new Date(from); d <= now; d.setUTCDate(d.getUTCDate() + 1)) {
+    const date = d.toISOString();
+    const sample = samplesByDate.get(date.slice(0, 10));
+    storageSeries.push({ date, value: sample?.bytesUsed ?? 0 });
+    objectsSeries.push({ date, value: sample?.objectCount ?? 0 });
+  }
 
   const response: ActivityResponse = {
     activities: activities.slice(0, limit),
