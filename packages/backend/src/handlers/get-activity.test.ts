@@ -140,14 +140,14 @@ describe('get-activity baseHandler', () => {
 
     // 7-day period from Dec 29 through Jan 5 = 8 entries
     expect(body.trends.storage.length).toBe(8);
-    expect(body.trends.storage[0]).toStrictEqual({ date: '2025-12-29T00:00:00.000Z', value: 1000 });
-    expect(body.trends.storage[1]).toStrictEqual({ date: '2025-12-30T00:00:00.000Z', value: 0 });
-    expect(body.trends.storage[2]).toStrictEqual({ date: '2025-12-31T00:00:00.000Z', value: 2000 });
-    expect(body.trends.storage[3]).toStrictEqual({ date: '2026-01-01T00:00:00.000Z', value: 0 });
+    expect(body.trends.storage[0]).toStrictEqual({ date: '2025-12-29T23:59:59.999Z', value: 1000 });
+    expect(body.trends.storage[1]).toStrictEqual({ date: '2025-12-30T23:59:59.999Z', value: 0 });
+    expect(body.trends.storage[2]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 2000 });
+    expect(body.trends.storage[3]).toStrictEqual({ date: '2026-01-01T23:59:59.999Z', value: 0 });
 
-    expect(body.trends.objects[0]).toStrictEqual({ date: '2025-12-29T00:00:00.000Z', value: 5 });
-    expect(body.trends.objects[2]).toStrictEqual({ date: '2025-12-31T00:00:00.000Z', value: 10 });
-    expect(body.trends.objects[3]).toStrictEqual({ date: '2026-01-01T00:00:00.000Z', value: 0 });
+    expect(body.trends.objects[0]).toStrictEqual({ date: '2025-12-29T23:59:59.999Z', value: 5 });
+    expect(body.trends.objects[2]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 10 });
+    expect(body.trends.objects[3]).toStrictEqual({ date: '2026-01-01T23:59:59.999Z', value: 0 });
     vi.useRealTimers();
   });
 
@@ -182,8 +182,8 @@ describe('get-activity baseHandler', () => {
     // 30-day period from Jan 1 through Jan 31 = 31 entries
     expect(body.trends.storage.length).toBe(31);
     expect(body.trends.objects.length).toBe(31);
-    // First entry should be Jan 1 midnight UTC
-    expect(body.trends.storage[0].date).toBe('2026-01-01T00:00:00.000Z');
+    // First entry should be Jan 1 end-of-day UTC
+    expect(body.trends.storage[0].date).toBe('2026-01-01T23:59:59.999Z');
     vi.useRealTimers();
   });
 

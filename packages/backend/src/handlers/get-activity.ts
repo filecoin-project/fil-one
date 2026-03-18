@@ -16,6 +16,12 @@ import { getStorageSamples } from '../lib/aurora-backoffice.js';
 
 const dynamo = getDynamoClient();
 
+function endOfDay(d: Date): Date {
+  const eod = new Date(d);
+  eod.setUTCHours(23, 59, 59, 999);
+  return eod;
+}
+
 export async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyStructuredResultV2> {
@@ -127,17 +133,19 @@ export async function baseHandler(
       })
     : [];
 
-  // Index Aurora samples by date
+  // Index Aurora samples by end-of-day timestamp
   const samplesByDate = new Map(
-    storageSamples.filter((s) => s.timestamp).map((s) => [s.timestamp!.slice(0, 10), s] as const),
+    storageSamples
+      .filter((s) => s.timestamp)
+      .map((s) => [endOfDay(new Date(s.timestamp!)).toISOString(), s] as const),
   );
 
   // Build full date range with gap-filling
   const storageSeries: UsageDataPoint[] = [];
   const objectsSeries: UsageDataPoint[] = [];
   for (const d = new Date(from); d <= now; d.setUTCDate(d.getUTCDate() + 1)) {
-    const date = d.toISOString();
-    const sample = samplesByDate.get(date.slice(0, 10));
+    const date = endOfDay(d).toISOString();
+    const sample = samplesByDate.get(date);
     storageSeries.push({ date, value: sample?.bytesUsed ?? 0 });
     objectsSeries.push({ date, value: sample?.objectCount ?? 0 });
   }
