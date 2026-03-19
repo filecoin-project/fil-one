@@ -224,6 +224,38 @@ describe('GET /api/me handler', () => {
     expect(mockTriggerTenantSetup).not.toHaveBeenCalled();
   });
 
+  it('returns success even when triggerTenantSetup fails', async () => {
+    mockTriggerTenantSetup.mockRejectedValue(new Error('SQS timeout'));
+
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({
+        Item: {
+          pk: { S: `ORG#${MOCK_ORG_ID}` },
+          sk: { S: 'PROFILE' },
+          name: { S: 'Example Corp' },
+          orgConfirmed: { BOOL: true },
+          setupStatus: { S: 'FILONE_ORG_CREATED' },
+        },
+      });
+
+    const result = await handler(authenticatedEvent(), buildContext());
+
+    expect(result).toMatchObject({
+      statusCode: 200,
+      body: JSON.stringify({
+        orgId: MOCK_ORG_ID,
+        orgName: 'Example Corp',
+        orgConfirmed: true,
+        email: MOCK_EMAIL,
+        orgSetupComplete: false,
+      }),
+    });
+  });
+
   it('does not trigger tenant setup when org is not confirmed', async () => {
     ddbMock
       .on(GetItemCommand, {

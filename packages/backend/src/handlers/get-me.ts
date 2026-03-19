@@ -32,7 +32,11 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   const orgConfirmed = Item?.orgConfirmed?.BOOL === true;
 
   if (orgConfirmed && !isOrgSetupComplete(setupStatus)) {
-    await triggerTenantSetup({ orgId, orgName });
+    try {
+      await triggerTenantSetup({ orgId, orgName });
+    } catch (error) {
+      console.error('[get-me] Failed to trigger tenant setup', { error, orgId });
+    }
   }
 
   const body: MeResponse = {
