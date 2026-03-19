@@ -21,6 +21,10 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   const { userId, orgId } = getUserInfo(event);
   const uploadsTableName = Resource.UploadsTable.name;
 
+  // TODO: Integrate with aurora to get the definitive form of this data.
+  // https://linear.app/filecoin-foundation/issue/FIL-68/create-a-data-summary-api
+  // Iterating over all buckets and their objects is not a scalable way to do this
+
   // 1. Query all buckets
   const bucketsResult = await dynamo.send(
     new QueryCommand({
