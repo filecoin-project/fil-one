@@ -32,6 +32,7 @@ vi.mock('sst', () => ({
     Auth0MgmtClientId: { value: 'mgmt-client-id' },
     Auth0MgmtClientSecret: { value: 'mgmt-client-secret' },
     Auth0ClientId: { value: 'auth0-client-id' },
+    SendGridApiKey: { value: 'SG.test-api-key' },
   },
 }));
 
@@ -81,6 +82,7 @@ function buildCfnEvent(
 
 let capturedCfnBody: Record<string, unknown> | undefined;
 let capturedAuth0PatchBody: Record<string, unknown> | undefined;
+let capturedEmailProviderBody: Record<string, unknown> | undefined;
 
 function stubAuth0Fetch(
   clientState = {
@@ -89,9 +91,11 @@ function stubAuth0Fetch(
     web_origins: [] as string[],
     initiate_login_uri: '',
   },
+  emailProviderStatus = 200,
 ) {
   capturedCfnBody = undefined;
   capturedAuth0PatchBody = undefined;
+  capturedEmailProviderBody = undefined;
 
   mockFetch.mockImplementation(async (url, init) => {
     const urlStr = String(url);
@@ -109,6 +113,13 @@ function stubAuth0Fetch(
     }
     if (urlStr.includes('/api/v2/clients/') && init?.method === 'PATCH') {
       capturedAuth0PatchBody = JSON.parse(init.body!);
+      return new Response('{}', { status: 200 });
+    }
+    if (urlStr.includes('/api/v2/emails/provider') && init?.method === 'PUT') {
+      capturedEmailProviderBody = JSON.parse(init.body!);
+      if (emailProviderStatus !== 200) {
+        return new Response('Provider config error', { status: emailProviderStatus });
+      }
       return new Response('{}', { status: 200 });
     }
     if (init?.method === 'PUT') {
@@ -518,7 +529,31 @@ describe('setup-integrations', () => {
         ],
         allowed_logout_urls: ['https://app.example.com/sign-in'],
         web_origins: ['https://app.example.com'],
-        initiate_login_uri: 'https://app.example.com/sign-in',
+      });
+    });
+
+    it('sets initiate_login_uri for staging stage', async () => {
+      ssmMock.on(GetParameterCommand).rejects({ name: 'ParameterNotFound' });
+      ssmMock.on(PutParameterCommand).resolves({});
+      mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
+      mockStripeWebhookEndpoints.create.mockResolvedValue({
+        id: 'we_1',
+        secret: 'whsec_1',
+      });
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Create',
+          ResourceProperties: {
+            ServiceToken: 'arn:aws:lambda:us-east-1:123:function:setup',
+            SiteUrl: 'https://staging.fil.one',
+            Stage: 'staging',
+          },
+        }),
+      );
+
+      expect(capturedAuth0PatchBody).toMatchObject({
+        initiate_login_uri: 'https://staging.fil.one/sign-in',
       });
     });
 
@@ -547,7 +582,166 @@ describe('setup-integrations', () => {
         callbacks: ['https://other.example.com/callback'],
         allowed_logout_urls: [],
         web_origins: [],
-        initiate_login_uri: '',
+      });
+    });
+  });
+
+  // ── Auth0 email provider ────────────────────────────────────────────
+
+  describe('Auth0 email provider', () => {
+    it('configures SendGrid email provider on Create for staging', async () => {
+      ssmMock.on(GetParameterCommand).rejects({ name: 'ParameterNotFound' });
+      ssmMock.on(PutParameterCommand).resolves({});
+      mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
+      mockStripeWebhookEndpoints.create.mockResolvedValue({
+        id: 'we_1',
+        secret: 'whsec_1',
+      });
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Create',
+          ResourceProperties: {
+            ServiceToken: 'arn:aws:lambda:us-east-1:123:function:setup',
+            SiteUrl: 'https://staging.filone.ai',
+            Stage: 'staging',
+          },
+        }),
+      );
+
+      expect(capturedEmailProviderBody).toEqual({
+        name: 'sendgrid',
+        enabled: true,
+        credentials: { api_key: 'SG.test-api-key' },
+        default_from_address: 'no-reply+staging@filone.ai',
+      });
+    });
+
+    it('uses production from-address when stage is production', async () => {
+      ssmMock.on(GetParameterCommand).rejects({ name: 'ParameterNotFound' });
+      ssmMock.on(PutParameterCommand).resolves({});
+      mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
+      mockStripeWebhookEndpoints.create.mockResolvedValue({
+        id: 'we_1',
+        secret: 'whsec_1',
+      });
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Create',
+          ResourceProperties: {
+            ServiceToken: 'arn:aws:lambda:us-east-1:123:function:setup',
+            SiteUrl: 'https://app.filone.ai',
+            Stage: 'production',
+          },
+        }),
+      );
+
+      expect(capturedEmailProviderBody).toEqual({
+        name: 'sendgrid',
+        enabled: true,
+        credentials: { api_key: 'SG.test-api-key' },
+        default_from_address: 'no-reply@filone.ai',
+      });
+    });
+
+    it('skips email provider for non-staging/production stages', async () => {
+      ssmMock.on(GetParameterCommand).rejects({ name: 'ParameterNotFound' });
+      ssmMock.on(PutParameterCommand).resolves({});
+      mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
+      mockStripeWebhookEndpoints.create.mockResolvedValue({
+        id: 'we_1',
+        secret: 'whsec_1',
+      });
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Create',
+          ResourceProperties: {
+            ServiceToken: 'arn:aws:lambda:us-east-1:123:function:setup',
+            SiteUrl: 'https://alice.filone.dev',
+            Stage: 'alice',
+          },
+        }),
+      );
+
+      expect(capturedEmailProviderBody).toBeUndefined();
+    });
+
+    it('does not configure email provider on Delete', async () => {
+      ssmMock.on(DeleteParameterCommand).resolves({});
+      mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Delete',
+          PhysicalResourceId: 'filone-setup-dev',
+        }),
+      );
+
+      expect(capturedEmailProviderBody).toBeUndefined();
+    });
+
+    it('sends FAILED CFN response when email provider setup fails', async () => {
+      ssmMock.on(GetParameterCommand).rejects({ name: 'ParameterNotFound' });
+      ssmMock.on(PutParameterCommand).resolves({});
+      mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
+      mockStripeWebhookEndpoints.create.mockResolvedValue({
+        id: 'we_1',
+        secret: 'whsec_1',
+      });
+
+      stubAuth0Fetch(undefined, 422);
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Create',
+          ResourceProperties: {
+            ServiceToken: 'arn:aws:lambda:us-east-1:123:function:setup',
+            SiteUrl: 'https://staging.filone.ai',
+            Stage: 'staging',
+          },
+        }),
+      );
+
+      expect(capturedCfnBody).toEqual({
+        Status: 'FAILED',
+        Reason: 'Auth0 email provider setup failed (422): Provider config error',
+        PhysicalResourceId: 'filone-setup-staging',
+        ...BASE_CFN_FIELDS,
+      });
+    });
+
+    it('configures email provider on Update for staging', async () => {
+      ssmMock.on(GetParameterCommand).resolves({
+        Parameter: { Value: 'whsec_existing' },
+      });
+      mockStripeWebhookEndpoints.list.mockResolvedValue({
+        data: [{ id: 'we_1', url: 'https://staging.filone.ai/api/stripe/webhook' }],
+      });
+      mockStripeWebhookEndpoints.update.mockResolvedValue({});
+
+      await handler(
+        buildCfnEvent({
+          RequestType: 'Update',
+          PhysicalResourceId: 'filone-setup-staging',
+          ResourceProperties: {
+            ServiceToken: 'arn:aws:lambda:us-east-1:123:function:setup',
+            SiteUrl: 'https://staging.filone.ai',
+            Stage: 'staging',
+          },
+          OldResourceProperties: {
+            SiteUrl: 'https://staging.filone.ai',
+            Stage: 'staging',
+          },
+        } as never),
+      );
+
+      expect(capturedEmailProviderBody).toEqual({
+        name: 'sendgrid',
+        enabled: true,
+        credentials: { api_key: 'SG.test-api-key' },
+        default_from_address: 'no-reply+staging@filone.ai',
       });
     });
   });

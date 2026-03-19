@@ -172,6 +172,7 @@ describe('authMiddleware', () => {
         userId: existingUserId,
         orgId: existingOrgId,
         email: MOCK_EMAIL,
+        emailVerified: false,
       });
     });
 
@@ -223,6 +224,7 @@ describe('authMiddleware', () => {
         userId: existingUserId,
         orgId: existingOrgId,
         email: 'stored@example.com',
+        emailVerified: false,
       });
     });
 
@@ -249,6 +251,7 @@ describe('authMiddleware', () => {
         userId: MOCK_USER_ID,
         orgId: MOCK_ORG_ID,
         email: undefined,
+        emailVerified: false,
       });
     });
 
@@ -351,8 +354,8 @@ describe('authMiddleware', () => {
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: existingUserId,
         orgId: existingOrgId,
-
         email: MOCK_EMAIL,
+        emailVerified: false,
       });
     });
 
@@ -379,8 +382,8 @@ describe('authMiddleware', () => {
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: MOCK_USER_ID,
         orgId: MOCK_ORG_ID,
-
         email: MOCK_EMAIL,
+        emailVerified: false,
       });
 
       const transactCalls = ddbMock.commandCalls(TransactWriteItemsCommand);
@@ -505,8 +508,8 @@ describe('authMiddleware', () => {
       expect(getUserInfoFromEvent(event)).toStrictEqual({
         userId: existingUserId,
         orgId: existingOrgId,
-
         email: MOCK_EMAIL,
+        emailVerified: false,
       });
       expect(request.internal.newTokens).toEqual({
         access_token: 'new-access-token',

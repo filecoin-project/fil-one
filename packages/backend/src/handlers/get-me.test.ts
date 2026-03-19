@@ -54,7 +54,7 @@ const MOCK_EMAIL = 'user@example.com';
 
 function authenticatedEvent() {
   return buildEvent({
-    cookies: [`hs_access_token=valid-token`],
+    cookies: [`hs_access_token=valid-token`, `hs_id_token=id-token`],
     userInfo: { userId: MOCK_USER_ID, orgId: MOCK_ORG_ID, email: MOCK_EMAIL },
   });
 }
@@ -70,7 +70,7 @@ describe('GET /api/me handler', () => {
     mockTriggerTenantSetup.mockResolvedValue({});
 
     mockJwtVerify.mockResolvedValue({
-      payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
+      payload: { sub: MOCK_SUB, email: MOCK_EMAIL, email_verified: true },
     });
 
     // Auth middleware: resolve existing user
@@ -114,6 +114,7 @@ describe('GET /api/me handler', () => {
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
         orgConfirmed: true,
+        emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: true,
       }),
@@ -144,6 +145,7 @@ describe('GET /api/me handler', () => {
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
         orgConfirmed: true,
+        emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: false,
       }),
@@ -173,6 +175,7 @@ describe('GET /api/me handler', () => {
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
         orgConfirmed: true,
+        emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: false,
       }),
@@ -250,6 +253,7 @@ describe('GET /api/me handler', () => {
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
         orgConfirmed: true,
+        emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: false,
       }),
