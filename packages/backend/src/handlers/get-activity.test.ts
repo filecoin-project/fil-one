@@ -122,10 +122,12 @@ describe('get-activity baseHandler', () => {
     const body = JSON.parse(String(result.body));
     expect(body.activities).toStrictEqual([]);
     // Default period is 7d → 8 entries (from Jan 1 through Jan 8)
-    expect(body.trends.storage.length).toBe(8);
-    expect(body.trends.storage.every((p: { value: number }) => p.value === 0)).toBe(true);
-    expect(body.trends.objects.length).toBe(8);
-    expect(body.trends.objects.every((p: { value: number }) => p.value === 0)).toBe(true);
+    expect(body.trends.storage).toStrictEqual(
+      new Array(8).fill({ value: 0, date: expect.any(String) }),
+    );
+    expect(body.trends.objects).toStrictEqual(
+      new Array(8).fill({ value: 0, date: expect.any(String) }),
+    );
   });
 
   it('returns trends from Aurora with missing days zero-filled', async () => {
@@ -143,7 +145,7 @@ describe('get-activity baseHandler', () => {
     const body = JSON.parse(String(result.body));
 
     // 7-day period from Dec 29 through Jan 5 = 8 entries
-    expect(body.trends.storage.length).toBe(8);
+    expect(body.trends.storage).toHaveLength(8);
     expect(body.trends.storage[0]).toStrictEqual({ date: '2025-12-29T23:59:59.999Z', value: 1000 });
     expect(body.trends.storage[1]).toStrictEqual({ date: '2025-12-30T23:59:59.999Z', value: 0 });
     expect(body.trends.storage[2]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 2000 });
@@ -164,8 +166,9 @@ describe('get-activity baseHandler', () => {
     const body = JSON.parse(String(result.body));
 
     // Still get a full series of zeroes
-    expect(body.trends.storage.length).toBe(8);
-    expect(body.trends.storage.every((p: { value: number }) => p.value === 0)).toBe(true);
+    expect(body.trends.storage).toStrictEqual(
+      new Array(8).fill({ value: 0, date: expect.any(String) }),
+    );
     expect(mockGetStorageSamples).not.toHaveBeenCalled();
     vi.useRealTimers();
   });

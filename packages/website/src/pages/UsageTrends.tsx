@@ -14,6 +14,7 @@ import type { UsageTrendsResponse } from '@filone/shared';
 
 import { formatBytes, formatBytesShort } from '@filone/shared';
 import { getActivity } from '../lib/api.js';
+import { formatDate } from '../lib/time.js';
 
 // ---------------------------------------------------------------------------
 // Component
