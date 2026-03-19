@@ -11,7 +11,6 @@ export type { UsageLimits } from './constants.js';
 export { formatBytes, formatBytesShort } from './formatBytes.js';
 export type { MeResponse, ConfirmOrgRequest, ConfirmOrgResponse } from './api/me.js';
 export { OrgRole } from './api/org.js';
-export type { UploadRequest, UploadResponse } from './api/upload.js';
 export { ApiErrorCode } from './api/coreInterfaces.js';
 export type { ErrorResponse } from './api/coreInterfaces.js';
 
@@ -27,9 +26,9 @@ export type {
   S3Object,
   ListObjectsRequest,
   ListObjectsResponse,
-  UploadObjectRequest,
-  UploadObjectResponse,
   DeleteObjectRequest,
+  PresignUploadRequest,
+  PresignUploadResponse,
 } from './api/objects.js';
 
 export type {
