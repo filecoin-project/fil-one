@@ -198,8 +198,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
       const key = objectName.trim();
       const contentType = selectedFile.type || 'application/octet-stream';
 
-      // Step 1: Get presigned URL (0-5%)
-      setUploadProgress(2);
+      // Step 1: Get presigned URL
       const description = objectDescription.trim() || undefined;
       const presignData = await apiRequest<PresignUploadResponse>(
         `/buckets/${encodeURIComponent(bucketName)}/objects/presign`,
@@ -213,15 +212,15 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
           }),
         },
       );
-      setUploadProgress(5);
+      setUploadProgress(1);
 
-      // Step 2: Upload directly to Aurora S3 via XHR for real progress (5-100%)
+      // Step 2: Upload directly to Aurora S3 via XHR for real progress
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            const pct = 5 + (e.loaded / e.total) * 95;
-            setUploadProgress(Math.round(pct));
+            // Never drop below 1% — we already showed progress for the presign step
+            setUploadProgress(Math.max(1, Math.round((e.loaded / e.total) * 100)));
           }
         };
         xhr.onload = () => {
