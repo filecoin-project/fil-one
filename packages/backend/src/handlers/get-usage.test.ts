@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -30,10 +31,20 @@ vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn((_url: unknown) => 'mock-jwks'),
 }));
 
-const ddbMock = mockClient(DynamoDBClient);
+const mockGetAuroraS3Credentials = vi.fn();
+const mockListObjects = vi.fn();
+
+vi.mock('../lib/aurora-s3-client.js', () => ({
+  getAuroraS3Credentials: (...args: unknown[]) => mockGetAuroraS3Credentials(...args),
+  listObjects: (...args: unknown[]) => mockListObjects(...args),
+}));
 
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
+process.env.FILONE_STAGE = 'test';
+process.env.AURORA_S3_GATEWAY_URL = 'https://s3.dev.aur.lu';
+
+const ddbMock = mockClient(DynamoDBClient);
 
 import { handler } from './get-usage.js';
 import { buildEvent, buildContext } from '../test/lambda-test-utilities.js';
@@ -84,6 +95,8 @@ function mockAuthIdentity() {
         sk: { S: 'PROFILE' },
         name: { S: 'Test Org' },
         orgConfirmed: { BOOL: true },
+        auroraTenantId: { S: 'aurora-t-1' },
+        setupStatus: { S: FINAL_SETUP_STATUS },
       },
     });
 }
@@ -113,20 +126,22 @@ function mockBuckets(bucketNames: string[]) {
     });
 }
 
-/** Mock the objects query for a specific bucket. */
+/** Mock listObjects for a specific bucket. */
 function mockBucketObjects(bucketName: string, objects: { sizeBytes: number }[]) {
-  ddbMock
-    .on(QueryCommand, {
-      TableName: 'UploadsTable',
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
-      ExpressionAttributeValues: {
-        ':pk': { S: `BUCKET#${MOCK_USER_ID}#${bucketName}` },
-        ':skPrefix': { S: 'OBJECT#' },
-      },
-    })
-    .resolves({
-      Items: objects.map((obj) => marshall(obj)),
-    });
+  mockListObjects.mockImplementation((opts: { bucket: string }) => {
+    // Find the right bucket match
+    if (opts.bucket === bucketName) {
+      return Promise.resolve({
+        objects: objects.map((o, i) => ({
+          key: `obj-${i}`,
+          sizeBytes: o.sizeBytes,
+          lastModified: '2024-01-01T00:00:00.000Z',
+        })),
+        isTruncated: false,
+      });
+    }
+    return Promise.resolve({ objects: [], isTruncated: false });
+  });
 }
 
 /** Mock the access keys count query. */
@@ -155,6 +170,11 @@ describe('GET /api/usage handler', () => {
       payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
     });
     mockAuthIdentity();
+    mockListObjects.mockResolvedValue({ objects: [], isTruncated: false });
+    mockGetAuroraS3Credentials.mockResolvedValue({
+      accessKeyId: 'AKIA_CONSOLE',
+      secretAccessKey: 's3_secret',
+    });
   });
 
   it('returns usage data with no buckets and no keys', async () => {
@@ -177,9 +197,25 @@ describe('GET /api/usage handler', () => {
 
   it('sums storage across multiple buckets and objects', async () => {
     mockBuckets(['photos', 'docs']);
-    mockBucketObjects('photos', [{ sizeBytes: 1000 }, { sizeBytes: 2500 }]);
-    mockBucketObjects('docs', [{ sizeBytes: 500 }]);
     mockAccessKeys(3);
+
+    let callCount = 0;
+    mockListObjects.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve({
+          objects: [
+            { key: 'a.jpg', sizeBytes: 1000, lastModified: '2024-01-01T00:00:00.000Z' },
+            { key: 'b.jpg', sizeBytes: 2500, lastModified: '2024-01-01T00:00:00.000Z' },
+          ],
+          isTruncated: false,
+        });
+      }
+      return Promise.resolve({
+        objects: [{ key: 'c.txt', sizeBytes: 500, lastModified: '2024-01-01T00:00:00.000Z' }],
+        isTruncated: false,
+      });
+    });
 
     const result = await handler(authenticatedEvent(), buildContext());
 

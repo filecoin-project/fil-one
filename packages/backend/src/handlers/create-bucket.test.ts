@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -41,7 +42,7 @@ function orgProfileWithTenant(tenantId: string) {
       pk: { S: `ORG#${USER_INFO.orgId}` },
       sk: { S: 'PROFILE' },
       auroraTenantId: { S: tenantId },
-      setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
+      setupStatus: { S: FINAL_SETUP_STATUS },
     },
   };
 }
