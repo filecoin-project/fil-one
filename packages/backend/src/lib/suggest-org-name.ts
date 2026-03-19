@@ -5,6 +5,8 @@
  * It is best-effort only — the suggested name is never blocking.
  */
 
+import * as psl from 'psl';
+
 export const PUBLIC_EMAIL_DOMAINS = new Set([
   // Google
   'gmail.com',
@@ -53,28 +55,23 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function kebabToTitleCase(s: string): string {
+  return s.split('-').map(capitalize).join(' ');
+}
+
 export function suggestOrgName(email: string): string | undefined {
   const [localPart, rawDomain] = email.split('@');
   const domain = rawDomain?.toLowerCase();
   if (!domain || !localPart) return undefined;
 
   if (PUBLIC_EMAIL_DOMAINS.has(domain)) {
-    // Public provider — use the local part as a best-effort name.
-    // e.g. "alice@gmail.com" → "Alice"
     return capitalize(localPart.toLowerCase());
   }
 
-  // Corporate domain — use the second-level domain label as the org name.
-  // e.g. "alice@acme.com" → "Acme", "dev@eng.bigcorp.co.uk" → "Bigcorp"
-  const parts = domain.split('.');
-  const COMPOUND_TLDS = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'edu']);
-  // Walk backwards: skip the TLD, skip compound SLD (co.uk, com.au, etc.)
-  let idx = parts.length - 2;
-  if (idx > 0 && COMPOUND_TLDS.has(parts[idx]!)) {
-    idx--;
-  }
-  const name = parts[idx];
-  if (!name) return undefined;
+  // Use psl to extract the second-level domain label.
+  // e.g. "eng.bigcorp.co.uk" → sld "bigcorp", "acme.com" → sld "acme"
+  const parsed = psl.parse(domain);
+  if ('error' in parsed || !parsed.sld) return undefined;
 
-  return capitalize(name);
+  return kebabToTitleCase(parsed.sld);
 }

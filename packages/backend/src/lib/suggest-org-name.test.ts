@@ -10,7 +10,9 @@ describe('suggestOrgName', () => {
       ['dev@eng.bigcorp.com', 'Bigcorp'],
       ['dev@eng.bigcorp.co.uk', 'Bigcorp'],
       ['ceo@startup.org', 'Startup'],
-      ['info@my-company.com', 'My-company'],
+      ['info@my-company.com', 'My Company'],
+      ['user@some-long-name.co.uk', 'Some Long Name'],
+      ['user@protocol.labs', 'Protocol'],
     ])('%s → %s', (email, expected) => {
       expect(suggestOrgName(email)).toBe(expected);
     });
