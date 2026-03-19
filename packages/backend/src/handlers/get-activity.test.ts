@@ -49,7 +49,9 @@ function orgProfileItem(auroraTenantId?: string) {
   return {
     pk: { S: `ORG#${USER_INFO.orgId}` },
     sk: { S: 'PROFILE' },
-    ...(auroraTenantId ? { auroraTenantId: { S: auroraTenantId } } : {}),
+    ...(auroraTenantId
+      ? { auroraTenantId: { S: auroraTenantId }, setupStatus: { S: FINAL_SETUP_STATUS } }
+      : {}),
   };
 }
 
