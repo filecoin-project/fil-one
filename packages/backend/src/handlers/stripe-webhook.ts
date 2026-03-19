@@ -234,7 +234,7 @@ async function handlePaymentSucceeded(tableName: string, invoice: Stripe.Invoice
         sk: { S: 'SUBSCRIPTION' },
       },
       UpdateExpression:
-        'SET subscriptionStatus = :active, lastPaymentAt = :now, updatedAt = :now REMOVE gracePeriodEndsAt, lastPaymentFailedAt',
+        'SET subscriptionStatus = :active, lastPaymentAt = :now, updatedAt = :now REMOVE gracePeriodEndsAt, lastPaymentFailedAt, canceledAt',
       ExpressionAttributeValues: {
         ':active': { S: SubscriptionStatus.Active },
         ':now': { S: new Date().toISOString() },

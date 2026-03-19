@@ -559,7 +559,7 @@ describe('stripe-webhook handler', () => {
   // 7. invoice.payment_succeeded
   // -----------------------------------------------------------------------
   describe('invoice.payment_succeeded', () => {
-    it('sets Active status, REMOVEs gracePeriodEndsAt and lastPaymentFailedAt', async () => {
+    it('sets Active status, REMOVEs gracePeriodEndsAt, lastPaymentFailedAt, and canceledAt', async () => {
       setupStripeEvent('invoice.payment_succeeded', mockInvoice());
       setupCustomerRetrieve();
 
@@ -575,7 +575,7 @@ describe('stripe-webhook handler', () => {
           sk: { S: 'SUBSCRIPTION' },
         },
         UpdateExpression:
-          'SET subscriptionStatus = :active, lastPaymentAt = :now, updatedAt = :now REMOVE gracePeriodEndsAt, lastPaymentFailedAt',
+          'SET subscriptionStatus = :active, lastPaymentAt = :now, updatedAt = :now REMOVE gracePeriodEndsAt, lastPaymentFailedAt, canceledAt',
         ExpressionAttributeValues: {
           ':active': { S: SubscriptionStatus.Active },
           ':now': { S: expect.any(String) },
