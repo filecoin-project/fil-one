@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -13,6 +14,17 @@ vi.mock('sst', () => ({
     UserInfoTable: { name: 'UserInfoTable' },
   },
 }));
+
+const mockGetAuroraS3Credentials = vi.fn();
+const mockListObjects = vi.fn();
+
+vi.mock('../lib/aurora-s3-client.js', () => ({
+  getAuroraS3Credentials: (...args: unknown[]) => mockGetAuroraS3Credentials(...args),
+  listObjects: (...args: unknown[]) => mockListObjects(...args),
+}));
+
+process.env.FILONE_STAGE = 'test';
+process.env.AURORA_S3_GATEWAY_URL = 'https://s3.dev.aur.lu';
 
 const ddbMock = mockClient(DynamoDBClient);
 
@@ -36,20 +48,6 @@ function bucketItem(name: string, createdAt: string) {
   });
 }
 
-function objectItem(bucketName: string, key: string, uploadedAt: string, sizeBytes: number) {
-  return marshall({
-    pk: `BUCKET#${USER_INFO.userId}#${bucketName}`,
-    sk: `OBJECT#${key}`,
-    key,
-    fileName: key,
-    contentType: 'application/octet-stream',
-    sizeBytes,
-    uploadedAt,
-    etag: '"abc"',
-    s3Key: `${bucketName}/${key}`,
-  });
-}
-
 function keyItem(id: string, keyName: string, createdAt: string) {
   return marshall({
     pk: `ORG#${USER_INFO.orgId}`,
@@ -59,6 +57,17 @@ function keyItem(id: string, keyName: string, createdAt: string) {
     createdAt,
     status: 'active',
   });
+}
+
+function orgProfileWithTenant() {
+  return {
+    Item: {
+      pk: { S: `ORG#${USER_INFO.orgId}` },
+      sk: { S: 'PROFILE' },
+      auroraTenantId: { S: 'aurora-t-1' },
+      setupStatus: { S: FINAL_SETUP_STATUS },
+    },
+  };
 }
 
 /** Build an array of { date: expect.any(String), value } for flat trend assertions. */
@@ -74,6 +83,12 @@ describe('get-activity baseHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
+    mockGetAuroraS3Credentials.mockResolvedValue({
+      accessKeyId: 'AKIA_CONSOLE',
+      secretAccessKey: 's3_secret',
+    });
+    mockListObjects.mockResolvedValue({ objects: [], isTruncated: false });
+    ddbMock.on(GetItemCommand, { TableName: 'UserInfoTable' }).resolves(orgProfileWithTenant());
   });
 
   it('returns 200 with empty activities and flat trends when no buckets exist', async () => {
@@ -103,27 +118,20 @@ describe('get-activity baseHandler', () => {
         Items: [bucketItem('photos', '2026-01-01T00:00:00Z')],
       });
 
-    // Second query: objects in bucket
-    ddbMock
-      .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#photos` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('photos', 'cat.jpg', '2026-01-05T00:00:00Z', 1024),
-          objectItem('photos', 'dog.jpg', '2026-01-03T00:00:00Z', 2048),
-        ],
-      });
-
-    // Third query: access keys
+    // Access keys query
     ddbMock
       .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'cat.jpg', sizeBytes: 1024, lastModified: '2026-01-05T00:00:00.000Z' },
+        { key: 'dog.jpg', sizeBytes: 2048, lastModified: '2026-01-03T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
@@ -138,7 +146,7 @@ describe('get-activity baseHandler', () => {
           action: 'object.uploaded',
           resourceType: 'object',
           resourceName: 'cat.jpg',
-          timestamp: '2026-01-05T00:00:00Z',
+          timestamp: '2026-01-05T00:00:00.000Z',
           sizeBytes: 1024,
         },
         {
@@ -146,7 +154,7 @@ describe('get-activity baseHandler', () => {
           action: 'object.uploaded',
           resourceType: 'object',
           resourceName: 'dog.jpg',
-          timestamp: '2026-01-03T00:00:00Z',
+          timestamp: '2026-01-03T00:00:00.000Z',
           sizeBytes: 2048,
         },
         {
@@ -175,24 +183,18 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
-          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
-          objectItem('b1', 'c.txt', '2026-01-04T00:00:00Z', 300),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'a.txt', sizeBytes: 100, lastModified: '2026-01-02T00:00:00.000Z' },
+        { key: 'b.txt', sizeBytes: 200, lastModified: '2026-01-03T00:00:00.000Z' },
+        { key: 'c.txt', sizeBytes: 300, lastModified: '2026-01-04T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -208,7 +210,7 @@ describe('get-activity baseHandler', () => {
           action: 'object.uploaded',
           resourceType: 'object',
           resourceName: 'c.txt',
-          timestamp: '2026-01-04T00:00:00Z',
+          timestamp: '2026-01-04T00:00:00.000Z',
           sizeBytes: 300,
         },
         {
@@ -216,7 +218,7 @@ describe('get-activity baseHandler', () => {
           action: 'object.uploaded',
           resourceType: 'object',
           resourceName: 'b.txt',
-          timestamp: '2026-01-03T00:00:00Z',
+          timestamp: '2026-01-03T00:00:00.000Z',
           sizeBytes: 200,
         },
       ],
@@ -238,23 +240,17 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
-          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'a.txt', sizeBytes: 100, lastModified: '2026-01-02T00:00:00.000Z' },
+        { key: 'b.txt', sizeBytes: 200, lastModified: '2026-01-03T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -278,23 +274,17 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
-          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'a.txt', sizeBytes: 100, lastModified: '2026-01-02T00:00:00.000Z' },
+        { key: 'b.txt', sizeBytes: 200, lastModified: '2026-01-03T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -381,23 +371,17 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#data` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('data', 'old.bin', twoDaysAgo.toISOString(), 500),
-          objectItem('data', 'new.bin', yesterday.toISOString(), 300),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'old.bin', sizeBytes: 500, lastModified: twoDaysAgo.toISOString() },
+        { key: 'new.bin', sizeBytes: 300, lastModified: yesterday.toISOString() },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
@@ -441,32 +425,6 @@ describe('get-activity baseHandler', () => {
     });
   });
 
-  it('queries DynamoDB with correct key conditions', async () => {
-    ddbMock.on(QueryCommand).resolves({ Items: [] });
-
-    const event = buildEvent({ userInfo: USER_INFO });
-    await baseHandler(event);
-
-    const calls = ddbMock.commandCalls(QueryCommand);
-    expect(calls).toHaveLength(2);
-    expect(calls.at(0)?.args.at(0)?.input).toStrictEqual({
-      TableName: 'UploadsTable',
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
-      ExpressionAttributeValues: {
-        ':pk': { S: 'USER#user-1' },
-        ':skPrefix': { S: 'BUCKET#' },
-      },
-    });
-    expect(calls.at(1)?.args.at(0)?.input).toStrictEqual({
-      TableName: 'UserInfoTable',
-      KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
-      ExpressionAttributeValues: {
-        ':pk': { S: 'ORG#org-1' },
-        ':skPrefix': { S: 'ACCESSKEY#' },
-      },
-    });
-  });
-
   it('includes key activities sorted with buckets and objects', async () => {
     ddbMock
       .on(QueryCommand, {
@@ -475,15 +433,6 @@ describe('get-activity baseHandler', () => {
       .resolves({
         Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
       });
-
-    ddbMock
-      .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({ Items: [] });
 
     ddbMock
       .on(QueryCommand, {
@@ -524,7 +473,7 @@ describe('get-activity baseHandler', () => {
     });
   });
 
-  it('includes sizeBytes and cid on object activities when present', async () => {
+  it('includes sizeBytes on object activities when present', async () => {
     ddbMock
       .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `USER#${USER_INFO.userId}` } },
@@ -533,33 +482,16 @@ describe('get-activity baseHandler', () => {
         Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
       });
 
-    const objWithCid = marshall({
-      pk: `BUCKET#${USER_INFO.userId}#b1`,
-      sk: 'OBJECT#file.dat',
-      key: 'file.dat',
-      fileName: 'file.dat',
-      contentType: 'application/octet-stream',
-      sizeBytes: 4096,
-      uploadedAt: '2026-01-02T00:00:00Z',
-      etag: '"xyz"',
-      s3Key: 'b1/file.dat',
-      cid: 'bafy123',
-    });
-
-    ddbMock
-      .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({ Items: [objWithCid] });
-
     ddbMock
       .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [{ key: 'file.dat', sizeBytes: 4096, lastModified: '2026-01-02T00:00:00.000Z' }],
+      isTruncated: false,
+    });
 
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
@@ -572,9 +504,8 @@ describe('get-activity baseHandler', () => {
           action: 'object.uploaded',
           resourceType: 'object',
           resourceName: 'file.dat',
-          timestamp: '2026-01-02T00:00:00Z',
+          timestamp: '2026-01-02T00:00:00.000Z',
           sizeBytes: 4096,
-          cid: 'bafy123',
         },
         {
           id: 'bucket-b1',
