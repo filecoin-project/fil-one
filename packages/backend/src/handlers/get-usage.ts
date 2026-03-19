@@ -1,11 +1,12 @@
-import { GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { marshall } from '@aws-sdk/util-dynamodb';
+import { GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
 import type { UsageResponse } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
@@ -23,22 +24,26 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   const { orgId } = getUserInfo(event);
   const userInfoTableName = Resource.UserInfoTable.name;
 
-  // Look up org profile to get auroraTenantId
+  // 1. Look up org profile for Aurora S3 credentials
   const { Item: orgProfile } = await dynamo.send(
     new GetItemCommand({
       TableName: userInfoTableName,
-      Key: marshall({ pk: `ORG#${orgId}`, sk: 'PROFILE' }),
+      Key: { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } },
     }),
   );
-  const auroraTenantId = orgProfile?.auroraTenantId?.S;
 
-  // Fetch usage data from Aurora in parallel
+  const auroraTenantId = orgProfile?.auroraTenantId?.S;
+  const setupStatus = orgProfile?.setupStatus?.S;
+
+  // 2. Fetch usage data from Aurora in parallel
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime());
   thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
 
+  const shouldFetchData =  auroraTenantId && isOrgSetupComplete(setupStatus);
+
   const [storageSamples, operationsSamples, tenantInfo] = await Promise.all([
-    auroraTenantId
+    shouldFetchData
       ? getStorageSamples({
           tenantId: auroraTenantId,
           from: thirtyDaysAgo.toISOString(),
@@ -46,7 +51,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
           window: '720h',
         })
       : [],
-    auroraTenantId
+    shouldFetchData
       ? getOperationsSamples({
           tenantId: auroraTenantId,
           from: thirtyDaysAgo.toISOString(),
@@ -54,7 +59,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
           window: '720h',
         })
       : [],
-    auroraTenantId ? getTenantInfo({ tenantId: auroraTenantId }) : null,
+    shouldFetchData ? getTenantInfo({ tenantId: auroraTenantId }) : null,
   ]);
 
   const latestStorage = storageSamples.at(-1);

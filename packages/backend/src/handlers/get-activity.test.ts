@@ -3,6 +3,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import type { ModelStorageMetricsSample } from '../lib/aurora-backoffice.js';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -20,6 +21,17 @@ const mockGetStorageSamples = vi.fn<() => Promise<ModelStorageMetricsSample[]>>(
 vi.mock('../lib/aurora-backoffice.js', () => ({
   getStorageSamples: (...args: unknown[]) => mockGetStorageSamples(...(args as [])),
 }));
+
+const mockGetAuroraS3Credentials = vi.fn();
+const mockListObjects = vi.fn();
+
+vi.mock('../lib/aurora-s3-client.js', () => ({
+  getAuroraS3Credentials: (...args: unknown[]) => mockGetAuroraS3Credentials(...args),
+  listObjects: (...args: unknown[]) => mockListObjects(...args),
+}));
+
+process.env.FILONE_STAGE = 'test';
+process.env.AURORA_S3_GATEWAY_URL = 'https://s3.dev.aur.lu';
 
 const ddbMock = mockClient(DynamoDBClient);
 
@@ -52,20 +64,6 @@ function bucketItem(name: string, createdAt: string) {
   });
 }
 
-function objectItem(bucketName: string, key: string, uploadedAt: string, sizeBytes: number) {
-  return marshall({
-    pk: `BUCKET#${USER_INFO.userId}#${bucketName}`,
-    sk: `OBJECT#${key}`,
-    key,
-    fileName: key,
-    contentType: 'application/octet-stream',
-    sizeBytes,
-    uploadedAt,
-    etag: '"abc"',
-    s3Key: `${bucketName}/${key}`,
-  });
-}
-
 function keyItem(id: string, keyName: string, createdAt: string) {
   return marshall({
     pk: `ORG#${USER_INFO.orgId}`,
@@ -85,6 +83,22 @@ function storageSample(
   return { timestamp, bytesUsed, objectCount };
 }
 
+function orgProfileWithTenant() {
+  return {
+    Item: {
+      pk: { S: `ORG#${USER_INFO.orgId}` },
+      sk: { S: 'PROFILE' },
+      auroraTenantId: { S: 'aurora-t-1' },
+      setupStatus: { S: FINAL_SETUP_STATUS },
+    },
+  };
+}
+
+/** Build an array of { date: expect.any(String), value } for flat trend assertions. */
+function flatTrend(length: number, value: number) {
+  return Array.from({ length }, () => ({ date: expect.any(String), value }));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -95,6 +109,12 @@ describe('get-activity baseHandler', () => {
     vi.clearAllMocks();
     ddbMock.reset();
     mockGetStorageSamples.mockResolvedValue([]);
+    mockGetAuroraS3Credentials.mockResolvedValue({
+      accessKeyId: 'AKIA_CONSOLE',
+      secretAccessKey: 's3_secret',
+    });
+    mockListObjects.mockResolvedValue({ objects: [], isTruncated: false });
+    ddbMock.on(GetItemCommand, { TableName: 'UserInfoTable' }).resolves(orgProfileWithTenant());
   });
 
   afterEach(() => {
@@ -121,12 +141,12 @@ describe('get-activity baseHandler', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
     expect(body.activities).toStrictEqual([]);
-    // Default period is 7d → 8 entries (from Jan 1 through Jan 8)
+    // Default period is 7d → 7 entries (from Jan 2 through Jan 8)
     expect(body.trends.storage).toStrictEqual(
-      new Array(8).fill({ value: 0, date: expect.any(String) }),
+      new Array(7).fill({ value: 0, date: expect.any(String) }),
     );
     expect(body.trends.objects).toStrictEqual(
-      new Array(8).fill({ value: 0, date: expect.any(String) }),
+      new Array(7).fill({ value: 0, date: expect.any(String) }),
     );
   });
 
@@ -144,16 +164,15 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    // 7-day period from Dec 29 through Jan 5 = 8 entries
-    expect(body.trends.storage).toHaveLength(8);
-    expect(body.trends.storage[0]).toStrictEqual({ date: '2025-12-29T23:59:59.999Z', value: 1000 });
-    expect(body.trends.storage[1]).toStrictEqual({ date: '2025-12-30T23:59:59.999Z', value: 0 });
-    expect(body.trends.storage[2]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 2000 });
-    expect(body.trends.storage[3]).toStrictEqual({ date: '2026-01-01T23:59:59.999Z', value: 0 });
+    // 7-day period from Dec 30 through Jan 5 = 7 entries
+    expect(body.trends.storage).toHaveLength(7);
+    expect(body.trends.storage[0]).toStrictEqual({ date: '2025-12-30T23:59:59.999Z', value: 0 });
+    expect(body.trends.storage[1]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 2000 });
+    expect(body.trends.storage[2]).toStrictEqual({ date: '2026-01-01T23:59:59.999Z', value: 0 });
 
-    expect(body.trends.objects[0]).toStrictEqual({ date: '2025-12-29T23:59:59.999Z', value: 5 });
-    expect(body.trends.objects[2]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 10 });
-    expect(body.trends.objects[3]).toStrictEqual({ date: '2026-01-01T23:59:59.999Z', value: 0 });
+    expect(body.trends.objects[0]).toStrictEqual({ date: '2025-12-30T23:59:59.999Z', value: 0 });
+    expect(body.trends.objects[1]).toStrictEqual({ date: '2025-12-31T23:59:59.999Z', value: 10 });
+    expect(body.trends.objects[2]).toStrictEqual({ date: '2026-01-01T23:59:59.999Z', value: 0 });
   });
 
   it('returns zero-filled trends when auroraTenantId is missing', async () => {
@@ -167,7 +186,7 @@ describe('get-activity baseHandler', () => {
 
     // Still get a full series of zeroes
     expect(body.trends.storage).toStrictEqual(
-      new Array(8).fill({ value: 0, date: expect.any(String) }),
+      new Array(7).fill({ value: 0, date: expect.any(String) }),
     );
     expect(mockGetStorageSamples).not.toHaveBeenCalled();
     vi.useRealTimers();
@@ -185,11 +204,11 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    // 30-day period from Jan 1 through Jan 31 = 31 entries
-    expect(body.trends.storage).toHaveLength(31);
-    expect(body.trends.objects).toHaveLength(31);
-    // First entry should be Jan 1 end-of-day UTC
-    expect(body.trends.storage[0].date).toBe('2026-01-01T23:59:59.999Z');
+    // 30-day period from Jan 2 through Jan 31 = 30 entries
+    expect(body.trends.storage).toHaveLength(30);
+    expect(body.trends.objects).toHaveLength(30);
+    // First entry should be Jan 2 end-of-day UTC
+    expect(body.trends.storage[0].date).toBe('2026-01-02T23:59:59.999Z');
     vi.useRealTimers();
   });
 
@@ -204,25 +223,20 @@ describe('get-activity baseHandler', () => {
         Items: [bucketItem('photos', '2026-01-01T00:00:00Z')],
       });
 
-    ddbMock
-      .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#photos` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('photos', 'cat.jpg', '2026-01-05T00:00:00Z', 1024),
-          objectItem('photos', 'dog.jpg', '2026-01-03T00:00:00Z', 2048),
-        ],
-      });
-
+    // Access keys query
     ddbMock
       .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'cat.jpg', sizeBytes: 1024, lastModified: '2026-01-05T00:00:00.000Z' },
+        { key: 'dog.jpg', sizeBytes: 2048, lastModified: '2026-01-03T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
@@ -230,31 +244,37 @@ describe('get-activity baseHandler', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(String(result.body));
 
-    expect(body.activities).toStrictEqual([
-      {
-        id: 'object-photos-cat.jpg',
-        action: 'object.uploaded',
-        resourceType: 'object',
-        resourceName: 'cat.jpg',
-        timestamp: '2026-01-05T00:00:00Z',
-        sizeBytes: 1024,
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'object-photos-cat.jpg',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'cat.jpg',
+          timestamp: '2026-01-05T00:00:00.000Z',
+          sizeBytes: 1024,
+        },
+        {
+          id: 'object-photos-dog.jpg',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'dog.jpg',
+          timestamp: '2026-01-03T00:00:00.000Z',
+          sizeBytes: 2048,
+        },
+        {
+          id: 'bucket-photos',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'photos',
+          timestamp: '2026-01-01T00:00:00Z',
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
       },
-      {
-        id: 'object-photos-dog.jpg',
-        action: 'object.uploaded',
-        resourceType: 'object',
-        resourceName: 'dog.jpg',
-        timestamp: '2026-01-03T00:00:00Z',
-        sizeBytes: 2048,
-      },
-      {
-        id: 'bucket-photos',
-        action: 'bucket.created',
-        resourceType: 'bucket',
-        resourceName: 'photos',
-        timestamp: '2026-01-01T00:00:00Z',
-      },
-    ]);
+    });
   });
 
   it('respects the limit query parameter', async () => {
@@ -270,24 +290,18 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
-          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
-          objectItem('b1', 'c.txt', '2026-01-04T00:00:00Z', 300),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'a.txt', sizeBytes: 100, lastModified: '2026-01-02T00:00:00.000Z' },
+        { key: 'b.txt', sizeBytes: 200, lastModified: '2026-01-03T00:00:00.000Z' },
+        { key: 'c.txt', sizeBytes: 300, lastModified: '2026-01-04T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -296,9 +310,30 @@ describe('get-activity baseHandler', () => {
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.activities).toHaveLength(2);
-    expect(body.activities[0].resourceName).toBe('c.txt');
-    expect(body.activities[1].resourceName).toBe('b.txt');
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'object-b1-c.txt',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'c.txt',
+          timestamp: '2026-01-04T00:00:00.000Z',
+          sizeBytes: 300,
+        },
+        {
+          id: 'object-b1-b.txt',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'b.txt',
+          timestamp: '2026-01-03T00:00:00.000Z',
+          sizeBytes: 200,
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
+      },
+    });
   });
 
   it('defaults limit to 10 when limit is non-numeric', async () => {
@@ -314,23 +349,17 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
-          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'a.txt', sizeBytes: 100, lastModified: '2026-01-02T00:00:00.000Z' },
+        { key: 'b.txt', sizeBytes: 200, lastModified: '2026-01-03T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -356,23 +385,17 @@ describe('get-activity baseHandler', () => {
 
     ddbMock
       .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({
-        Items: [
-          objectItem('b1', 'a.txt', '2026-01-02T00:00:00Z', 100),
-          objectItem('b1', 'b.txt', '2026-01-03T00:00:00Z', 200),
-        ],
-      });
-
-    ddbMock
-      .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'a.txt', sizeBytes: 100, lastModified: '2026-01-02T00:00:00.000Z' },
+        { key: 'b.txt', sizeBytes: 200, lastModified: '2026-01-03T00:00:00.000Z' },
+      ],
+      isTruncated: false,
+    });
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -407,7 +430,9 @@ describe('get-activity baseHandler', () => {
       userInfo: USER_INFO,
       queryStringParameters: { period: '30d' },
     });
-    await baseHandler(event);
+
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
 
     expect(mockGetStorageSamples).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -416,14 +441,99 @@ describe('get-activity baseHandler', () => {
       }),
     );
 
-    // Verify the from date is ~30 days before to
-    const call = mockGetStorageSamples.mock.calls[0] as unknown as [{ from: string; to: string }];
-    const { from: fromStr, to: toStr } = call[0];
-    const fromDate = new Date(fromStr);
-    const toDate = new Date(toStr);
-    const diffDays = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24);
-    expect(diffDays).toBeGreaterThanOrEqual(29);
-    expect(diffDays).toBeLessThanOrEqual(31);
+    expect(body).toStrictEqual({
+      activities: [],
+      trends: {
+        storage: flatTrend(30, 0),
+        objects: flatTrend(30, 0),
+      },
+    });
+  });
+
+  it('defaults to 7-day trend series', async () => {
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
+
+    expect(body).toStrictEqual({
+      activities: [],
+      trends: {
+        storage: flatTrend(7, 0),
+        objects: flatTrend(7, 0),
+      },
+    });
+  });
+
+  it('computes cumulative storage in trends', async () => {
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(12, 0, 0, 0);
+
+    const twoDaysAgo = new Date(now);
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    twoDaysAgo.setHours(12, 0, 0, 0);
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `USER#${USER_INFO.userId}` } },
+      })
+      .resolves({
+        Items: [bucketItem('data', '2025-01-01T00:00:00Z')],
+      });
+
+    ddbMock
+      .on(QueryCommand, {
+        ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
+      })
+      .resolves({ Items: [] });
+
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'old.bin', sizeBytes: 500, lastModified: twoDaysAgo.toISOString() },
+        { key: 'new.bin', sizeBytes: 300, lastModified: yesterday.toISOString() },
+      ],
+      isTruncated: false,
+    });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    const result = await baseHandler(event);
+    const body = JSON.parse(String(result.body));
+
+    // Full structure check
+    expect(body).toStrictEqual({
+      activities: expect.arrayContaining([
+        {
+          id: 'object-data-new.bin',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'new.bin',
+          timestamp: yesterday.toISOString(),
+          sizeBytes: 300,
+        },
+        {
+          id: 'object-data-old.bin',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'old.bin',
+          timestamp: twoDaysAgo.toISOString(),
+          sizeBytes: 500,
+        },
+        {
+          id: 'bucket-data',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'data',
+          timestamp: '2025-01-01T00:00:00Z',
+        },
+      ]),
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
+      },
+    });
   });
 
   it('includes key activities sorted with buckets and objects', async () => {
@@ -436,15 +546,6 @@ describe('get-activity baseHandler', () => {
       .resolves({
         Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
       });
-
-    ddbMock
-      .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({ Items: [] });
 
     ddbMock
       .on(QueryCommand, {
@@ -479,9 +580,7 @@ describe('get-activity baseHandler', () => {
     ]);
   });
 
-  it('includes sizeBytes and cid on object activities when present', async () => {
-    mockOrgProfile(AURORA_TENANT_ID);
-
+  it('includes sizeBytes on object activities when present', async () => {
     ddbMock
       .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `USER#${USER_INFO.userId}` } },
@@ -490,55 +589,43 @@ describe('get-activity baseHandler', () => {
         Items: [bucketItem('b1', '2026-01-01T00:00:00Z')],
       });
 
-    const objWithCid = marshall({
-      pk: `BUCKET#${USER_INFO.userId}#b1`,
-      sk: 'OBJECT#file.dat',
-      key: 'file.dat',
-      fileName: 'file.dat',
-      contentType: 'application/octet-stream',
-      sizeBytes: 4096,
-      uploadedAt: '2026-01-02T00:00:00Z',
-      etag: '"xyz"',
-      s3Key: 'b1/file.dat',
-      cid: 'bafy123',
-    });
-
-    ddbMock
-      .on(QueryCommand, {
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${USER_INFO.userId}#b1` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      })
-      .resolves({ Items: [objWithCid] });
-
     ddbMock
       .on(QueryCommand, {
         ExpressionAttributeValues: { ':pk': { S: `ORG#${USER_INFO.orgId}` } },
       })
       .resolves({ Items: [] });
 
+    mockListObjects.mockResolvedValue({
+      objects: [{ key: 'file.dat', sizeBytes: 4096, lastModified: '2026-01-02T00:00:00.000Z' }],
+      isTruncated: false,
+    });
+
     const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
     const body = JSON.parse(String(result.body));
 
-    expect(body.activities).toStrictEqual([
-      {
-        id: 'object-b1-file.dat',
-        action: 'object.uploaded',
-        resourceType: 'object',
-        resourceName: 'file.dat',
-        timestamp: '2026-01-02T00:00:00Z',
-        sizeBytes: 4096,
-        cid: 'bafy123',
+    expect(body).toStrictEqual({
+      activities: [
+        {
+          id: 'object-b1-file.dat',
+          action: 'object.uploaded',
+          resourceType: 'object',
+          resourceName: 'file.dat',
+          timestamp: '2026-01-02T00:00:00.000Z',
+          sizeBytes: 4096,
+        },
+        {
+          id: 'bucket-b1',
+          action: 'bucket.created',
+          resourceType: 'bucket',
+          resourceName: 'b1',
+          timestamp: '2026-01-01T00:00:00Z',
+        },
+      ],
+      trends: {
+        storage: flatTrend(7, expect.any(Number)),
+        objects: flatTrend(7, expect.any(Number)),
       },
-      {
-        id: 'bucket-b1',
-        action: 'bucket.created',
-        resourceType: 'bucket',
-        resourceName: 'b1',
-        timestamp: '2026-01-01T00:00:00Z',
-      },
-    ]);
+    });
   });
 });

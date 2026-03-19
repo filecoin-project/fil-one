@@ -13,6 +13,7 @@ import {
   TransactWriteItemsCommand,
 } from '@aws-sdk/client-dynamodb';
 import { ApiErrorCode, OrgRole } from '@filone/shared';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { buildEvent, buildMiddyRequest } from '../test/lambda-test-utilities.js';
 import { expectErrorResponse } from '../test/assert-helpers.js';
@@ -144,7 +145,7 @@ describe('authMiddleware', () => {
             sk: { S: 'PROFILE' },
             name: { S: 'example.com' },
             orgConfirmed: { BOOL: true },
-            setupStatus: { S: 'AURORA_TENANT_API_KEY_CREATED' },
+            setupStatus: { S: FINAL_SETUP_STATUS },
           },
         });
 

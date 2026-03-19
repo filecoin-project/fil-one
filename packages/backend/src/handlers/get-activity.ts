@@ -1,17 +1,19 @@
 import { GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import type { ActivityResponse, RecentActivity, UsageDataPoint } from '@filone/shared';
+import type { ActivityResponse, RecentActivity, S3Object, UsageDataPoint } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { getAuroraS3Credentials, listObjects } from '../lib/aurora-s3-client.js';
+import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
-import type { AccessKeyRecord, BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
+import type { AccessKeyRecord, BucketRecord } from '../lib/dynamo-records.js';
 import { getStorageSamples } from '../lib/aurora-backoffice.js';
 
 const dynamo = getDynamoClient();
@@ -34,15 +36,6 @@ export async function baseHandler(
   const uploadsTableName = Resource.UploadsTable.name;
   const userInfoTableName = Resource.UserInfoTable.name;
 
-  // Look up org profile to get auroraTenantId
-  const { Item: orgProfile } = await dynamo.send(
-    new GetItemCommand({
-      TableName: userInfoTableName,
-      Key: marshall({ pk: `ORG#${orgId}`, sk: 'PROFILE' }),
-    }),
-  );
-  const auroraTenantId = orgProfile?.auroraTenantId?.S;
-
   // Get all buckets
   const bucketsResult = await dynamo.send(
     new QueryCommand({
@@ -56,8 +49,26 @@ export async function baseHandler(
   );
   const buckets = (bucketsResult.Items ?? []).map((item) => unmarshall(item) as BucketRecord);
 
-  // Collect activities from buckets and objects
+  // Look up org profile for Aurora S3 credentials
+  const { Item: orgProfile } = await dynamo.send(
+    new GetItemCommand({
+      TableName: Resource.UserInfoTable.name,
+      Key: { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } },
+    }),
+  );
+
+  const auroraTenantId = orgProfile?.auroraTenantId?.S;
+  const setupStatus = orgProfile?.setupStatus?.S;
+
+  // Collect activities and objects in a single pass over all buckets
   const activities: RecentActivity[] = [];
+
+  const stage = process.env.FILONE_STAGE!;
+  const gatewayUrl = process.env.AURORA_S3_GATEWAY_URL!;
+  const credentials =
+    auroraTenantId && isOrgSetupComplete(setupStatus)
+      ? await getAuroraS3Credentials(stage, auroraTenantId)
+      : undefined;
 
   for (const bucket of buckets) {
     activities.push({
@@ -68,28 +79,27 @@ export async function baseHandler(
       timestamp: bucket.createdAt,
     });
 
-    const objectsResult = await dynamo.send(
-      new QueryCommand({
-        TableName: uploadsTableName,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${userId}#${bucket.name}` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-      }),
-    );
-
-    for (const item of objectsResult.Items ?? []) {
-      const obj = unmarshall(item) as ObjectRecord;
-      activities.push({
-        id: `object-${bucket.name}-${obj.key}`,
-        action: 'object.uploaded',
-        resourceType: 'object',
-        resourceName: obj.key,
-        timestamp: obj.uploadedAt,
-        sizeBytes: obj.sizeBytes || undefined,
-        cid: obj.cid || undefined,
-      });
+    if (credentials) {
+      let continuationToken: string | undefined;
+      do {
+        const result = await listObjects({
+          endpointUrl: gatewayUrl,
+          credentials,
+          bucket: bucket.name,
+          continuationToken,
+        });
+        for (const obj of result.objects) {
+          activities.push({
+            id: `object-${bucket.name}-${obj.key}`,
+            action: 'object.uploaded',
+            resourceType: 'object',
+            resourceName: obj.key,
+            timestamp: obj.lastModified,
+            sizeBytes: obj.sizeBytes || undefined,
+          });
+        }
+        continuationToken = result.nextToken;
+      } while (continuationToken);
     }
   }
 
@@ -121,7 +131,7 @@ export async function baseHandler(
   // Fetch time series data from Aurora
   const now = new Date();
   const from = new Date(now);
-  from.setUTCDate(from.getUTCDate() - period);
+  from.setUTCDate(from.getUTCDate() - period + 1);
   from.setUTCHours(0, 0, 0, 0);
 
   const storageSamples = auroraTenantId

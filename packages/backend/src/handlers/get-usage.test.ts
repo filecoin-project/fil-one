@@ -6,6 +6,7 @@ import type {
   ModelOperationMetricsSample,
   ModelsTenantWithMetricsManagementResponse,
 } from '../lib/aurora-backoffice.js';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -41,10 +42,20 @@ vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn((_url: unknown) => 'mock-jwks'),
 }));
 
-const ddbMock = mockClient(DynamoDBClient);
+const mockGetAuroraS3Credentials = vi.fn();
+const mockListObjects = vi.fn();
+
+vi.mock('../lib/aurora-s3-client.js', () => ({
+  getAuroraS3Credentials: (...args: unknown[]) => mockGetAuroraS3Credentials(...args),
+  listObjects: (...args: unknown[]) => mockListObjects(...args),
+}));
 
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
+process.env.FILONE_STAGE = 'test';
+process.env.AURORA_S3_GATEWAY_URL = 'https://s3.dev.aur.lu';
+
+const ddbMock = mockClient(DynamoDBClient);
 
 import { handler } from './get-usage.js';
 import { buildEvent, buildContext } from '../test/lambda-test-utilities.js';
@@ -94,6 +105,7 @@ function mockAuthIdentity() {
         name: { S: 'Test Org' },
         orgConfirmed: { BOOL: true },
         auroraTenantId: { S: AURORA_TENANT_ID },
+        setupStatus: { S: FINAL_SETUP_STATUS },
       },
     });
 }
@@ -140,6 +152,7 @@ describe('GET /api/usage handler', () => {
     mockJwtVerify.mockResolvedValue({
       payload: { sub: MOCK_SUB, email: MOCK_EMAIL },
     });
+    mockAuthIdentity();
     mockGetStorageSamples.mockResolvedValue([]);
     mockGetOperationsSamples.mockResolvedValue([]);
     mockGetTenantInfo.mockResolvedValue(null);
