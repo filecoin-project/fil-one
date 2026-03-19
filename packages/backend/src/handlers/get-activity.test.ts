@@ -180,8 +180,8 @@ describe('get-activity baseHandler', () => {
     const body = JSON.parse(String(result.body));
 
     // 30-day period from Jan 1 through Jan 31 = 31 entries
-    expect(body.trends.storage.length).toBe(31);
-    expect(body.trends.objects.length).toBe(31);
+    expect(body.trends.storage).toHaveLength(31);
+    expect(body.trends.objects).toHaveLength(31);
     // First entry should be Jan 1 end-of-day UTC
     expect(body.trends.storage[0].date).toBe('2026-01-01T23:59:59.999Z');
     vi.useRealTimers();
