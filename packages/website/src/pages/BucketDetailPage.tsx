@@ -27,7 +27,6 @@ import type {
   AccessKey,
   ListObjectsResponse,
   PresignUploadResponse,
-  ConfirmUploadResponse,
 } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
 import { formatDate } from '../lib/time.js';
@@ -201,27 +200,33 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
       // Step 1: Get presigned URL (0-5%)
       setUploadProgress(2);
+      const description = objectDescription.trim() || undefined;
       const presignData = await apiRequest<PresignUploadResponse>(
         `/buckets/${encodeURIComponent(bucketName)}/objects/presign`,
         {
           method: 'POST',
-          body: JSON.stringify({ key, contentType }),
+          body: JSON.stringify({
+            key,
+            contentType,
+            fileName: selectedFile.name,
+            ...(description && { description }),
+          }),
         },
       );
       setUploadProgress(5);
 
-      // Step 2: Upload directly to Aurora S3 via XHR for real progress (5-95%)
-      const etag = await new Promise<string | null>((resolve, reject) => {
+      // Step 2: Upload directly to Aurora S3 via XHR for real progress (5-100%)
+      await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
-            const pct = 5 + (e.loaded / e.total) * 90;
+            const pct = 5 + (e.loaded / e.total) * 95;
             setUploadProgress(Math.round(pct));
           }
         };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(xhr.getResponseHeader('etag'));
+            resolve();
           } else {
             reject(new Error(`Upload failed with status ${xhr.status}`));
           }
@@ -232,31 +237,16 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
         xhr.send(selectedFile);
       });
 
-      // Step 3: Confirm upload metadata (95-100%)
-      // Temporary workaround: we tell our backend about the uploaded object so it
-      // can track metadata in DynamoDB. This will go away once we implement proper
-      // sync between FilOne Console and Aurora S3 Gateway. It's fine to trust the
-      // frontend here — if the PUT succeeded but confirm fails, the object still
-      // lives in Aurora S3 and will be picked up once sync is in place.
-      setUploadProgress(95);
-      const confirmData = await apiRequest<ConfirmUploadResponse>(
-        `/buckets/${encodeURIComponent(bucketName)}/objects/confirm`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            key,
-            fileName: selectedFile.name,
-            contentType,
-            sizeBytes: selectedFile.size,
-            ...(etag && { etag }),
-            ...(objectDescription.trim() && { description: objectDescription.trim() }),
-          }),
-        },
-      );
-
       setUploadProgress(100);
       setUploadStep('done');
-      setObjects((prev) => [confirmData.object, ...prev]);
+      setObjects((prev) => [
+        {
+          key,
+          sizeBytes: selectedFile.size,
+          lastModified: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
       toast.success(`${selectedFile.name} uploaded successfully`);
     } catch (err) {
       handleCloseUploadModal();
@@ -401,13 +391,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                               Size
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                              Content Type
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                               Last Modified
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                              CID
                             </th>
                             <th className="px-4 py-3" aria-label="Actions" />
                           </tr>
@@ -430,8 +414,6 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                                     {entry.name}/
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-zinc-400">—</td>
-                                <td className="px-4 py-3 text-zinc-400">—</td>
                                 <td className="px-4 py-3 text-zinc-400">—</td>
                                 <td className="px-4 py-3 text-zinc-400">—</td>
                                 <td className="px-4 py-3" />
@@ -458,22 +440,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                                   {formatBytes(entry.object.sizeBytes)}
                                 </td>
                                 <td className="px-4 py-3 text-zinc-600">
-                                  {entry.object.contentType}
-                                </td>
-                                <td className="px-4 py-3 text-zinc-600">
                                   {formatDate(entry.object.lastModified)}
-                                </td>
-                                <td className="px-4 py-3">
-                                  {entry.object.cid ? (
-                                    <span
-                                      className="font-mono text-xs text-zinc-600"
-                                      title={entry.object.cid}
-                                    >
-                                      {entry.object.cid.slice(0, 12)}...
-                                    </span>
-                                  ) : (
-                                    <span className="text-zinc-400">—</span>
-                                  )}
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center justify-end gap-2">

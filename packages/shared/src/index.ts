@@ -29,8 +29,6 @@ export type {
   DeleteObjectRequest,
   PresignUploadRequest,
   PresignUploadResponse,
-  ConfirmUploadRequest,
-  ConfirmUploadResponse,
 } from './api/objects.js';
 
 export type {

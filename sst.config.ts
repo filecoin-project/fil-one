@@ -323,7 +323,13 @@ export default $config({
         },
       ],
     );
-    addRoute('GET', '/api/buckets/{name}/objects', 'list-objects');
+    addRoute(
+      'GET',
+      '/api/buckets/{name}/objects',
+      'list-objects',
+      auroraS3GatewayEnv,
+      auroraS3GatewayPermissions,
+    );
     addRoute(
       'POST',
       '/api/buckets/{name}/objects/presign',
@@ -331,7 +337,6 @@ export default $config({
       auroraS3GatewayEnv,
       auroraS3GatewayPermissions,
     );
-    addRoute('POST', '/api/buckets/{name}/objects/confirm', 'confirm-upload');
     addRoute(
       'GET',
       '/api/buckets/{name}/objects/download',
@@ -365,8 +370,14 @@ export default $config({
     addRoute('POST', '/api/org/confirm', 'confirm-org');
 
     // ── Usage + Dashboard routes ─────────────────────────────────────
-    addRoute('GET', '/api/usage', 'get-usage');
-    addRoute('GET', '/api/activity', 'get-activity');
+    addRoute('GET', '/api/usage', 'get-usage', auroraS3GatewayEnv, auroraS3GatewayPermissions);
+    addRoute(
+      'GET',
+      '/api/activity',
+      'get-activity',
+      auroraS3GatewayEnv,
+      auroraS3GatewayPermissions,
+    );
 
     // ── Billing routes ───────────────────────────────────────────────
     addRoute('GET', '/api/billing', 'get-billing');

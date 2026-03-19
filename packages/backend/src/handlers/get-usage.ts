@@ -1,4 +1,4 @@
-import { QueryCommand } from '@aws-sdk/client-dynamodb';
+import { GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
@@ -6,12 +6,14 @@ import type { APIGatewayProxyResultV2 } from 'aws-lambda';
 import type { UsageResponse } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { getAuroraS3Credentials, listObjects } from '../lib/aurora-s3-client.js';
+import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
-import type { BucketRecord, ObjectRecord } from '../lib/dynamo-records.js';
+import type { BucketRecord } from '../lib/dynamo-records.js';
 
 const dynamo = getDynamoClient();
 
@@ -32,33 +34,45 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   );
   const buckets = (bucketsResult.Items ?? []).map((item) => unmarshall(item) as BucketRecord);
 
-  // TODO: Integrate with aurora to get the definitive form of this data.
-  // https://linear.app/filecoin-foundation/issue/FIL-68/create-a-data-summary-api
-  // This is not a scalable way to do this and currently only accounts for our console uploaded files
+  // 2. Look up org profile for Aurora S3 credentials
+  const { Item: orgProfile } = await dynamo.send(
+    new GetItemCommand({
+      TableName: Resource.UserInfoTable.name,
+      Key: { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } },
+    }),
+  );
 
-  // 2. Sum object sizes + count across all buckets
+  const auroraTenantId = orgProfile?.auroraTenantId?.S;
+  const setupStatus = orgProfile?.setupStatus?.S;
+
+  // 3. Sum object sizes + count across all buckets via S3
   let storageUsedBytes = 0;
   let objectCount = 0;
-  for (const bucket of buckets) {
-    const objectsResult = await dynamo.send(
-      new QueryCommand({
-        TableName: uploadsTableName,
-        KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': { S: `BUCKET#${userId}#${bucket.name}` },
-          ':skPrefix': { S: 'OBJECT#' },
-        },
-        ProjectionExpression: 'sizeBytes',
-      }),
-    );
-    for (const item of objectsResult.Items ?? []) {
-      const obj = unmarshall(item) as Pick<ObjectRecord, 'sizeBytes'>;
-      storageUsedBytes += obj.sizeBytes || 0;
-      objectCount++;
+
+  if (buckets.length > 0 && auroraTenantId && isOrgSetupComplete(setupStatus)) {
+    const stage = process.env.FILONE_STAGE!;
+    const gatewayUrl = process.env.AURORA_S3_GATEWAY_URL!;
+    const credentials = await getAuroraS3Credentials(stage, auroraTenantId);
+
+    for (const bucket of buckets) {
+      let continuationToken: string | undefined;
+      do {
+        const result = await listObjects({
+          endpointUrl: gatewayUrl,
+          credentials,
+          bucket: bucket.name,
+          continuationToken,
+        });
+        for (const obj of result.objects) {
+          storageUsedBytes += obj.sizeBytes;
+          objectCount++;
+        }
+        continuationToken = result.nextToken;
+      } while (continuationToken);
     }
   }
 
-  // 3. Count access keys (stored in UserInfoTable with ORG# pk and ACCESSKEY# sk prefix)
+  // 4. Count access keys (stored in UserInfoTable with ORG# pk and ACCESSKEY# sk prefix)
   const keysResult = await dynamo.send(
     new QueryCommand({
       TableName: Resource.UserInfoTable.name,

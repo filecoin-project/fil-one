@@ -40,11 +40,11 @@ export async function baseHandler(
       .build();
   }
 
-  const { key, contentType } = request;
-  if (!key || !contentType) {
+  const { key, contentType, fileName } = request;
+  if (!key || !contentType || !fileName) {
     return new ResponseBuilder()
       .status(400)
-      .body<ErrorResponse>({ message: 'Missing required fields: key, contentType' })
+      .body<ErrorResponse>({ message: 'Missing required fields: key, contentType, fileName' })
       .build();
   }
 
@@ -88,14 +88,21 @@ export async function baseHandler(
   const stage = process.env.FILONE_STAGE!;
   const gatewayUrl = process.env.AURORA_S3_GATEWAY_URL!;
 
+  const metadata: Record<string, string> = { filename: fileName };
+  if (request.description) {
+    metadata.description = request.description;
+  }
+
   const credentials = await getAuroraS3Credentials(stage, auroraTenantId);
-  const url = await getPresignedPutObjectUrl(
-    gatewayUrl,
+  const url = await getPresignedPutObjectUrl({
+    endpointUrl: gatewayUrl,
     credentials,
-    bucketName,
+    bucket: bucketName,
     key,
-    PRESIGN_EXPIRY_SECONDS,
-  );
+    expiresIn: PRESIGN_EXPIRY_SECONDS,
+    contentType,
+    metadata,
+  });
 
   return new ResponseBuilder().status(200).body<PresignUploadResponse>({ url, key }).build();
 }

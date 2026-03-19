@@ -3,9 +3,6 @@ export interface S3Object {
   sizeBytes: number;
   lastModified: string;
   etag?: string;
-  contentType: string;
-  cid?: string;
-  description?: string;
 }
 
 export interface ListObjectsRequest {
@@ -26,24 +23,13 @@ export interface ListObjectsResponse {
 export interface PresignUploadRequest {
   key: string;
   contentType: string;
+  fileName: string;
+  description?: string;
 }
 
 export interface PresignUploadResponse {
   url: string;
   key: string;
-}
-
-export interface ConfirmUploadRequest {
-  key: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  etag?: string;
-  description?: string;
-}
-
-export interface ConfirmUploadResponse {
-  object: S3Object;
 }
 
 export interface DeleteObjectRequest {

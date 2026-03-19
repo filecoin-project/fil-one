@@ -16,11 +16,11 @@ vi.mock('sst', () => ({
 }));
 
 const mockGetAuroraS3Credentials = vi.fn();
-const mockGetPresignedPutObjectUrl = vi.fn();
+const mockListObjects = vi.fn();
 
 vi.mock('../lib/aurora-s3-client.js', () => ({
   getAuroraS3Credentials: (...args: unknown[]) => mockGetAuroraS3Credentials(...args),
-  getPresignedPutObjectUrl: (...args: unknown[]) => mockGetPresignedPutObjectUrl(...args),
+  listObjects: (...args: unknown[]) => mockListObjects(...args),
 }));
 
 process.env.FILONE_STAGE = 'test';
@@ -28,7 +28,7 @@ process.env.AURORA_S3_GATEWAY_URL = 'https://s3.dev.aur.lu';
 
 const ddbMock = mockClient(DynamoDBClient);
 
-import { baseHandler } from './presign-upload.js';
+import { baseHandler } from './list-objects.js';
 import { buildEvent } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
@@ -36,10 +36,6 @@ import { buildEvent } from '../test/lambda-test-utilities.js';
 // ---------------------------------------------------------------------------
 
 const USER_INFO = { userId: 'user-1', orgId: 'org-1' };
-
-function validBody() {
-  return JSON.stringify({ key: 'photos/cat.jpg', contentType: 'image/jpeg', fileName: 'cat.jpg' });
-}
 
 function bucketRecord() {
   return {
@@ -62,13 +58,13 @@ function orgProfileWithTenant(tenantId: string) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('presign-upload baseHandler', () => {
+describe('list-objects baseHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
   });
 
-  it('returns 200 with presigned URL on success', async () => {
+  it('returns 200 with objects from S3', async () => {
     ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
     ddbMock
       .on(GetItemCommand, { TableName: 'UserInfoTable' })
@@ -77,73 +73,39 @@ describe('presign-upload baseHandler', () => {
       accessKeyId: 'AKIA_CONSOLE',
       secretAccessKey: 's3_secret',
     });
-    mockGetPresignedPutObjectUrl.mockResolvedValue(
-      'https://s3.dev.aur.lu/my-bucket/photos/cat.jpg?sig=abc',
-    );
-
-    const event = buildEvent({
-      body: validBody(),
-      userInfo: USER_INFO,
-      rawPath: '/api/buckets/my-bucket/objects/presign',
+    mockListObjects.mockResolvedValue({
+      objects: [
+        { key: 'photos/cat.jpg', sizeBytes: 1024, lastModified: '2026-01-01T00:00:00.000Z' },
+      ],
+      isTruncated: false,
     });
+
+    const event = buildEvent({ userInfo: USER_INFO });
     event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
     expect(body).toStrictEqual({
-      url: 'https://s3.dev.aur.lu/my-bucket/photos/cat.jpg?sig=abc',
-      key: 'photos/cat.jpg',
+      objects: [
+        { key: 'photos/cat.jpg', sizeBytes: 1024, lastModified: '2026-01-01T00:00:00.000Z' },
+      ],
+      isTruncated: false,
     });
 
-    expect(mockGetAuroraS3Credentials).toHaveBeenCalledWith('test', 'aurora-t-1');
-    expect(mockGetPresignedPutObjectUrl).toHaveBeenCalledWith({
+    expect(mockListObjects).toHaveBeenCalledWith({
       endpointUrl: 'https://s3.dev.aur.lu',
       credentials: { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
       bucket: 'my-bucket',
-      key: 'photos/cat.jpg',
-      expiresIn: 3600,
-      contentType: 'image/jpeg',
-      metadata: { filename: 'cat.jpg' },
+      prefix: undefined,
+      delimiter: undefined,
+      maxKeys: undefined,
+      continuationToken: undefined,
     });
   });
 
   it('returns 400 when bucket name is missing from path', async () => {
-    const event = buildEvent({ body: validBody(), userInfo: USER_INFO });
-    // no pathParameters
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(400);
-  });
-
-  it('returns 400 when key is missing from body', async () => {
-    const event = buildEvent({
-      body: JSON.stringify({ contentType: 'image/jpeg', fileName: 'cat.jpg' }),
-      userInfo: USER_INFO,
-    });
-    event.pathParameters = { name: 'my-bucket' };
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(400);
-  });
-
-  it('returns 400 when contentType is missing from body', async () => {
-    const event = buildEvent({
-      body: JSON.stringify({ key: 'test.txt', fileName: 'test.txt' }),
-      userInfo: USER_INFO,
-    });
-    event.pathParameters = { name: 'my-bucket' };
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(400);
-  });
-
-  it('returns 400 when fileName is missing from body', async () => {
-    const event = buildEvent({
-      body: JSON.stringify({ key: 'test.txt', contentType: 'text/plain' }),
-      userInfo: USER_INFO,
-    });
-    event.pathParameters = { name: 'my-bucket' };
+    const event = buildEvent({ userInfo: USER_INFO });
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(400);
@@ -152,7 +114,7 @@ describe('presign-upload baseHandler', () => {
   it('returns 404 when bucket is not found', async () => {
     ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves({ Item: undefined });
 
-    const event = buildEvent({ body: validBody(), userInfo: USER_INFO });
+    const event = buildEvent({ userInfo: USER_INFO });
     event.pathParameters = { name: 'no-bucket' };
     const result = await baseHandler(event);
 
@@ -170,11 +132,50 @@ describe('presign-upload baseHandler', () => {
       },
     });
 
-    const event = buildEvent({ body: validBody(), userInfo: USER_INFO });
+    const event = buildEvent({ userInfo: USER_INFO });
     event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(503);
     expect(mockGetAuroraS3Credentials).not.toHaveBeenCalled();
+  });
+
+  it('passes pagination parameters through to listObjects', async () => {
+    ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
+    ddbMock
+      .on(GetItemCommand, { TableName: 'UserInfoTable' })
+      .resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraS3Credentials.mockResolvedValue({
+      accessKeyId: 'AKIA_CONSOLE',
+      secretAccessKey: 's3_secret',
+    });
+    mockListObjects.mockResolvedValue({
+      objects: [],
+      nextToken: 'next-page',
+      isTruncated: true,
+    });
+
+    const event = buildEvent({
+      userInfo: USER_INFO,
+      queryStringParameters: { prefix: 'photos/', maxKeys: '10', nextToken: 'token-1' },
+    });
+    event.pathParameters = { name: 'my-bucket' };
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(200);
+    expect(mockListObjects).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prefix: 'photos/',
+        maxKeys: 10,
+        continuationToken: 'token-1',
+      }),
+    );
+
+    const body = JSON.parse(result.body as string);
+    expect(body).toStrictEqual({
+      objects: [],
+      nextToken: 'next-page',
+      isTruncated: true,
+    });
   });
 });

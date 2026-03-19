@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
@@ -43,16 +43,6 @@ function bucketRecord() {
   };
 }
 
-function objectRecord() {
-  return {
-    Item: marshall({
-      pk: `BUCKET#${USER_INFO.userId}#my-bucket`,
-      sk: 'OBJECT#photos/cat.jpg',
-      s3Key: 'org-1/my-bucket/photos/cat.jpg',
-    }),
-  };
-}
-
 function orgProfileWithTenant(tenantId: string) {
   return {
     Item: {
@@ -74,14 +64,8 @@ describe('delete-object baseHandler', () => {
     ddbMock.reset();
   });
 
-  it('returns 204 after deleting via Aurora S3 GW and DynamoDB', async () => {
+  it('returns 204 after deleting via Aurora S3 Gateway', async () => {
     ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
-    ddbMock
-      .on(GetItemCommand, {
-        TableName: 'UploadsTable',
-        Key: marshall({ pk: `BUCKET#${USER_INFO.userId}#my-bucket`, sk: 'OBJECT#photos/cat.jpg' }),
-      })
-      .resolves(objectRecord());
     ddbMock
       .on(GetItemCommand, { TableName: 'UserInfoTable' })
       .resolves(orgProfileWithTenant('aurora-t-1'));
@@ -90,7 +74,6 @@ describe('delete-object baseHandler', () => {
       secretAccessKey: 's3_secret',
     });
     mockDeleteObject.mockResolvedValue(undefined);
-    ddbMock.on(DeleteItemCommand).resolves({});
 
     const event = buildEvent({
       userInfo: USER_INFO,
@@ -139,33 +122,8 @@ describe('delete-object baseHandler', () => {
     expect(result.statusCode).toBe(404);
   });
 
-  it('returns 404 when object is not found', async () => {
-    ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
-    ddbMock
-      .on(GetItemCommand, {
-        TableName: 'UploadsTable',
-        Key: marshall({ pk: `BUCKET#${USER_INFO.userId}#my-bucket`, sk: 'OBJECT#missing.txt' }),
-      })
-      .resolves({ Item: undefined });
-
-    const event = buildEvent({
-      userInfo: USER_INFO,
-      queryStringParameters: { key: 'missing.txt' },
-    });
-    event.pathParameters = { name: 'my-bucket' };
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(404);
-  });
-
   it('returns 503 when org setup is not complete', async () => {
     ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
-    ddbMock
-      .on(GetItemCommand, {
-        TableName: 'UploadsTable',
-        Key: marshall({ pk: `BUCKET#${USER_INFO.userId}#my-bucket`, sk: 'OBJECT#photos/cat.jpg' }),
-      })
-      .resolves(objectRecord());
     ddbMock.on(GetItemCommand, { TableName: 'UserInfoTable' }).resolves({
       Item: {
         pk: { S: `ORG#${USER_INFO.orgId}` },

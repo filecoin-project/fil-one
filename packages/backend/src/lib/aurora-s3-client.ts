@@ -3,7 +3,9 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
+import type { S3Object } from '@filone/shared';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 
@@ -41,13 +43,19 @@ export async function getAuroraS3Credentials(
   return JSON.parse(value) as AuroraS3Credentials;
 }
 
-export async function getPresignedPutObjectUrl(
-  endpointUrl: string,
-  credentials: AuroraS3Credentials,
-  bucket: string,
-  key: string,
-  expiresIn: number,
-): Promise<string> {
+export interface PresignPutObjectOptions {
+  endpointUrl: string;
+  credentials: AuroraS3Credentials;
+  bucket: string;
+  key: string;
+  expiresIn: number;
+  contentType?: string;
+  metadata?: Record<string, string>;
+}
+
+export async function getPresignedPutObjectUrl(options: PresignPutObjectOptions): Promise<string> {
+  const { endpointUrl, credentials, bucket, key, expiresIn, contentType, metadata } = options;
+
   const s3 = new S3Client({
     endpoint: endpointUrl,
     region: 'auto',
@@ -71,6 +79,8 @@ export async function getPresignedPutObjectUrl(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
+      ...(contentType && { ContentType: contentType }),
+      ...(metadata && { Metadata: metadata }),
     }),
     { expiresIn },
   );
@@ -140,4 +150,58 @@ export async function deleteObject(
       Key: key,
     }),
   );
+}
+
+export interface ListObjectsOptions {
+  endpointUrl: string;
+  credentials: AuroraS3Credentials;
+  bucket: string;
+  prefix?: string;
+  delimiter?: string;
+  maxKeys?: number;
+  continuationToken?: string;
+}
+
+export interface ListObjectsResult {
+  objects: S3Object[];
+  nextToken?: string;
+  isTruncated: boolean;
+}
+
+export async function listObjects(options: ListObjectsOptions): Promise<ListObjectsResult> {
+  const { endpointUrl, credentials, bucket, prefix, delimiter, maxKeys, continuationToken } =
+    options;
+
+  const s3 = new S3Client({
+    endpoint: endpointUrl,
+    region: 'auto',
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+    },
+    forcePathStyle: true,
+  });
+
+  const result = await s3.send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      ...(prefix && { Prefix: prefix }),
+      ...(delimiter && { Delimiter: delimiter }),
+      ...(maxKeys && { MaxKeys: maxKeys }),
+      ...(continuationToken && { ContinuationToken: continuationToken }),
+    }),
+  );
+
+  const objects: S3Object[] = (result.Contents ?? []).map((item) => ({
+    key: item.Key!,
+    sizeBytes: item.Size ?? 0,
+    lastModified: item.LastModified?.toISOString() ?? new Date().toISOString(),
+    ...(item.ETag && { etag: item.ETag }),
+  }));
+
+  return {
+    objects,
+    nextToken: result.NextContinuationToken,
+    isTruncated: result.IsTruncated ?? false,
+  };
 }

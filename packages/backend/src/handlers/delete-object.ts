@@ -1,4 +1,4 @@
-import { DeleteItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
@@ -56,24 +56,6 @@ export async function baseHandler(
       .build();
   }
 
-  // Get object metadata to find objectKey
-  const objectRecord = await dynamo.send(
-    new GetItemCommand({
-      TableName: tableName,
-      Key: marshall({
-        pk: `BUCKET#${userId}#${bucketName}`,
-        sk: `OBJECT#${objectKey}`,
-      }),
-    }),
-  );
-
-  if (!objectRecord.Item) {
-    return new ResponseBuilder()
-      .status(404)
-      .body<ErrorResponse>({ message: 'Object not found' })
-      .build();
-  }
-
   // Look up org profile to get auroraTenantId
   const { Item: orgProfile } = await dynamo.send(
     new GetItemCommand({
@@ -98,17 +80,6 @@ export async function baseHandler(
 
   const credentials = await getAuroraS3Credentials(stage, auroraTenantId);
   await deleteObject(gatewayUrl, credentials, bucketName, objectKey);
-
-  // Delete from DynamoDB
-  await dynamo.send(
-    new DeleteItemCommand({
-      TableName: tableName,
-      Key: marshall({
-        pk: `BUCKET#${userId}#${bucketName}`,
-        sk: `OBJECT#${objectKey}`,
-      }),
-    }),
-  );
 
   return {
     statusCode: 204,

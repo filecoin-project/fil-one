@@ -56,24 +56,6 @@ export async function baseHandler(
       .build();
   }
 
-  // Get object metadata to find s3Key
-  const objectRecord = await dynamo.send(
-    new GetItemCommand({
-      TableName: tableName,
-      Key: marshall({
-        pk: `BUCKET#${userId}#${bucketName}`,
-        sk: `OBJECT#${objectKey}`,
-      }),
-    }),
-  );
-
-  if (!objectRecord.Item) {
-    return new ResponseBuilder()
-      .status(404)
-      .body<ErrorResponse>({ message: 'Object not found' })
-      .build();
-  }
-
   // Look up org profile to get auroraTenantId
   const { Item: orgProfile } = await dynamo.send(
     new GetItemCommand({
