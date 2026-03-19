@@ -59,7 +59,6 @@ const ddbMock = mockClient(DynamoDBClient);
 
 import { handler } from './get-usage.js';
 import { buildEvent, buildContext } from '../test/lambda-test-utilities.js';
-import { S3_REGION } from '@filone/shared';
 
 // ---------------------------------------------------------------------------
 // Helpers
