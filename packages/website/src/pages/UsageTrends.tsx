@@ -15,9 +15,6 @@ import type { UsageTrendsResponse } from '@filone/shared';
 import { formatBytes, formatBytesShort } from '@filone/shared';
 import { getActivity } from '../lib/api.js';
 
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
