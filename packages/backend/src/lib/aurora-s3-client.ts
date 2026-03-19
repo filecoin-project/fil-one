@@ -86,13 +86,17 @@ export async function getPresignedPutObjectUrl(options: PresignPutObjectOptions)
   );
 }
 
-export async function getPresignedGetObjectUrl(
-  endpointUrl: string,
-  credentials: AuroraS3Credentials,
-  bucket: string,
-  key: string,
-  expiresIn: number,
-): Promise<string> {
+export interface PresignGetObjectOptions {
+  endpointUrl: string;
+  credentials: AuroraS3Credentials;
+  bucket: string;
+  key: string;
+  expiresIn: number;
+}
+
+export async function getPresignedGetObjectUrl(options: PresignGetObjectOptions): Promise<string> {
+  const { endpointUrl, credentials, bucket, key, expiresIn } = options;
+
   const s3 = new S3Client({
     endpoint: endpointUrl,
     region: 'auto',

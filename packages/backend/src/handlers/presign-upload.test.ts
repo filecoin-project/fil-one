@@ -102,7 +102,7 @@ describe('presign-upload baseHandler', () => {
       credentials: { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
       bucket: 'my-bucket',
       key: 'photos/cat.jpg',
-      expiresIn: 3600,
+      expiresIn: 300,
       contentType: 'image/jpeg',
       metadata: { filename: 'cat.jpg' },
     });

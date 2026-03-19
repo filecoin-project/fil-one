@@ -16,7 +16,7 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 import { subscriptionGuardMiddleware, AccessLevel } from '../middleware/subscription-guard.js';
 
 const dynamo = getDynamoClient();
-const PRESIGN_EXPIRY_SECONDS = 3600;
+const PRESIGN_EXPIRY_SECONDS = 300;
 
 export async function baseHandler(
   event: AuthenticatedEvent,
@@ -80,13 +80,13 @@ export async function baseHandler(
   const gatewayUrl = process.env.AURORA_S3_GATEWAY_URL!;
 
   const credentials = await getAuroraS3Credentials(stage, auroraTenantId);
-  const url = await getPresignedGetObjectUrl(
-    gatewayUrl,
+  const url = await getPresignedGetObjectUrl({
+    endpointUrl: gatewayUrl,
     credentials,
-    bucketName,
-    objectKey,
-    PRESIGN_EXPIRY_SECONDS,
-  );
+    bucket: bucketName,
+    key: objectKey,
+    expiresIn: PRESIGN_EXPIRY_SECONDS,
+  });
 
   return new ResponseBuilder().status(200).body({ url }).build();
 }

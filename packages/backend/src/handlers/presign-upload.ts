@@ -17,7 +17,7 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 import { subscriptionGuardMiddleware, AccessLevel } from '../middleware/subscription-guard.js';
 
 const dynamo = getDynamoClient();
-const PRESIGN_EXPIRY_SECONDS = 3600;
+const PRESIGN_EXPIRY_SECONDS = 300;
 
 export async function baseHandler(
   event: AuthenticatedEvent,

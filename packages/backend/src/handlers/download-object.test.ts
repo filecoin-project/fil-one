@@ -92,13 +92,13 @@ describe('download-object baseHandler', () => {
     });
 
     expect(mockGetAuroraS3Credentials).toHaveBeenCalledWith('test', 'aurora-t-1');
-    expect(mockGetPresignedGetObjectUrl).toHaveBeenCalledWith(
-      'https://s3.dev.aur.lu',
-      { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
-      'my-bucket',
-      'photos/cat.jpg',
-      3600,
-    );
+    expect(mockGetPresignedGetObjectUrl).toHaveBeenCalledWith({
+      endpointUrl: 'https://s3.dev.aur.lu',
+      credentials: { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
+      bucket: 'my-bucket',
+      key: 'photos/cat.jpg',
+      expiresIn: 300,
+    });
   });
 
   it('returns 400 when bucket name is missing from path', async () => {
