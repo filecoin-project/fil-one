@@ -1,0 +1,41 @@
+import { describe, it, beforeAll, afterAll, expect } from 'vitest';
+import {
+  createTestCustomer,
+  attachDecliningCard,
+  seedBillingRecord,
+  createAndFailInvoice,
+  waitForWebhook,
+  getBillingRecord,
+  deleteBillingRecord,
+  stripe,
+  randomId,
+} from './helpers.js';
+
+describe('Payment Failure (invoice.payment_failed)', () => {
+  let userId: string;
+  let cusId: string;
+
+  beforeAll(async () => {
+    userId = `test-pf-${randomId()}`;
+    cusId = await createTestCustomer(userId);
+    await attachDecliningCard(cusId);
+    await seedBillingRecord(userId, cusId, 'active');
+  });
+
+  afterAll(async () => {
+    await stripe()
+      .customers.del(cusId)
+      .catch(() => {});
+    await deleteBillingRecord(userId);
+  });
+
+  it('should set status to past_due and record failure timestamp', async () => {
+    await createAndFailInvoice(cusId);
+    await waitForWebhook(15);
+    const record = await getBillingRecord(userId);
+    expect(record).not.toBeNull();
+    expect(record!.subscriptionStatus?.S).toBe('past_due');
+    expect(record!.lastPaymentFailedAt?.S).toBeTruthy();
+    expect(record!.gracePeriodEndsAt).toBeUndefined();
+  });
+});
