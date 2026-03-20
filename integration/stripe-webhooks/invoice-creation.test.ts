@@ -8,7 +8,6 @@ import {
   getBillingRecord,
   deleteBillingRecord,
   stripe,
-  randomId,
 } from './helpers.js';
 
 describe('Invoice Creation (invoice.payment_succeeded)', () => {
@@ -16,7 +15,7 @@ describe('Invoice Creation (invoice.payment_succeeded)', () => {
   let cusId: string;
 
   beforeAll(async () => {
-    userId = `test-ic-${randomId()}`;
+    userId = `test-ic-${crypto.randomUUID()}`;
     cusId = await createTestCustomer(userId);
     await attachValidCard(cusId);
     await seedBillingRecord(userId, cusId, 'past_due', {

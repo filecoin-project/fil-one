@@ -8,7 +8,6 @@ import {
   getBillingRecord,
   deleteBillingRecord,
   stripe,
-  randomId,
 } from './helpers.js';
 
 describe('Grace Period Recovery (invoice.payment_succeeded)', () => {
@@ -16,7 +15,7 @@ describe('Grace Period Recovery (invoice.payment_succeeded)', () => {
   let cusId: string;
 
   beforeAll(async () => {
-    userId = `test-gpr-${randomId()}`;
+    userId = `test-gpr-${crypto.randomUUID()}`;
     cusId = await createTestCustomer(userId);
     await attachValidCard(cusId);
 

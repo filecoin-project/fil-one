@@ -7,7 +7,6 @@ import {
   deleteBillingRecord,
   getStripePriceId,
   stripe,
-  randomId,
 } from './helpers.js';
 
 describe('Trial Canceled (customer.subscription.deleted)', () => {
@@ -16,7 +15,7 @@ describe('Trial Canceled (customer.subscription.deleted)', () => {
   let subId: string;
 
   beforeAll(async () => {
-    userId = `test-tc-${randomId()}`;
+    userId = `test-tc-${crypto.randomUUID()}`;
     cusId = await createTestCustomer(userId);
     await seedBillingRecord(userId, cusId, 'trialing');
   });

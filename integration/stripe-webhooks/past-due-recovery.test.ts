@@ -8,7 +8,6 @@ import {
   getBillingRecord,
   deleteBillingRecord,
   stripe,
-  randomId,
 } from './helpers.js';
 
 describe('Past Due Recovery (invoice.payment_succeeded with canceledAt)', () => {
@@ -16,7 +15,7 @@ describe('Past Due Recovery (invoice.payment_succeeded with canceledAt)', () => 
   let cusId: string;
 
   beforeAll(async () => {
-    userId = `test-pdr-${randomId()}`;
+    userId = `test-pdr-${crypto.randomUUID()}`;
     cusId = await createTestCustomer(userId);
     await attachValidCard(cusId);
 

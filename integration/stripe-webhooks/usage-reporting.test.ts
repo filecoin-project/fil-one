@@ -7,7 +7,6 @@ import {
   waitForWebhook,
   pollTestClockReady,
   deleteBillingRecord,
-  randomId,
 } from './helpers.js';
 
 describe('Usage Reporting (meter events via test clock)', () => {
@@ -17,7 +16,7 @@ describe('Usage Reporting (meter events via test clock)', () => {
   let subId: string;
 
   beforeAll(async () => {
-    userId = `test-ur-${randomId()}`;
+    userId = `test-ur-${crypto.randomUUID()}`;
     const s = stripe();
     const priceId = getStripePriceId();
 
@@ -25,7 +24,7 @@ describe('Usage Reporting (meter events via test clock)', () => {
     const frozenTime = Math.floor(Date.now() / 1000);
     const clock = await s.testHelpers.testClocks.create({
       frozen_time: frozenTime,
-      name: `usage-reporting-test-${randomId()}`,
+      name: `usage-reporting-test-${crypto.randomUUID()}`,
     });
     clockId = clock.id;
 

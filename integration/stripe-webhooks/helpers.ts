@@ -57,11 +57,6 @@ export function dynamo(): DynamoDBClient {
 // =============================================================================
 // Utilities
 // =============================================================================
-
-export function randomId(): number {
-  return Math.floor(Math.random() * 100000);
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

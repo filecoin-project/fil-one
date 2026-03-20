@@ -8,7 +8,6 @@ import {
   getBillingRecord,
   deleteBillingRecord,
   stripe,
-  randomId,
 } from './helpers.js';
 
 describe('Payment Failure (invoice.payment_failed)', () => {
@@ -16,7 +15,7 @@ describe('Payment Failure (invoice.payment_failed)', () => {
   let cusId: string;
 
   beforeAll(async () => {
-    userId = `test-pf-${randomId()}`;
+    userId = `test-pf-${crypto.randomUUID()}`;
     cusId = await createTestCustomer(userId);
     await attachDecliningCard(cusId);
     await seedBillingRecord(userId, cusId, 'active');
