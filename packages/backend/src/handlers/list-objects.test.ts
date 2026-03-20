@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { marshall } from '@aws-sdk/util-dynamodb';
 import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
@@ -10,7 +9,6 @@ import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 vi.mock('sst', () => ({
   Resource: {
-    UploadsTable: { name: 'UploadsTable' },
     UserInfoTable: { name: 'UserInfoTable' },
   },
 }));
@@ -37,12 +35,6 @@ import { buildEvent } from '../test/lambda-test-utilities.js';
 
 const USER_INFO = { userId: 'user-1', orgId: 'org-1' };
 
-function bucketRecord() {
-  return {
-    Item: marshall({ pk: `USER#${USER_INFO.userId}`, sk: 'BUCKET#my-bucket' }),
-  };
-}
-
 function orgProfileWithTenant(tenantId: string) {
   return {
     Item: {
@@ -65,10 +57,7 @@ describe('list-objects baseHandler', () => {
   });
 
   it('returns 200 with objects from S3', async () => {
-    ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
-    ddbMock
-      .on(GetItemCommand, { TableName: 'UserInfoTable' })
-      .resolves(orgProfileWithTenant('aurora-t-1'));
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockGetAuroraS3Credentials.mockResolvedValue({
       accessKeyId: 'AKIA_CONSOLE',
       secretAccessKey: 's3_secret',
@@ -111,19 +100,8 @@ describe('list-objects baseHandler', () => {
     expect(result.statusCode).toBe(400);
   });
 
-  it('returns 404 when bucket is not found', async () => {
-    ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves({ Item: undefined });
-
-    const event = buildEvent({ userInfo: USER_INFO });
-    event.pathParameters = { name: 'no-bucket' };
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(404);
-  });
-
   it('returns 503 when org setup is not complete', async () => {
-    ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
-    ddbMock.on(GetItemCommand, { TableName: 'UserInfoTable' }).resolves({
+    ddbMock.on(GetItemCommand).resolves({
       Item: {
         pk: { S: `ORG#${USER_INFO.orgId}` },
         sk: { S: 'PROFILE' },
@@ -141,10 +119,7 @@ describe('list-objects baseHandler', () => {
   });
 
   it('passes pagination parameters through to listObjects', async () => {
-    ddbMock.on(GetItemCommand, { TableName: 'UploadsTable' }).resolves(bucketRecord());
-    ddbMock
-      .on(GetItemCommand, { TableName: 'UserInfoTable' })
-      .resolves(orgProfileWithTenant('aurora-t-1'));
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockGetAuroraS3Credentials.mockResolvedValue({
       accessKeyId: 'AKIA_CONSOLE',
       secretAccessKey: 's3_secret',

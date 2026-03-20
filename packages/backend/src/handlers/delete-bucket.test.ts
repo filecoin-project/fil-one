@@ -14,11 +14,13 @@ vi.mock('sst', () => ({
 }));
 
 const mockGetAuroraS3Credentials = vi.fn();
-const mockDeleteObject = vi.fn();
+const mockListObjects = vi.fn();
+const mockDeleteBucket = vi.fn();
 
 vi.mock('../lib/aurora-s3-client.js', () => ({
   getAuroraS3Credentials: (...args: unknown[]) => mockGetAuroraS3Credentials(...args),
-  deleteObject: (...args: unknown[]) => mockDeleteObject(...args),
+  listObjects: (...args: unknown[]) => mockListObjects(...args),
+  deleteBucket: (...args: unknown[]) => mockDeleteBucket(...args),
 }));
 
 process.env.FILONE_STAGE = 'test';
@@ -26,7 +28,7 @@ process.env.AURORA_S3_GATEWAY_URL = 'https://s3.dev.aur.lu';
 
 const ddbMock = mockClient(DynamoDBClient);
 
-import { baseHandler } from './delete-object.js';
+import { baseHandler } from './delete-bucket.js';
 import { buildEvent } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
@@ -50,52 +52,57 @@ function orgProfileWithTenant(tenantId: string) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('delete-object baseHandler', () => {
+describe('delete-bucket baseHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
   });
 
-  it('returns 204 after deleting via Aurora S3 Gateway', async () => {
+  it('returns 204 after deleting an empty bucket', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockGetAuroraS3Credentials.mockResolvedValue({
       accessKeyId: 'AKIA_CONSOLE',
       secretAccessKey: 's3_secret',
     });
-    mockDeleteObject.mockResolvedValue(undefined);
+    mockListObjects.mockResolvedValue({ objects: [], isTruncated: false });
+    mockDeleteBucket.mockResolvedValue(undefined);
 
-    const event = buildEvent({
-      userInfo: USER_INFO,
-      queryStringParameters: { key: 'photos/cat.jpg' },
-      rawPath: '/api/buckets/my-bucket/objects',
-    });
-    event.pathParameters = { name: 'my-bucket' };
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(204);
-
-    expect(mockGetAuroraS3Credentials).toHaveBeenCalledWith('test', 'aurora-t-1');
-    expect(mockDeleteObject).toHaveBeenCalledWith(
-      'https://s3.dev.aur.lu',
-      { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
-      'my-bucket',
-      'photos/cat.jpg',
-    );
-  });
-
-  it('returns 400 when bucket name is missing from path', async () => {
-    const event = buildEvent({ userInfo: USER_INFO, queryStringParameters: { key: 'test.txt' } });
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(400);
-  });
-
-  it('returns 400 when object key is missing from query', async () => {
     const event = buildEvent({ userInfo: USER_INFO });
     event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
+    expect(result.statusCode).toBe(204);
+    expect(mockDeleteBucket).toHaveBeenCalledWith(
+      'https://s3.dev.aur.lu',
+      { accessKeyId: 'AKIA_CONSOLE', secretAccessKey: 's3_secret' },
+      'my-bucket',
+    );
+  });
+
+  it('returns 400 when bucket name is missing from path', async () => {
+    const event = buildEvent({ userInfo: USER_INFO });
+    const result = await baseHandler(event);
+
     expect(result.statusCode).toBe(400);
+  });
+
+  it('returns 409 when bucket contains objects', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraS3Credentials.mockResolvedValue({
+      accessKeyId: 'AKIA_CONSOLE',
+      secretAccessKey: 's3_secret',
+    });
+    mockListObjects.mockResolvedValue({
+      objects: [{ key: 'file.txt', sizeBytes: 100, lastModified: '2026-01-01T00:00:00.000Z' }],
+      isTruncated: false,
+    });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(409);
+    expect(mockDeleteBucket).not.toHaveBeenCalled();
   });
 
   it('returns 503 when org setup is not complete', async () => {
@@ -108,10 +115,7 @@ describe('delete-object baseHandler', () => {
       },
     });
 
-    const event = buildEvent({
-      userInfo: USER_INFO,
-      queryStringParameters: { key: 'photos/cat.jpg' },
-    });
+    const event = buildEvent({ userInfo: USER_INFO });
     event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
