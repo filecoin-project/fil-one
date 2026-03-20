@@ -402,17 +402,10 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
       )}
 
       {/* Stat cards */}
+      {/* TODO: Replace N/A values with real data from Aurora analytics endpoint */}
       <div className="mb-6 grid grid-cols-3 gap-4">
-        <StatCard
-          icon={CubeIcon}
-          label="Objects"
-          value={bucket ? bucket.objectCount.toLocaleString() : objects.length.toLocaleString()}
-        />
-        <StatCard
-          icon={HardDrivesIcon}
-          label="Storage used"
-          value={bucket ? formatBytes(bucket.sizeBytes) : '—'}
-        />
+        <StatCard icon={CubeIcon} label="Objects" value="N/A" />
+        <StatCard icon={HardDrivesIcon} label="Storage used" value="N/A" />
         <StatCard
           icon={KeyIcon}
           label="API keys"

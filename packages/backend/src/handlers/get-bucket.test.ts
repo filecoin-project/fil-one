@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { FINAL_SETUP_STATUS } from '../lib/org-setup-status.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -8,14 +9,29 @@ import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 
 vi.mock('sst', () => ({
   Resource: {
-    UploadsTable: { name: 'UploadsTable' },
+    UserInfoTable: { name: 'UserInfoTable' },
   },
 }));
+
+const mockGetAuroraPortalApiKey = vi.fn();
+vi.mock('../lib/aurora-portal.js', () => ({
+  getAuroraPortalApiKey: (...args: unknown[]) => mockGetAuroraPortalApiKey(...args),
+}));
+
+const mockGetBucket = vi.fn();
+vi.mock('@filone/aurora-portal-client', () => ({
+  createClient: () => 'mock-client',
+  getV1TenantsByTenantIdBucketByBucketName: (...args: unknown[]) => mockGetBucket(...args),
+}));
+
+process.env.AURORA_PORTAL_URL = 'https://portal.dev.aur.lu';
+process.env.FILONE_STAGE = 'test';
 
 const ddbMock = mockClient(DynamoDBClient);
 
 import { baseHandler } from './get-bucket.js';
 import { buildEvent } from '../test/lambda-test-utilities.js';
+import { S3_REGION } from '@filone/shared';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -23,14 +39,14 @@ import { buildEvent } from '../test/lambda-test-utilities.js';
 
 const USER_INFO = { userId: 'user-1', orgId: 'org-1' };
 
-function bucketItem(name: string, region: string, createdAt: string, isPublic = false) {
+function orgProfileWithTenant(tenantId: string) {
   return {
-    pk: { S: `USER#${USER_INFO.userId}` },
-    sk: { S: `BUCKET#${name}` },
-    name: { S: name },
-    region: { S: region },
-    createdAt: { S: createdAt },
-    isPublic: { BOOL: isPublic },
+    Item: {
+      pk: { S: `ORG#${USER_INFO.orgId}` },
+      sk: { S: 'PROFILE' },
+      auroraTenantId: { S: tenantId },
+      setupStatus: { S: FINAL_SETUP_STATUS },
+    },
   };
 }
 
@@ -44,9 +60,13 @@ describe('get-bucket baseHandler', () => {
     ddbMock.reset();
   });
 
-  it('returns 200 with bucket data', async () => {
-    ddbMock.on(GetItemCommand).resolves({
-      Item: bucketItem('my-bucket', 'eu-west-1', '2026-01-15T10:00:00Z'),
+  it('returns 200 with bucket data from Aurora', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
+    mockGetBucket.mockResolvedValue({
+      data: { name: 'my-bucket', createdAt: '2026-01-15T10:00:00Z' },
+      error: undefined,
+      response: { status: 200 },
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
@@ -58,17 +78,42 @@ describe('get-bucket baseHandler', () => {
     expect(body).toStrictEqual({
       bucket: {
         name: 'my-bucket',
-        region: 'eu-west-1',
+        region: S3_REGION,
         createdAt: '2026-01-15T10:00:00Z',
-        objectCount: 0,
-        sizeBytes: 0,
         isPublic: false,
       },
     });
   });
 
-  it('returns 404 when bucket does not exist', async () => {
-    ddbMock.on(GetItemCommand).resolves({ Item: undefined });
+  it('calls Aurora portal API with correct params', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
+    mockGetBucket.mockResolvedValue({
+      data: { name: 'my-bucket', createdAt: '2026-01-15T10:00:00Z' },
+      error: undefined,
+      response: { status: 200 },
+    });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
+    await baseHandler(event);
+
+    expect(mockGetAuroraPortalApiKey).toHaveBeenCalledWith('test', 'aurora-t-1');
+    expect(mockGetBucket).toHaveBeenCalledWith({
+      client: 'mock-client',
+      path: { tenantId: 'aurora-t-1', bucketName: 'my-bucket' },
+      throwOnError: false,
+    });
+  });
+
+  it('returns 404 when Aurora returns 404', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
+    mockGetBucket.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Not found' },
+      response: { status: 404 },
+    });
 
     const event = buildEvent({ userInfo: USER_INFO });
     event.pathParameters = { name: 'nonexistent-bucket' };
@@ -77,6 +122,23 @@ describe('get-bucket baseHandler', () => {
     expect(result.statusCode).toBe(404);
     const body = JSON.parse(result.body!);
     expect(body).toStrictEqual({ message: 'Bucket not found' });
+  });
+
+  it('throws when Aurora returns a non-404 error', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
+    mockGetBucket.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Internal error' },
+      response: { status: 500 },
+    });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
+
+    await expect(baseHandler(event)).rejects.toThrow(
+      'Failed to get bucket "my-bucket" from Aurora for tenant aurora-t-1',
+    );
   });
 
   it('returns 400 when bucket name is missing', async () => {
@@ -88,35 +150,37 @@ describe('get-bucket baseHandler', () => {
     expect(body).toStrictEqual({ message: 'Bucket name is required' });
   });
 
-  it('queries DynamoDB with correct key', async () => {
-    ddbMock.on(GetItemCommand).resolves({ Item: undefined });
-
-    const event = buildEvent({ userInfo: USER_INFO });
-    event.pathParameters = { name: 'test-bucket' };
-    await baseHandler(event);
-
-    const calls = ddbMock.commandCalls(GetItemCommand);
-    expect(calls).toHaveLength(1);
-    const input = calls[0].args[0].input;
-    expect(input).toStrictEqual({
-      TableName: 'UploadsTable',
-      Key: {
-        pk: { S: 'USER#user-1' },
-        sk: { S: 'BUCKET#test-bucket' },
+  it('returns 503 when auroraTenantId is missing', async () => {
+    ddbMock.on(GetItemCommand).resolves({
+      Item: {
+        pk: { S: `ORG#${USER_INFO.orgId}` },
+        sk: { S: 'PROFILE' },
       },
     });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(503);
+    expect(mockGetBucket).not.toHaveBeenCalled();
   });
 
-  it('returns isPublic true when bucket is public', async () => {
+  it('returns 503 when org setup is not complete', async () => {
     ddbMock.on(GetItemCommand).resolves({
-      Item: bucketItem('public-bucket', 'eu-west-1', '2026-01-15T10:00:00Z', true),
+      Item: {
+        pk: { S: `ORG#${USER_INFO.orgId}` },
+        sk: { S: 'PROFILE' },
+        auroraTenantId: { S: 'aurora-t-1' },
+        setupStatus: { S: 'AURORA_TENANT_SETUP_COMPLETE' },
+      },
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
-    event.pathParameters = { name: 'public-bucket' };
+    event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
-    const body = JSON.parse(result.body!);
-    expect(body.bucket.isPublic).toBe(true);
+    expect(result.statusCode).toBe(503);
+    expect(mockGetBucket).not.toHaveBeenCalled();
   });
 });
