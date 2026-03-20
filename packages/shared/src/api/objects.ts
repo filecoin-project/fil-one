@@ -25,11 +25,28 @@ export interface PresignUploadRequest {
   contentType: string;
   fileName: string;
   description?: string;
+  tags?: string[];
 }
 
 export interface PresignUploadResponse {
   url: string;
   key: string;
+}
+
+export interface ObjectRetentionInfo {
+  mode: 'GOVERNANCE' | 'COMPLIANCE';
+  retainUntilDate: string;
+}
+
+export interface ObjectMetadataResponse {
+  key: string;
+  sizeBytes: number;
+  lastModified: string;
+  etag?: string;
+  contentType?: string;
+  metadata: Record<string, string>;
+  filCid?: string;
+  retention?: ObjectRetentionInfo;
 }
 
 export interface DeleteObjectRequest {

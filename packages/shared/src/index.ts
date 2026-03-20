@@ -41,6 +41,8 @@ export type {
   DeleteObjectRequest,
   PresignUploadRequest,
   PresignUploadResponse,
+  ObjectMetadataResponse,
+  ObjectRetentionInfo,
 } from './api/objects.js';
 
 export {
