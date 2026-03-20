@@ -246,7 +246,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
       setUploadStep('done');
       setObjects((prev) => [
         {
-          key,
+          key: presignData.key,
           sizeBytes: selectedFile.size,
           lastModified: new Date().toISOString(),
         },
