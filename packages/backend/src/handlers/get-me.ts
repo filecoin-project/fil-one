@@ -15,7 +15,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
-  const { userId, orgId, email, emailVerified } = getUserInfo(event);
+  const { orgId, email, emailVerified } = getUserInfo(event);
 
   const { Item } = await getDynamoClient().send(
     new GetItemCommand({
@@ -49,8 +49,8 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   };
 
   // Only include suggested name if org is not yet confirmed
-  if (!orgConfirmed) {
-    body.suggestedOrgName = suggestOrgName(email, userId);
+  if (!orgConfirmed && email) {
+    body.suggestedOrgName = suggestOrgName(email);
   }
 
   return new ResponseBuilder().status(200).body(body).build();

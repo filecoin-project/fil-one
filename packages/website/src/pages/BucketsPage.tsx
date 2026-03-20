@@ -5,7 +5,6 @@ import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ss
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
-import { formatBytes } from '@filone/shared';
 
 import type { Bucket, ListBucketsResponse } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
@@ -118,12 +117,6 @@ export function BucketsPage() {
                   Region
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Objects
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Size
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                   Created
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
@@ -148,8 +141,6 @@ export function BucketsPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-zinc-600">{bucket.region}</td>
-                  <td className="px-4 py-3 text-zinc-600">{bucket.objectCount.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-zinc-600">{formatBytes(bucket.sizeBytes)}</td>
                   <td className="px-4 py-3 text-zinc-600">{formatDate(bucket.createdAt)}</td>
                   <td className="px-4 py-3">
                     {bucket.isPublic ? (
