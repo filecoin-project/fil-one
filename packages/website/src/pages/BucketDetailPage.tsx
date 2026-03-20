@@ -350,6 +350,16 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
     }
   }
 
+  async function handleDeleteKey(id: string) {
+    try {
+      await apiRequest(`/access-keys/${id}`, { method: 'DELETE' });
+      setAccessKeys((prev) => prev.filter((k) => k.id !== id));
+      toast.success('Access key deleted');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete key');
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-16">
@@ -591,6 +601,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                 <AccessKeysTable
                   keys={accessKeys}
                   showPermissions
+                  onDelete={handleDeleteKey}
                   onCreateOpen={() => setAddKeyOpen(true)}
                   emptyTitle="No access keys yet"
                   emptyDescription="Create an access key to connect via the S3 API"
