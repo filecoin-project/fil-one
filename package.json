@@ -28,6 +28,7 @@
     "@playwright/test": "^1.58.2",
     "@pulumi/aws": "^7.21.0",
     "@pulumi/command": "^1.2.1",
+    "@types/node": "^24",
     "aws-cdk-lib": "^2.241.0",
     "constructs": "^10.5.1",
     "husky": "^9.1.7",
