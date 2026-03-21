@@ -45,6 +45,8 @@ export type {
   ObjectRetentionInfo,
 } from './api/objects.js';
 
+export { PresignUploadSchema, HeadObjectQuerySchema } from './api/objects.js';
+
 export {
   ACCESS_KEY_PERMISSIONS,
   ACCESS_KEY_BUCKET_SCOPES,

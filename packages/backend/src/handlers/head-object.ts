@@ -3,6 +3,7 @@ import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import type { ErrorResponse, ObjectMetadataResponse } from '@filone/shared';
+import { HeadObjectQuerySchema } from '@filone/shared';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
 import { getAuroraS3Credentials, headObject, getObjectRetention } from '../lib/aurora-s3-client.js';
@@ -21,8 +22,6 @@ export async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const bucketName = event.pathParameters?.name;
-  const objectKey = event.queryStringParameters?.key;
-
   if (!bucketName) {
     return new ResponseBuilder()
       .status(400)
@@ -30,12 +29,15 @@ export async function baseHandler(
       .build();
   }
 
-  if (!objectKey) {
+  const queryParsed = HeadObjectQuerySchema.safeParse(event.queryStringParameters ?? {});
+  if (!queryParsed.success) {
     return new ResponseBuilder()
       .status(400)
-      .body<ErrorResponse>({ message: 'Missing object key query parameter' })
+      .body<ErrorResponse>({ message: queryParsed.error.issues[0].message })
       .build();
   }
+
+  const { key: objectKey } = queryParsed.data;
 
   const { orgId } = getUserInfo(event);
 

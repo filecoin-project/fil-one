@@ -29,15 +29,13 @@ export type UploadObjectPageProps = {
 export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
   const navigate = useNavigate();
 
-  // TODO: Tags are managed as local UI state only. Wire them through the
-  // useFileUpload hook and send to the presign endpoint once the hook supports tags.
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
   const upload = useFileUpload({
     bucketName,
+    tags,
     onSuccess: () => {
-      // Navigate to bucket detail page (object detail page will be wired in Phase 7)
       void navigate({ to: '/buckets/$bucketName', params: { bucketName } });
     },
   });

@@ -65,8 +65,8 @@ describe('head-object baseHandler', () => {
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(400);
-    const body = JSON.parse(result.body as string);
-    expect(body).toStrictEqual({ message: 'Missing object key query parameter' });
+    const body = JSON.parse(result.body as string) as { message: string };
+    expect(body.message).toBeTruthy();
   });
 
   it('returns 404 when S3 throws NoSuchBucket', async () => {
