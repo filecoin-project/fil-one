@@ -60,17 +60,14 @@ export default $config({
       OTEL_EXPORTER_OTLP_HEADERS: $interpolate`Authorization=Basic ${grafanaOtlpAuth.value}`,
     };
 
-    // Ensure every Lambda function gets OTEL env, consistent runtime, and JSON logging.
-    // Note: retention is NOT set here to avoid SST creating a child LogGroup resource
-    // that conflicts with Lambda-auto-created log groups on existing stacks.
-    // Log groups are created explicitly in createFunction() with import handling.
+    // Ensure every Lambda function gets OTEL env and consistent runtime.
+    // Logging is configured per-function in createFunction() with import handling.
     $transform(sst.aws.Function, (args) => {
       args.environment = $resolve([args.environment ?? {}]).apply(([overrides]) => ({
         ...otelEnv,
         ...overrides,
       }));
       args.runtime = args.runtime ?? 'nodejs24.x';
-      args.logging = args.logging ?? { format: 'json' };
     });
 
     // Discover log groups that already exist in AWS (e.g. auto-created by Lambda runtime
@@ -194,29 +191,32 @@ export default $config({
     function createFunction(fnName: string, args: sst.aws.FunctionArgs): sst.aws.Function {
       const logGroupName = `/aws/lambda/filone-${$app.stage}-${fnName}`;
 
-      // Create the log group explicitly so we can set retention and handle
-      // the case where it already exists (import into Pulumi state).
-      const logGroup = new aws.cloudwatch.LogGroup(
-        `${fnName}LogGroup`,
-        { name: logGroupName, retentionInDays: 7 },
-        existingLogGroups.has(logGroupName) ? { import: logGroupName } : {},
-      );
-
       const fn = new sst.aws.Function(fnName, {
         name: $interpolate`filone-${$app.stage}-${fnName}`,
         ...args,
+        logging: { retention: '1 week', format: 'json' },
+        transform: {
+          logGroup: (_logGroupArgs, opts) => {
+            if (existingLogGroups.has(logGroupName)) {
+              opts.import = logGroupName;
+            }
+          },
+        },
       });
 
-      new aws.cloudwatch.LogSubscriptionFilter(
-        `${fnName}LogFwd`,
-        {
-          logGroup: logGroup.name,
-          filterPattern: '',
-          destinationArn: firehose.arn,
-          roleArn: cwToFirehoseRole.arn,
-        },
-        { dependsOn: [fn] },
-      );
+      // Use the LogGroup resource reference (not a plain string) to ensure
+      // Pulumi creates the log group before the subscription filter.
+      const logGroup = fn.nodes.logGroup.apply((lg) => {
+        if (!lg) throw new Error(`LogGroup not created for function ${fnName}`);
+        return lg;
+      });
+
+      new aws.cloudwatch.LogSubscriptionFilter(`${fnName}LogFwd`, {
+        logGroup: logGroup.name,
+        filterPattern: '',
+        destinationArn: firehose.arn,
+        roleArn: cwToFirehoseRole.arn,
+      });
 
       return fn;
     }

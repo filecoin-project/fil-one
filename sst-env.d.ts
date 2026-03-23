@@ -14,6 +14,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "AuroraTenantSetup": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "AuroraTenantSetupDlq": {
       "type": "sst.aws.Queue"
       "url": string
@@ -41,6 +45,18 @@ declare module "sst" {
     "BillingTable": {
       "name": string
       "type": "sst.aws.Dynamo"
+    }
+    "GrafanaLokiAuth": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "GrafanaOtlpAuth": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "OtelFirehoseBackup": {
+      "name": string
+      "type": "sst.aws.Bucket"
     }
     "SetupIntegrations": {
       "name": string
