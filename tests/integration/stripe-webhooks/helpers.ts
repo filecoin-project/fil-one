@@ -202,12 +202,19 @@ export async function waitForWebhook(seconds = 15): Promise<void> {
 }
 
 export async function pollTestClockReady(clockId: string, timeoutSeconds = 120): Promise<void> {
-  for (let elapsed = 0; elapsed < timeoutSeconds; elapsed += 5) {
+  const timeoutMs = timeoutSeconds * 1000;
+  let elapsed = 0;
+  let delay = 200;
+  const maxDelay = 2000;
+
+  while (elapsed < timeoutMs) {
     const clockState = await getStripeClient().testHelpers.testClocks.retrieve(clockId);
     if (clockState.status === 'ready') {
       return;
     }
-    await sleep(5000);
+    await sleep(delay);
+    elapsed += delay;
+    delay = Math.min(delay * 2, maxDelay);
   }
   throw new Error(`Test clock ${clockId} did not reach 'ready' status after ${timeoutSeconds}s`);
 }
