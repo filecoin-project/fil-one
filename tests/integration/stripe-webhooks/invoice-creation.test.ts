@@ -43,8 +43,8 @@ describe('Invoice Creation (invoice.payment_succeeded)', () => {
       paymentMethodBrand: { S: 'visa' },
       paymentMethodId: { S: expect.any(String) },
       paymentMethodLast4: { S: '4242' },
-      paymentMethodExpYear: { S: expect.any(String) },
-      paymentMethodExpMonth: { S: expect.any(String) },
+      paymentMethodExpYear: { N: expect.any(String) },
+      paymentMethodExpMonth: { N: expect.any(String) },
     });
   });
 });

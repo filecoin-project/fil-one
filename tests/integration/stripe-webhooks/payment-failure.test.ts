@@ -41,8 +41,8 @@ describe('Payment Failure (invoice.payment_failed)', () => {
       paymentMethodBrand: { S: 'visa' },
       paymentMethodId: { S: expect.any(String) },
       paymentMethodLast4: { S: '0341' }, // last4 numbers for declined after attach test card
-      paymentMethodExpYear: { S: expect.any(String) },
-      paymentMethodExpMonth: { S: expect.any(String) },
+      paymentMethodExpYear: { N: expect.any(String) },
+      paymentMethodExpMonth: { N: expect.any(String) },
     });
   });
 });
