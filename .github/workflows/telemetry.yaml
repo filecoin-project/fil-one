@@ -41,9 +41,11 @@ jobs:
         run: |
           # workflow_run.workflow_id refers to the observed workflow (e.g. CI [packages]),
           # not the telemetry workflow that runs this step.
-          api_path="/repos/${{ github.repository }}/actions/workflows/${{ github.event.workflow_run.workflow_id }}/runs?branch=${{ github.event.workflow_run.head_branch }}&status=completed&per_page=1"
-          echo "::debug::API query: $api_path"
-          count=$(gh api "$api_path" --jq '.total_count') || true
+          api_path="/repos/${{ github.repository }}/actions/workflows/${{ github.event.workflow_run.workflow_id }}/runs"
+          branch="${{ github.event.workflow_run.head_branch }}"
+          echo "::debug::API query path: $api_path"
+          echo "::debug::API query branch: $branch"
+          count=$(gh api "$api_path" -f "branch=$branch" -f status=completed -f per_page=1 --jq '.total_count') || true
           echo "Completed runs count: ${count:-(empty/failed)}"
 
           # Leave the output empty if the API call failed.
