@@ -61,14 +61,26 @@ export default $config({
     };
 
     // Ensure every Lambda function gets OTEL env, consistent runtime, and JSON logging.
+    // Note: retention is NOT set here to avoid SST creating a child LogGroup resource
+    // that conflicts with Lambda-auto-created log groups on existing stacks.
+    // Log groups are created explicitly in createFunction() with import handling.
     $transform(sst.aws.Function, (args) => {
       args.environment = $resolve([args.environment ?? {}]).apply(([overrides]) => ({
         ...otelEnv,
         ...overrides,
       }));
       args.runtime = args.runtime ?? 'nodejs24.x';
-      args.logging = args.logging ?? { retention: '1 week', format: 'json' };
+      args.logging = args.logging ?? { format: 'json' };
     });
+
+    // Discover log groups that already exist in AWS (e.g. auto-created by Lambda runtime
+    // on previous deployments). These must be imported into Pulumi state rather than
+    // created from scratch, to avoid ResourceAlreadyExistsException.
+    const existingLogGroups = await aws.cloudwatch
+      .getLogGroups({
+        logGroupNamePrefix: `/aws/lambda/filone-${$app.stage}-`,
+      })
+      .then((r) => new Set(r.logGroupNames));
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
     const billingTable = new sst.aws.Dynamo('BillingTable', {
@@ -180,16 +192,25 @@ export default $config({
     });
 
     function createFunction(fnName: string, args: sst.aws.FunctionArgs): sst.aws.Function {
+      const logGroupName = `/aws/lambda/filone-${$app.stage}-${fnName}`;
+
+      // Create the log group explicitly so we can set retention and handle
+      // the case where it already exists (import into Pulumi state).
+      const logGroup = new aws.cloudwatch.LogGroup(
+        `${fnName}LogGroup`,
+        { name: logGroupName, retentionInDays: 7 },
+        existingLogGroups.has(logGroupName) ? { import: logGroupName } : {},
+      );
+
       const fn = new sst.aws.Function(fnName, {
         name: $interpolate`filone-${$app.stage}-${fnName}`,
         ...args,
       });
 
-      const logGroupName = $interpolate`/aws/lambda/filone-${$app.stage}-${fnName}`;
       new aws.cloudwatch.LogSubscriptionFilter(
         `${fnName}LogFwd`,
         {
-          logGroup: logGroupName,
+          logGroup: logGroup.name,
           filterPattern: '',
           destinationArn: firehose.arn,
           roleArn: cwToFirehoseRole.arn,
