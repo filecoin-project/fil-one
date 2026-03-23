@@ -21,6 +21,8 @@ function initTracing(): void {
     resourceFromAttributes({
       [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? 'filone',
       [ATTR_SERVICE_VERSION]: '0.0.1',
+      'deployment.environment.name': process.env.DEPLOYMENT_STAGE ?? 'dev',
+      'service.namespace': 'filone',
     }),
   );
 

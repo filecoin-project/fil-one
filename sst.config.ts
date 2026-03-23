@@ -54,7 +54,7 @@ export default $config({
     // ── OTEL environment & global Lambda defaults ─────────────────────
     const otelEnv: Record<string, $util.Input<string>> = {
       OTEL_SERVICE_NAME: $interpolate`filone-${$app.stage}`,
-      OTEL_RESOURCE_ATTRIBUTES: $interpolate`deployment.environment.name=${$app.stage},service.namespace=filone`,
+      DEPLOYMENT_STAGE: $app.stage,
       OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp-gateway-prod-us-central-0.grafana.net/otlp',
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_HEADERS: $interpolate`Authorization=Basic ${grafanaOtlpAuth.value}`,
@@ -174,6 +174,7 @@ export default $config({
         },
         requestConfiguration: {
           contentEncoding: 'GZIP',
+          commonAttributes: [{ name: 'lbl_environment', value: $app.stage }],
         },
       },
     });
@@ -481,6 +482,16 @@ export default $config({
       });
 
       api.route(`${method} ${routePath}`, fn.arn);
+
+      // SST's api.route() with an ARN creates lambda.Permission with
+      // qualifier: "" (from undefined), which doesn't actually grant
+      // API Gateway invoke access. Add an explicit permission.
+      new aws.lambda.Permission(`${fnName}ApiPermission`, {
+        action: 'lambda:InvokeFunction',
+        function: fn.nodes.function.name,
+        principal: 'apigateway.amazonaws.com',
+        sourceArn: $interpolate`${api.nodes.api.executionArn}/*`,
+      });
     }
 
     // ── Data routes ──────────────────────────────────────────────────
@@ -620,6 +631,18 @@ export default $config({
         {
           actions: ['ssm:GetParameter', 'ssm:PutParameter'],
           resources: [auroraApiKeySsmArn, auroraS3KeySsmArn],
+        },
+        // queue.subscribe(fn.arn) passes an ARN, so SST skips attaching
+        // SQS permissions automatically — we must add them here.
+        {
+          actions: [
+            'sqs:ChangeMessageVisibility',
+            'sqs:DeleteMessage',
+            'sqs:GetQueueAttributes',
+            'sqs:GetQueueUrl',
+            'sqs:ReceiveMessage',
+          ],
+          resources: [tenantSetupQueue.arn],
         },
       ],
       timeout: '60 seconds',
