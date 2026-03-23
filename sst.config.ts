@@ -132,6 +132,13 @@ export default $config({
       },
     });
 
+    const firehoseLogGroup = new aws.cloudwatch.LogGroup('OtelFirehoseLogGroup', {
+      retentionInDays: 7,
+    });
+    const firehoseLogStream = new aws.cloudwatch.LogStream('OtelFirehoseLogStream', {
+      logGroupName: firehoseLogGroup.name,
+    });
+
     const firehoseRole = new aws.iam.Role('OtelFirehoseRole', {
       assumeRolePolicy: aws.iam.getPolicyDocumentOutput({
         statements: [
@@ -152,6 +159,11 @@ export default $config({
                 Action: ['s3:PutObject', 's3:GetObject', 's3:ListBucket'],
                 Resource: [firehoseBackupBucket.arn, $interpolate`${firehoseBackupBucket.arn}/*`],
               },
+              {
+                Effect: 'Allow',
+                Action: ['logs:PutLogEvents'],
+                Resource: [$interpolate`${firehoseLogGroup.arn}:*`],
+              },
             ],
           }),
         },
@@ -161,12 +173,17 @@ export default $config({
     const firehose = new aws.kinesis.FirehoseDeliveryStream('OtelLogDelivery', {
       destination: 'http_endpoint',
       httpEndpointConfiguration: {
-        url: 'https://aws-logs-prod-008.grafana.net/aws-logs/api/v1/push',
-        name: 'Grafana Loki',
+        url: 'https://logs-prod3.grafana.net/aws-logs/api/v1/push',
+        name: 'grafanacloud-filecoinfoundation-logs',
         accessKey: grafanaLokiAuth.value,
         bufferingInterval: 60,
         bufferingSize: 1,
         roleArn: firehoseRole.arn,
+        cloudwatchLoggingOptions: {
+          enabled: true,
+          logGroupName: firehoseLogGroup.name,
+          logStreamName: firehoseLogStream.name,
+        },
         s3BackupMode: 'FailedDataOnly',
         s3Configuration: {
           bucketArn: firehoseBackupBucket.arn,
@@ -174,7 +191,10 @@ export default $config({
         },
         requestConfiguration: {
           contentEncoding: 'GZIP',
-          commonAttributes: [{ name: 'lbl_environment', value: $app.stage }],
+          commonAttributes: [
+            { name: 'lbl_environment', value: $app.stage },
+            { name: 'lbl_service', value: $interpolate`filone-${$app.stage}` },
+          ],
         },
       },
     });
