@@ -62,7 +62,10 @@ export default $config({
 
     // Ensure every Lambda function gets OTEL env, consistent runtime, and JSON logging.
     $transform(sst.aws.Function, (args) => {
-      args.environment = { ...otelEnv, ...args.environment };
+      args.environment = $resolve([args.environment ?? {}]).apply(([overrides]) => ({
+        ...otelEnv,
+        ...overrides,
+      }));
       args.runtime = args.runtime ?? 'nodejs24.x';
       args.logging = args.logging ?? { retention: '1 week', format: 'json' };
     });
