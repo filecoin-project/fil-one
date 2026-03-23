@@ -239,20 +239,6 @@ describe('usage-reporting-worker', () => {
       expect(item.lockAction).toEqual({ S: 'DISABLED' });
     });
 
-    it('admin-locked tenant is preserved', async () => {
-      mockGetStorageSamples.mockResolvedValue([
-        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_500_000_000_000 },
-      ]);
-      mockGetOperationsSamples.mockResolvedValue([]);
-      mockGetTenantInfo.mockResolvedValue({ status: 'LOCKED' });
-
-      await handler(trialPayload);
-
-      expect(mockUpdateTenantStatus).not.toHaveBeenCalled();
-      const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
-      expect(item.lockAction).toEqual({ S: 'skipped:admin-locked' });
-    });
-
     it('audit record includes totalEgressBytes', async () => {
       mockGetStorageSamples.mockResolvedValue([]);
       mockGetOperationsSamples.mockResolvedValue([

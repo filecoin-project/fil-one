@@ -35,13 +35,7 @@ async function enforceTenantLocks({
   currentStatus: ModelsTenantStatus | undefined;
   currentStorageBytes: number;
   totalEgressBytes: number;
-}): Promise<string> {
-  // Don't override admin-set LOCKED status
-  if (currentStatus === 'LOCKED') {
-    console.log('[usage-worker] Tenant is admin-LOCKED, skipping enforcement', { tenantId });
-    return 'skipped:admin-locked';
-  }
-
+}): Promise<ModelsTenantStatus> {
   // Determine desired status (DISABLED > WRITE_LOCKED > ACTIVE)
   let desiredStatus: ModelsTenantStatus;
   if (totalEgressBytes > TRIAL_EGRESS_LIMIT) {
