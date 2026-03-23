@@ -405,11 +405,7 @@ export function SettingsPage() {
                   Permanently delete your account and all data
                 </p>
               </div>
-              <Button
-                variant="ghost"
-                className="border-red-300 bg-red-600 text-white hover:bg-red-700"
-                disabled
-              >
+              <Button variant="ghost" className="cursor-not-allowed opacity-40" disabled>
                 Delete account
               </Button>
             </div>
