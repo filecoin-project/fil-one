@@ -1,4 +1,4 @@
-name: Telemetry
+name: GHA Workflow Telemetry
 
 on:
   # NOTE: workflow_run requires an explicit list — wildcards are not supported.
