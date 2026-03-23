@@ -31,7 +31,7 @@ jobs:
           fi
 
       - name: Export OpenTelemetry data
-        uses: paper2/github-actions-opentelemetry@v0.10.0
+        uses: paper2/github-actions-opentelemetry@e1027e95ff4cc4022e36a0fc03c44f402430bee6 # v0.10.0
         env:
           OTEL_SERVICE_NAME: filone-ci
           OTEL_EXPORTER_OTLP_ENDPOINT: https://otlp-gateway-prod-us-central-0.grafana.net/otlp
