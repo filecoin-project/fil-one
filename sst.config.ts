@@ -32,6 +32,9 @@ export default $config({
     };
   },
   async run() {
+    // ⚠️  All Lambda functions MUST be created via createFunction() to ensure
+    //     log forwarding is set up. Never use `new sst.aws.Function()` directly.
+
     // ── Secrets (set via: pnpx sst secret set <Name> <value>) ─────────
     const auth0ClientId = new sst.Secret('Auth0ClientId');
     const auth0ClientSecret = new sst.Secret('Auth0ClientSecret');
@@ -47,6 +50,22 @@ export default $config({
         ? new sst.Secret('SendGridApiKey')
         : undefined;
     const AWS_CACHING_DISABLED_POLICY = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
+
+    // ── OTEL environment & global Lambda defaults ─────────────────────
+    const otelEnv: Record<string, $util.Input<string>> = {
+      OTEL_SERVICE_NAME: $interpolate`filone-${$app.stage}`,
+      OTEL_RESOURCE_ATTRIBUTES: $interpolate`deployment.environment.name=${$app.stage},service.namespace=filone`,
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp-gateway-prod-us-central-0.grafana.net/otlp',
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_HEADERS: $interpolate`Authorization=Basic ${grafanaOtlpAuth.value}`,
+    };
+
+    // Ensure every Lambda function gets OTEL env, consistent runtime, and JSON logging.
+    $transform(sst.aws.Function, (args) => {
+      args.environment = { ...otelEnv, ...args.environment };
+      args.runtime = args.runtime ?? 'nodejs24.x';
+      args.logging = args.logging ?? { retention: '1 week', format: 'json' };
+    });
 
     // ── DynamoDB Tables ──────────────────────────────────────────────
     const billingTable = new sst.aws.Dynamo('BillingTable', {
@@ -157,21 +176,25 @@ export default $config({
       ],
     });
 
-    // Log groups must be created explicitly (not left to the Lambda runtime)
-    // because CloudWatch subscription filters require the log group to exist
-    // at deploy time. Lambda only creates implicit log groups on first invocation.
-    function addLogForwarding(fnName: string) {
+    function createFunction(fnName: string, args: sst.aws.FunctionArgs): sst.aws.Function {
+      const fn = new sst.aws.Function(fnName, {
+        name: $interpolate`filone-${$app.stage}-${fnName}`,
+        ...args,
+      });
+
       const logGroupName = $interpolate`/aws/lambda/filone-${$app.stage}-${fnName}`;
-      const logGroup = new aws.cloudwatch.LogGroup(`${fnName}LogGroup`, {
-        name: logGroupName,
-        retentionInDays: 7,
-      });
-      new aws.cloudwatch.LogSubscriptionFilter(`${fnName}LogFwd`, {
-        logGroup: logGroup.name,
-        filterPattern: '',
-        destinationArn: firehose.arn,
-        roleArn: cwToFirehoseRole.arn,
-      });
+      new aws.cloudwatch.LogSubscriptionFilter(
+        `${fnName}LogFwd`,
+        {
+          logGroup: logGroupName,
+          filterPattern: '',
+          destinationArn: firehose.arn,
+          roleArn: cwToFirehoseRole.arn,
+        },
+        { dependsOn: [fn] },
+      );
+
+      return fn;
     }
 
     // ── S3 Bucket for user file storage ──────────────────────────────
@@ -279,7 +302,7 @@ export default $config({
     const siteUrl = router.url;
 
     // ── Deploy-time setup (Stripe webhook + Auth0 callbacks) ────────
-    const setupFn = new sst.aws.Function('SetupIntegrations', {
+    const setupFn = createFunction('SetupIntegrations', {
       handler: 'packages/backend/src/jobs/stack-setup/setup-integrations.handler',
       link: [
         stripeSecretKey,
@@ -297,7 +320,6 @@ export default $config({
           resources: [$interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/*`],
         },
       ],
-      runtime: 'nodejs24.x',
       timeout: '10 seconds',
     });
 
@@ -346,20 +368,10 @@ export default $config({
       auroraBackofficeToken,
     ];
 
-    const otelEnv: Record<string, $util.Input<string>> = {
-      OTEL_SERVICE_NAME: $interpolate`filone-${$app.stage}`,
-      OTEL_RESOURCE_ATTRIBUTES: $interpolate`deployment.environment.name=${$app.stage},service.namespace=filone`,
-      OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp-gateway-prod-us-central-0.grafana.net/otlp',
-      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
-      OTEL_EXPORTER_OTLP_HEADERS: $interpolate`Authorization=Basic ${grafanaOtlpAuth.value}`,
-      AWS_LAMBDA_LOG_FORMAT: 'JSON',
-    };
-
     const sharedEnv: Record<string, $util.Input<string>> = {
       FILONE_STAGE: $app.stage,
       AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
       AUTH0_AUDIENCE: 'https://staging.fil.one',
-      ...otelEnv,
     };
 
     if (isProduction) {
@@ -404,20 +416,18 @@ export default $config({
         .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
         .join('');
 
-      api.route(`${method} ${routePath}`, {
+      const fn = createFunction(fnName, {
         handler: `packages/backend/src/handlers/${handler}.handler`,
-        name: $interpolate`filone-${$app.stage}-${fnName}`,
         link: allResources,
         environment: {
           ...sharedEnv,
           ...extraEnv,
         },
         permissions,
-        runtime: 'nodejs24.x',
         timeout: '10 seconds',
       });
 
-      addLogForwarding(fnName);
+      api.route(`${method} ${routePath}`, fn.arn);
     }
 
     // ── Data routes ──────────────────────────────────────────────────
@@ -546,28 +556,23 @@ export default $config({
     );
 
     // ── Tenant setup consumer ──────────────────────────────────────
-    tenantSetupQueue.subscribe(
-      {
-        handler: 'packages/backend/src/handlers/aurora-tenant-setup.handler',
-        name: $interpolate`filone-${$app.stage}-AuroraTenantSetup`,
-        link: [userInfoTable, auroraBackofficeToken],
-        environment: {
-          ...auroraEnv,
-          ...sharedEnv,
-        },
-        permissions: [
-          {
-            actions: ['ssm:GetParameter', 'ssm:PutParameter'],
-            resources: [auroraApiKeySsmArn, auroraS3KeySsmArn],
-          },
-        ],
-        runtime: 'nodejs24.x',
-        timeout: '60 seconds',
+    const tenantSetupFn = createFunction('AuroraTenantSetup', {
+      handler: 'packages/backend/src/handlers/aurora-tenant-setup.handler',
+      link: [userInfoTable, auroraBackofficeToken],
+      environment: {
+        ...auroraEnv,
+        ...sharedEnv,
       },
-      { batch: { size: 1 } },
-    );
+      permissions: [
+        {
+          actions: ['ssm:GetParameter', 'ssm:PutParameter'],
+          resources: [auroraApiKeySsmArn, auroraS3KeySsmArn],
+        },
+      ],
+      timeout: '60 seconds',
+    });
 
-    addLogForwarding('AuroraTenantSetup');
+    tenantSetupQueue.subscribe(tenantSetupFn.arn, { batch: { size: 1 } });
 
     // ── CloudWatch alarm on DLQ ──────────────────────────────────
     // TODO: Rework this alarm to trigger alert in Grafana IRM
@@ -585,26 +590,21 @@ export default $config({
     });
 
     // ── Usage reporting (cron-based) ────────────────────────────────
-    const usageWorker = new sst.aws.Function('UsageReportingWorker', {
+    const usageWorker = createFunction('UsageReportingWorker', {
       handler: 'packages/backend/src/jobs/usage-reporting-worker.handler',
-      name: $interpolate`filone-${$app.stage}-UsageReportingWorker`,
       link: [billingTable, stripeSecretKey, auroraBackofficeToken],
-      environment: { ...auroraEnv, ...otelEnv, STRIPE_METER_EVENT_NAME: 'tibmonthmeter' },
-      runtime: 'nodejs24.x',
+      environment: { ...auroraEnv, STRIPE_METER_EVENT_NAME: 'tibmonthmeter' },
       timeout: '60 seconds',
       memory: '256 MB',
     });
 
-    const usageOrchestrator = new sst.aws.Function('UsageReportingOrchestrator', {
+    const usageOrchestrator = createFunction('UsageReportingOrchestrator', {
       handler: 'packages/backend/src/jobs/usage-reporting-orchestrator.handler',
-      name: $interpolate`filone-${$app.stage}-UsageReportingOrchestrator`,
       link: [billingTable, userInfoTable],
       environment: {
-        ...otelEnv,
         USAGE_WORKER_FUNCTION_NAME: usageWorker.name,
         STRIPE_METER_EVENT_NAME: 'tibmonthmeter',
       },
-      runtime: 'nodejs24.x',
       timeout: '300 seconds',
       memory: '256 MB',
       permissions: [
@@ -614,9 +614,6 @@ export default $config({
         },
       ],
     });
-
-    addLogForwarding('UsageReportingWorker');
-    addLogForwarding('UsageReportingOrchestrator');
 
     new sst.aws.Cron('UsageReportingCron', {
       // run the Lambda every day at 6:00 AM UTC.

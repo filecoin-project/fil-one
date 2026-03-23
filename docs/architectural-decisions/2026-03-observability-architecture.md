@@ -83,9 +83,9 @@ access). Metrics are auto-derived from spans via Tempo's metrics-generator.
    cold start overhead from Lambda layers.
 
 4. **Plain console.log for application logs.** Application logs use plain
-   `console.log`/`warn`/`error` — no structured logging library needed. The
-   Lambda runtime's JSON log format (`AWS_LAMBDA_LOG_FORMAT=JSON`) wraps each
-   call with `timestamp`, `level`, and `requestId` automatically. Logs go to
+   `console.log`/`warn`/`error` — no structured logging library needed. SST's
+   `logging: { format: 'json' }` configures the Lambda runtime to emit JSON log
+   records with `timestamp`, `level`, and `requestId` automatically. Logs go to
    stdout → CloudWatch Logs → Firehose → Grafana Cloud Loki. All structured
    queryable data lives in Tempo span attributes, not in log fields.
 
@@ -141,6 +141,11 @@ TracerProvider and create root spans manually, but do not use the HTTP-specific
 
 ### Lambda environment variables
 
+These env vars are auto-injected into every `sst.aws.Function` via
+`$transform(sst.aws.Function, ...)` in `sst.config.ts` — individual function
+definitions do not need to set them. JSON log formatting is configured
+separately via SST's `logging: { format: 'json' }` in the same `$transform`.
+
 ```
 # OTel SDK configuration
 OTEL_SERVICE_NAME=filone-<stage>
@@ -150,9 +155,6 @@ OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=<stage>,service.namespace=f
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-prod-us-central-0.grafana.net/otlp
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64(instanceId:apiKey)>
-
-# Lambda runtime log formatting (adds requestId, timestamp, level to stdout)
-AWS_LAMBDA_LOG_FORMAT=JSON
 ```
 
 ---
@@ -432,9 +434,9 @@ bidirectional one-click correlation between Loki and Tempo.
 **Why we chose plain console.log instead:**
 
 - **Zero dependencies.** No pino, no `@opentelemetry/instrumentation-pino`.
-  Two fewer packages to install, update, and debug. The Lambda runtime's
-  `AWS_LAMBDA_LOG_FORMAT=JSON` provides `timestamp`, `level`, and `requestId`
-  automatically.
+  Two fewer packages to install, update, and debug. SST's
+  `logging: { format: 'json' }` configures the Lambda runtime to provide
+  `timestamp`, `level`, and `requestId` automatically.
 - **Tempo is our query surface, not Loki.** All structured queryable data
   (user IDs, bucket names, error details) lives in span attributes, queryable
   via TraceQL. Logs are supporting detail — human-readable context for when
