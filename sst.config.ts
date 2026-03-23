@@ -162,12 +162,12 @@ export default $config({
     // at deploy time. Lambda only creates implicit log groups on first invocation.
     function addLogForwarding(fnName: string) {
       const logGroupName = $interpolate`/aws/lambda/filone-${$app.stage}-${fnName}`;
-      new aws.cloudwatch.LogGroup(`${fnName}LogGroup`, {
+      const logGroup = new aws.cloudwatch.LogGroup(`${fnName}LogGroup`, {
         name: logGroupName,
         retentionInDays: 7,
       });
       new aws.cloudwatch.LogSubscriptionFilter(`${fnName}LogFwd`, {
-        logGroup: logGroupName,
+        logGroup: logGroup.name,
         filterPattern: '',
         destinationArn: firehose.arn,
         roleArn: cwToFirehoseRole.arn,
