@@ -290,7 +290,7 @@ jobs:
             }
 
   dispatch-telemetry:
-    needs: [check-packages, deploy-preview, comment, e2e-tests, deploy-staging]
+    needs: [check-packages, deploy-preview, comment, e2e-tests, integration-tests, deploy-staging]
     if: >-
       always() && (
         github.event_name == 'push' ||
