@@ -79,6 +79,22 @@ export default $config({
       })
       .then((r) => new Set(r.logGroupNames));
 
+    // Discover Lambda functions that already exist in AWS.
+    // Used to import functions that moved from api.route() children
+    // to standalone createFunction() resources.
+    const existingFunctions = await aws.lambda
+      .getFunctions()
+      .then((r) => new Set(r.functionNames.filter((n) => n.startsWith(`filone-${$app.stage}-`))));
+
+    // Retain Lambda functions on delete during migration: when functions move
+    // from inline api.route() to standalone createFunction(), Pulumi sees two
+    // different resources with the same physical name. Without retainOnDelete,
+    // removing the old resource would destroy the Lambda that was just imported
+    // into the new resource. Safe to remove after first successful deploy.
+    $transform(aws.lambda.Function, (_args, opts) => {
+      opts.retainOnDelete = true;
+    });
+
     // ── DynamoDB Tables ──────────────────────────────────────────────
     const billingTable = new sst.aws.Dynamo('BillingTable', {
       fields: {
@@ -189,13 +205,19 @@ export default $config({
     });
 
     function createFunction(fnName: string, args: sst.aws.FunctionArgs): sst.aws.Function {
-      const logGroupName = `/aws/lambda/filone-${$app.stage}-${fnName}`;
+      const functionName = `filone-${$app.stage}-${fnName}`;
+      const logGroupName = `/aws/lambda/${functionName}`;
 
       const fn = new sst.aws.Function(fnName, {
         name: $interpolate`filone-${$app.stage}-${fnName}`,
         ...args,
         logging: { retention: '1 week', format: 'json' },
         transform: {
+          function: (_fnArgs, opts) => {
+            if (existingFunctions.has(functionName)) {
+              opts.import = functionName;
+            }
+          },
           logGroup: (_logGroupArgs, opts) => {
             if (existingLogGroups.has(logGroupName)) {
               opts.import = logGroupName;
