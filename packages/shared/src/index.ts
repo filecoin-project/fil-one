@@ -24,7 +24,15 @@ export type {
   ListBucketsResponse,
   CreateBucketRequest,
   CreateBucketResponse,
+  GetBucketResponse,
   DeleteBucketRequest,
+} from './api/buckets.js';
+
+export {
+  BUCKET_NAME_MIN_LENGTH,
+  BUCKET_NAME_MAX_LENGTH,
+  BUCKET_NAME_PATTERN,
+  CreateBucketSchema,
 } from './api/buckets.js';
 
 export type {

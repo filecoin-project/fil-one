@@ -18,10 +18,10 @@ vi.mock('../lib/aurora-portal.js', () => ({
   getAuroraPortalApiKey: (...args: unknown[]) => mockGetAuroraPortalApiKey(...args),
 }));
 
-const mockListBuckets = vi.fn();
+const mockGetBucket = vi.fn();
 vi.mock('@filone/aurora-portal-client', () => ({
   createClient: () => 'mock-client',
-  getV1TenantsByTenantIdBucket: (...args: unknown[]) => mockListBuckets(...args),
+  getV1TenantsByTenantIdBucketByBucketName: (...args: unknown[]) => mockGetBucket(...args),
 }));
 
 process.env.AURORA_PORTAL_URL = 'https://portal.dev.aur.lu';
@@ -29,7 +29,7 @@ process.env.FILONE_STAGE = 'test';
 
 const ddbMock = mockClient(DynamoDBClient);
 
-import { baseHandler } from './list-buckets.js';
+import { baseHandler } from './get-bucket.js';
 import { buildEvent } from '../test/lambda-test-utilities.js';
 import { S3_REGION } from '@filone/shared';
 
@@ -54,80 +54,100 @@ function orgProfileWithTenant(tenantId: string) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('list-buckets baseHandler', () => {
+describe('get-bucket baseHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
   });
 
-  it('returns 200 with buckets from Aurora Portal', async () => {
+  it('returns 200 with bucket data from Aurora', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
-    mockListBuckets.mockResolvedValue({
-      data: {
-        buckets: [
-          { name: 'my-bucket', createdAt: '2026-01-01T00:00:00.000Z' },
-          { name: 'other-bucket', createdAt: '2026-01-02T00:00:00.000Z' },
-        ],
-      },
+    mockGetBucket.mockResolvedValue({
+      data: { name: 'my-bucket', createdAt: '2026-01-15T10:00:00Z' },
       error: undefined,
+      response: { status: 200 },
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body as string);
+    const body = JSON.parse(result.body!);
     expect(body).toStrictEqual({
-      buckets: [
-        {
-          name: 'my-bucket',
-          region: S3_REGION,
-          createdAt: '2026-01-01T00:00:00.000Z',
-          isPublic: false,
-        },
-        {
-          name: 'other-bucket',
-          region: S3_REGION,
-          createdAt: '2026-01-02T00:00:00.000Z',
-          isPublic: false,
-        },
-      ],
+      bucket: {
+        name: 'my-bucket',
+        region: S3_REGION,
+        createdAt: '2026-01-15T10:00:00Z',
+        isPublic: false,
+      },
     });
   });
 
-  it('calls Aurora Portal API with correct params', async () => {
+  it('calls Aurora portal API with correct params', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
-    mockListBuckets.mockResolvedValue({
-      data: { buckets: [] },
+    mockGetBucket.mockResolvedValue({
+      data: { name: 'my-bucket', createdAt: '2026-01-15T10:00:00Z' },
       error: undefined,
+      response: { status: 200 },
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
     await baseHandler(event);
 
     expect(mockGetAuroraPortalApiKey).toHaveBeenCalledWith('test', 'aurora-t-1');
-    expect(mockListBuckets).toHaveBeenCalledWith({
+    expect(mockGetBucket).toHaveBeenCalledWith({
       client: 'mock-client',
-      path: { tenantId: 'aurora-t-1' },
+      path: { tenantId: 'aurora-t-1', bucketName: 'my-bucket' },
       throwOnError: false,
     });
   });
 
-  it('throws when Aurora returns an error', async () => {
+  it('returns 404 when Aurora returns 404', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
-    mockListBuckets.mockResolvedValue({
+    mockGetBucket.mockResolvedValue({
       data: undefined,
-      error: { message: 'Internal error' },
+      error: { message: 'Not found' },
+      response: { status: 404 },
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'nonexistent-bucket' };
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(404);
+    const body = JSON.parse(result.body!);
+    expect(body).toStrictEqual({ message: 'Bucket not found' });
+  });
+
+  it('throws when Aurora returns a non-404 error', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
+    mockGetBucket.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Internal error' },
+      response: { status: 500 },
+    });
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
 
     await expect(baseHandler(event)).rejects.toThrow(
-      'Failed to list buckets from Aurora for tenant aurora-t-1',
+      'Failed to get bucket "my-bucket" from Aurora for tenant aurora-t-1',
     );
+  });
+
+  it('returns 400 when bucket name is missing', async () => {
+    const event = buildEvent({ userInfo: USER_INFO });
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body!);
+    expect(body).toStrictEqual({ message: 'Bucket name is required' });
   });
 
   it('returns 503 when auroraTenantId is missing', async () => {
@@ -139,10 +159,11 @@ describe('list-buckets baseHandler', () => {
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(503);
-    expect(mockListBuckets).not.toHaveBeenCalled();
+    expect(mockGetBucket).not.toHaveBeenCalled();
   });
 
   it('returns 503 when org setup is not complete', async () => {
@@ -156,25 +177,10 @@ describe('list-buckets baseHandler', () => {
     });
 
     const event = buildEvent({ userInfo: USER_INFO });
+    event.pathParameters = { name: 'my-bucket' };
     const result = await baseHandler(event);
 
     expect(result.statusCode).toBe(503);
-    expect(mockListBuckets).not.toHaveBeenCalled();
-  });
-
-  it('returns 200 with empty array when no buckets exist', async () => {
-    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
-    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
-    mockListBuckets.mockResolvedValue({
-      data: { buckets: [] },
-      error: undefined,
-    });
-
-    const event = buildEvent({ userInfo: USER_INFO });
-    const result = await baseHandler(event);
-
-    expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body as string);
-    expect(body).toStrictEqual({ buckets: [] });
+    expect(mockGetBucket).not.toHaveBeenCalled();
   });
 });

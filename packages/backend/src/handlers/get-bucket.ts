@@ -2,10 +2,13 @@ import { GetItemCommand } from '@aws-sdk/client-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import type { Bucket, ListBucketsResponse, ErrorResponse } from '@filone/shared';
+import type { Bucket, ErrorResponse, GetBucketResponse } from '@filone/shared';
 import { S3_REGION } from '@filone/shared';
 import { Resource } from 'sst';
-import { createClient, getV1TenantsByTenantIdBucket } from '@filone/aurora-portal-client';
+import {
+  createClient,
+  getV1TenantsByTenantIdBucketByBucketName,
+} from '@filone/aurora-portal-client';
 import { getDynamoClient } from '../lib/ddb-client.js';
 import { getAuroraPortalApiKey } from '../lib/aurora-portal.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
@@ -22,6 +25,11 @@ export async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const { orgId } = getUserInfo(event);
+  const bucketName = event.pathParameters?.name;
+
+  if (!bucketName) {
+    return new ResponseBuilder().status(400).body({ message: 'Bucket name is required' }).build();
+  }
 
   // Look up org profile to get auroraTenantId
   const { Item: orgProfile } = await dynamo.send(
@@ -52,28 +60,38 @@ export async function baseHandler(
     headers: { 'X-Api-Key': apiKey },
   });
 
-  const { data, error } = await getV1TenantsByTenantIdBucket({
+  const { data, error, response } = await getV1TenantsByTenantIdBucketByBucketName({
     client,
-    path: { tenantId: auroraTenantId },
+    path: { tenantId: auroraTenantId, bucketName },
     throwOnError: false,
   });
 
   if (error) {
-    throw new Error(`Failed to list buckets from Aurora for tenant ${auroraTenantId}`, {
-      cause: error,
-    });
+    if (response?.status === 404) {
+      return new ResponseBuilder().status(404).body({ message: 'Bucket not found' }).build();
+    }
+    throw new Error(
+      `Failed to get bucket "${bucketName}" from Aurora for tenant ${auroraTenantId}`,
+      {
+        cause: error,
+      },
+    );
   }
 
-  const buckets: Bucket[] = (data?.buckets ?? [])
-    .filter((b): b is typeof b & { name: string; createdAt: string } => !!b.name && !!b.createdAt)
-    .map((b) => ({
-      name: b.name,
-      region: S3_REGION,
-      createdAt: b.createdAt,
-      isPublic: false,
-    }));
+  if (!data?.createdAt) {
+    throw new Error(
+      `Aurora returned incomplete data for bucket "${bucketName}" (tenant ${auroraTenantId})`,
+    );
+  }
 
-  return new ResponseBuilder().status(200).body<ListBucketsResponse>({ buckets }).build();
+  const bucket: Bucket = {
+    name: data.name ?? bucketName,
+    region: S3_REGION,
+    createdAt: data.createdAt,
+    isPublic: false,
+  };
+
+  return new ResponseBuilder().status(200).body<GetBucketResponse>({ bucket }).build();
 }
 
 export const handler = middy(baseHandler)

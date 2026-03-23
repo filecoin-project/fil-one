@@ -334,6 +334,20 @@ export default $config({
       ],
     );
     addRoute(
+      'GET',
+      '/api/buckets/{name}',
+      'get-bucket',
+      {
+        AURORA_PORTAL_URL: auroraEnv.AURORA_PORTAL_URL,
+      },
+      [
+        {
+          actions: ['ssm:GetParameter'],
+          resources: [auroraApiKeySsmArn],
+        },
+      ],
+    );
+    addRoute(
       'DELETE',
       '/api/buckets/{name}',
       'delete-bucket',
