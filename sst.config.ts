@@ -191,7 +191,7 @@ export default $config({
         ...(sendGridApiKey ? [sendGridApiKey] : []),
       ],
       environment: {
-        AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
+        AUTH0_DOMAIN: isProduction ? 'fil-one.us.auth0.com' : 'dev-oar2nhqh58xf5pwf.us.auth0.com',
       },
       permissions: [
         {
@@ -257,15 +257,12 @@ export default $config({
 
     const sharedEnv: Record<string, $util.Input<string>> = {
       FILONE_STAGE: $app.stage,
-      AUTH0_DOMAIN: 'dev-oar2nhqh58xf5pwf.us.auth0.com',
-      AUTH0_AUDIENCE: 'https://staging.fil.one',
+      AUTH0_DOMAIN: isProduction ? 'fil-one.us.auth0.com' : 'dev-oar2nhqh58xf5pwf.us.auth0.com',
+      AUTH0_AUDIENCE: isProduction ? 'https://app.fil.one' : 'https://staging.fil.one',
     };
 
     if (isProduction) {
-      throw new Error(
-        'Aurora production configuration not yet available. ' +
-          'Set AURORA_BACKOFFICE_URL, AURORA_PORTAL_URL, AURORA_PARTNER_ID, and AURORA_REGION_ID before deploying to production.',
-      );
+      // TODO Add the prod Info here!
     }
 
     const auroraEnv = {
