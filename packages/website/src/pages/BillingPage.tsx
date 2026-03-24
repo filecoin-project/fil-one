@@ -63,6 +63,7 @@ export function BillingPage() {
 
   const [invoices, setInvoices] = useState<ListInvoicesResponse | null>(null);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
 
   // Modal states
   const [planOpen, setPlanOpen] = useState(false);
@@ -105,9 +106,12 @@ export function BillingPage() {
     if (!billing || billing.subscription.status === SubscriptionStatus.Trialing) return;
     setInvoicesLoading(true);
     getInvoices()
-      .then(setInvoices)
+      .then((data) => {
+        setInvoices(data);
+        setInvoicesError(null);
+      })
       .catch(() => {
-        // Silent — invoice section just won't appear
+        setInvoicesError('Unable to load invoices. Please try again later.');
       })
       .finally(() => setInvoicesLoading(false));
   }, [billing]);
@@ -472,7 +476,7 @@ export function BillingPage() {
           </div>
 
           {/* Invoice history card */}
-          {invoicesLoading && (
+          {!isTrialing && invoicesLoading && (
             <div className="animate-pulse rounded-xl border border-[#e1e4ea] bg-white p-6">
               <div className="h-3 w-28 rounded bg-zinc-200 mb-2" />
               <div className="h-3 w-44 rounded bg-zinc-200 mb-4" />
@@ -481,48 +485,63 @@ export function BillingPage() {
               <div className="h-4 w-full rounded bg-zinc-200" />
             </div>
           )}
-          {!invoicesLoading && invoices && invoices.invoices.length > 0 && (
+          {!isTrialing && !invoicesLoading && (
             <div className="rounded-xl border border-[#e1e4ea] bg-white p-6">
               <h3 className="text-[13px] font-semibold text-[#14181f] mb-0.5">Invoice history</h3>
               <p className="text-[13px] text-[#99a0ae] mb-4">Recent billing statements</p>
 
-              <div>
-                {invoices.invoices.map((inv, idx) => (
-                  <div
-                    key={inv.id}
-                    className={`flex items-center justify-between py-3 ${
-                      idx > 0 ? 'border-t border-[#e1e4ea]' : ''
-                    }`}
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-[13px] font-medium text-[#14181f]">
-                        {formatDate(inv.createdAt)}
-                      </span>
-                      <span className="text-[11px] text-[#99a0ae] capitalize">{inv.status}</span>
+              {invoicesError && (
+                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                  <WarningIcon size={16} className="text-red-600 flex-shrink-0" weight="fill" />
+                  <span className="text-sm text-red-700">{invoicesError}</span>
+                </div>
+              )}
+
+              {!invoicesError && invoices && invoices.invoices.length === 0 && (
+                <p className="text-sm text-[#99a0ae]">
+                  No invoices yet. Your invoices will appear here after your first billing cycle.
+                </p>
+              )}
+
+              {!invoicesError && invoices && invoices.invoices.length > 0 && (
+                <div>
+                  {invoices.invoices.map((inv, idx) => (
+                    <div
+                      key={inv.id}
+                      className={`flex items-center justify-between py-3 ${
+                        idx > 0 ? 'border-t border-[#e1e4ea]' : ''
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-[13px] font-medium text-[#14181f]">
+                          {formatDate(inv.createdAt)}
+                        </span>
+                        <span className="text-[11px] text-[#99a0ae] capitalize">{inv.status}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-[14px] font-semibold text-[#14181f]">
+                          {formatCents(inv.amountDueInCents)}
+                        </span>
+                        {inv.invoicePdfUrl && (
+                          <a
+                            href={inv.invoicePdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-[13px] font-medium text-[#0066ff] hover:underline"
+                          >
+                            <DownloadSimpleIcon
+                              size={14}
+                              className="text-[#677183]"
+                              aria-hidden="true"
+                            />
+                            PDF
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-[14px] font-semibold text-[#14181f]">
-                        {formatCents(inv.amountDueInCents)}
-                      </span>
-                      {inv.invoicePdfUrl && (
-                        <a
-                          href={inv.invoicePdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-[13px] font-medium text-[#0066ff] hover:underline"
-                        >
-                          <DownloadSimpleIcon
-                            size={14}
-                            className="text-[#677183]"
-                            aria-hidden="true"
-                          />
-                          PDF
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
