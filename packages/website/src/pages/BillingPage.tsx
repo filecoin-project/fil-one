@@ -7,6 +7,7 @@ import {
   ArrowRightIcon,
   WarningIcon,
   CloudIcon,
+  DownloadSimpleIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
 import { ProgressBar } from '../components/ProgressBar';
@@ -14,9 +15,14 @@ import { useToast } from '../components/Toast';
 import { formatBytes } from '@filone/shared';
 
 import { SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';
-import type { BillingInfo, UsageResponse, CreateSetupIntentResponse } from '@filone/shared';
+import type {
+  BillingInfo,
+  UsageResponse,
+  CreateSetupIntentResponse,
+  ListInvoicesResponse,
+} from '@filone/shared';
 
-import { apiRequest, getUsage } from '../lib/api.js';
+import { apiRequest, getUsage, getInvoices } from '../lib/api.js';
 import { daysUntil } from '../lib/time.js';
 import { ChoosePlanDialog } from '../components/billing/ChoosePlanDialog.js';
 import { AddPaymentDialog } from '../components/billing/AddPaymentDialog.js';
@@ -27,6 +33,12 @@ import { AddPaymentDialog } from '../components/billing/AddPaymentDialog.js';
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatInvoiceDate(unixTimestamp: number): string {
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
+    new Date(unixTimestamp * 1000),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +66,9 @@ export function BillingPage() {
   const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [invoices, setInvoices] = useState<ListInvoicesResponse | null>(null);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
 
   // Modal states
   const [planOpen, setPlanOpen] = useState(false);
@@ -90,6 +105,18 @@ export function BillingPage() {
       void fetchBilling();
     }
   }, [fetchBilling]);
+
+  // Fetch invoices once billing loads (skip for trial users)
+  useEffect(() => {
+    if (!billing || billing.subscription.status === SubscriptionStatus.Trialing) return;
+    setInvoicesLoading(true);
+    getInvoices()
+      .then(setInvoices)
+      .catch(() => {
+        // Silent — invoice section just won't appear
+      })
+      .finally(() => setInvoicesLoading(false));
+  }, [billing]);
 
   const isTrialing = billing?.subscription.status === SubscriptionStatus.Trialing;
   const isActive = billing?.subscription.status === SubscriptionStatus.Active;
@@ -449,6 +476,57 @@ export function BillingPage() {
               </div>
             )}
           </div>
+
+          {/* Invoice history card */}
+          {invoicesLoading && (
+            <div className="animate-pulse rounded-xl border border-[#e1e4ea] bg-white p-6">
+              <div className="h-3 w-28 rounded bg-zinc-200 mb-2" />
+              <div className="h-3 w-44 rounded bg-zinc-200 mb-4" />
+              <div className="h-4 w-full rounded bg-zinc-200 mb-3" />
+              <div className="h-4 w-full rounded bg-zinc-200 mb-3" />
+              <div className="h-4 w-full rounded bg-zinc-200" />
+            </div>
+          )}
+          {!invoicesLoading && invoices && invoices.invoices.length > 0 && (
+            <div className="rounded-xl border border-[#e1e4ea] bg-white p-6">
+              <h3 className="text-[13px] font-semibold text-[#14181f] mb-0.5">Invoice history</h3>
+              <p className="text-[13px] text-[#99a0ae] mb-4">Recent billing statements</p>
+
+              <div>
+                {invoices.invoices.map((inv, idx) => (
+                  <div
+                    key={inv.id}
+                    className={`flex items-center justify-between py-3 ${
+                      idx > 0 ? 'border-t border-[#e1e4ea]' : ''
+                    }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-[13px] font-medium text-[#14181f]">
+                        {formatInvoiceDate(inv.created)}
+                      </span>
+                      <span className="text-[11px] text-[#99a0ae] capitalize">{inv.status}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-[14px] font-semibold text-[#14181f]">
+                        {formatCents(inv.amountDue)}
+                      </span>
+                      {inv.invoicePdfUrl && (
+                        <a
+                          href={inv.invoicePdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[13px] font-medium text-[#0066ff] hover:underline"
+                        >
+                          <DownloadSimpleIcon size={14} aria-hidden="true" />
+                          PDF
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Right column (pricing sidebar) ─────────────────── */}
