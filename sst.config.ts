@@ -275,14 +275,8 @@ export default $config({
       AURORA_REGION_ID: 'ff',
     };
 
-    const auroraS3GatewayUrl = 'https://s3.dev.aur.lu';
-
     const auroraApiKeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/aurora-portal/tenant-api-key/*`;
     const auroraS3KeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/aurora-s3/*`;
-
-    const auroraS3GatewayEnv = {
-      AURORA_S3_GATEWAY_URL: auroraS3GatewayUrl,
-    };
     const auroraS3GatewayPermissions: sst.aws.FunctionPermissionArgs[] = [
       {
         actions: ['ssm:GetParameter'],
@@ -318,7 +312,7 @@ export default $config({
     }
 
     // ── Data routes ──────────────────────────────────────────────────
-    addRoute('GET', '/api/buckets', 'list-buckets', auroraS3GatewayEnv, auroraS3GatewayPermissions);
+    addRoute('GET', '/api/buckets', 'list-buckets', {}, auroraS3GatewayPermissions);
     addRoute(
       'POST',
       '/api/buckets',
@@ -347,13 +341,7 @@ export default $config({
         },
       ],
     );
-    addRoute(
-      'DELETE',
-      '/api/buckets/{name}',
-      'delete-bucket',
-      auroraS3GatewayEnv,
-      auroraS3GatewayPermissions,
-    );
+    addRoute('DELETE', '/api/buckets/{name}', 'delete-bucket', {}, auroraS3GatewayPermissions);
     addRoute('GET', '/api/access-keys', 'list-access-keys');
     addRoute(
       'POST',
@@ -373,35 +361,29 @@ export default $config({
       'DELETE',
       '/api/access-keys/{keyId}',
       'delete-access-key',
-      auroraS3GatewayEnv,
+      {},
       auroraS3GatewayPermissions,
     );
-    addRoute(
-      'GET',
-      '/api/buckets/{name}/objects',
-      'list-objects',
-      auroraS3GatewayEnv,
-      auroraS3GatewayPermissions,
-    );
+    addRoute('GET', '/api/buckets/{name}/objects', 'list-objects', {}, auroraS3GatewayPermissions);
     addRoute(
       'POST',
       '/api/buckets/{name}/objects/presign',
       'presign-upload',
-      auroraS3GatewayEnv,
+      {},
       auroraS3GatewayPermissions,
     );
     addRoute(
       'GET',
       '/api/buckets/{name}/objects/download',
       'download-object',
-      auroraS3GatewayEnv,
+      {},
       auroraS3GatewayPermissions,
     );
     addRoute(
       'DELETE',
       '/api/buckets/{name}/objects',
       'delete-object',
-      auroraS3GatewayEnv,
+      {},
       auroraS3GatewayPermissions,
     );
 
@@ -424,13 +406,7 @@ export default $config({
 
     // ── Usage + Dashboard routes ─────────────────────────────────────
     addRoute('GET', '/api/usage', 'get-usage', auroraEnv);
-    addRoute(
-      'GET',
-      '/api/activity',
-      'get-activity',
-      { ...auroraEnv, ...auroraS3GatewayEnv },
-      auroraS3GatewayPermissions,
-    );
+    addRoute('GET', '/api/activity', 'get-activity', auroraEnv, auroraS3GatewayPermissions);
 
     // ── Billing routes ───────────────────────────────────────────────
     addRoute('GET', '/api/billing', 'get-billing');

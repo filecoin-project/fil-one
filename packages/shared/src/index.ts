@@ -1,6 +1,9 @@
 export {
+  Stage,
   S3_ENDPOINT,
   S3_REGION,
+  S3Region,
+  getS3Endpoint,
   OAUTH_STATE_COOKIE,
   CSRF_COOKIE_NAME,
   GB_BYTES,

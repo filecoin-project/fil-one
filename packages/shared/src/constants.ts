@@ -1,8 +1,29 @@
-/** S3-compatible storage endpoint for Fil One. */
+/** Deployment stages. */
+export enum Stage {
+  Production = 'production',
+  Staging = 'staging',
+}
+
+/** S3-compatible storage endpoint for Fil One (production default). */
 export const S3_ENDPOINT = 'https://s3.fil.one';
 
-/** S3 region for Fil One. */
-export const S3_REGION = 'eu-west-1';
+/** Available S3 regions. */
+export enum S3Region {
+  EuWest1 = 'eu-west-1',
+}
+
+/** Default S3 region for Fil One. */
+export const S3_REGION = S3Region.EuWest1;
+
+/**
+ * Build the S3-compatible endpoint URL for a given region and stage.
+ * The region parameter is accepted for forward-compatibility with regional
+ * endpoints (e.g. eu-1.s3.fil.one) but is not yet used in URL construction.
+ */
+export function getS3Endpoint(_region: S3Region, stage: Stage | string): string {
+  const base = stage === Stage.Production ? 's3.fil.one' : 's3.staging.fil.one';
+  return `https://${base}`;
+}
 
 /** Cookie name for the OAuth state parameter (CSRF protection for login flow). */
 export const OAUTH_STATE_COOKIE = 'hs_oauth_state';
