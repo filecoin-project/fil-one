@@ -87,11 +87,8 @@ export default $config({
     let domainName = 'staging.fil.one';
     let certArn: string | undefined;
 
-    //TODO Bring this back after we have a successful prod deployment.
-    // https://linear.app/filecoin-foundation/issue/FIL-12/console-prod-deployed-at-appfilone
-    // if (stage === 'production' || stage === 'staging') {
-    // domainName = stage === 'production' ? 'console.fil.one' : 'staging.fil.one';
-    if (stage == 'staging') {
+    if (stage === 'production' || stage === 'staging') {
+      domainName = stage === 'production' ? 'app.fil.one' : 'staging.fil.one';
       // ACM cert must be in us-east-1 for CloudFront
       const usEast1 = new aws.Provider('useast1', { region: 'us-east-1' });
       const cert = await aws.acm.getCertificate(

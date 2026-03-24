@@ -115,7 +115,7 @@ The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Mach
 pnpm run dev              # SST live dev mode (live Lambda debugging)
 pnpm run deploy           # Deploy personal dev stack (uses OS username as stage)
 pnpm run deploy:staging   # Deploy to staging.fil.one
-pnpm run deploy:production      # Deploy to console.fil.one
+pnpm run deploy:production      # Deploy to app.fil.one
 pnpm run deploy:infra:staging   # Deploy base infra (OIDC, IAM) to staging
 pnpm run deploy:infra:production # Deploy base infra (OIDC, IAM) to production
 pnpm run remove           # Remove your personal dev stack
@@ -226,7 +226,7 @@ Auth0 credentials are managed as SST secrets (`Auth0ClientId`, `Auth0ClientSecre
 
 **API setup** (APIs > Create API):
 
-- **Identifier (audience)**: `console.fil.one` (prod) — this must match `AUTH0_AUDIENCE` in `sst.config.ts` and website env. It's what makes Auth0 issue a JWT access token (instead of an opaque one) and is the `aud` claim the middleware validates.
+- **Identifier (audience)**: `app.fil.one` (prod) — this must match `AUTH0_AUDIENCE` in `sst.config.ts` and website env. It's what makes Auth0 issue a JWT access token (instead of an opaque one) and is the `aud` claim the middleware validates.
 - Under the API's **Machine to Machine Applications** tab, authorize your application so it can exchange tokens.
 
 ### Auth0 Machine-to-Machine (M2M) Application
