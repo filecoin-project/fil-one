@@ -558,7 +558,7 @@ export default $config({
     // ── Usage reporting (cron-based) ────────────────────────────────
     const usageWorker = createFn('UsageReportingWorker', {
       handler: 'packages/backend/src/jobs/usage-reporting-worker.handler',
-      link: [billingTable, stripeSecretKey, auroraBackofficeToken],
+      link: [billingTable, stripeSecretKey, stripePriceId, auroraBackofficeToken],
       environment: { ...auroraEnv, STRIPE_METER_EVENT_NAME: 'gb_month_meter' },
       timeout: '60 seconds',
       memory: '256 MB',
