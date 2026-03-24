@@ -99,11 +99,7 @@ jobs:
           AURORA_BACKOFFICE_TOKEN: ${{ secrets.CI_AURORA_BACKOFFICE_TOKEN }}
 
       - name: Build
-        run: pnpm build
-        env:
-          VITE_AUTH0_DOMAIN: dev-oar2nhqh58xf5pwf.us.auth0.com
-          VITE_AUTH0_CLIENT_ID: hAHMVzFTsFMrtxHDfzOvQCLHgaAf3bPQ
-          VITE_AUTH0_AUDIENCE: https://staging.fil.one
+        run: pnpm --filter @filone/website run build:staging && pnpm -r --filter '!@filone/website' run build
 
       - name: Deploy SST stage
         run: pnpm exec sst deploy --stage "$STAGE"
@@ -258,11 +254,7 @@ jobs:
           role-to-assume: arn:aws:iam::654654381893:role/filone-infra-staging-github
           aws-region: us-east-2
 
-      - run: pnpm build
-        env:
-          VITE_AUTH0_DOMAIN: dev-oar2nhqh58xf5pwf.us.auth0.com
-          VITE_AUTH0_CLIENT_ID: hAHMVzFTsFMrtxHDfzOvQCLHgaAf3bPQ
-          VITE_AUTH0_AUDIENCE: https://staging.fil.one
+      - run: pnpm --filter @filone/website run build:staging && pnpm -r --filter '!@filone/website' run build
 
       - run: pnpm exec sst deploy --stage staging
 
