@@ -128,7 +128,7 @@ jobs:
           output: trivy-deps.sarif
           severity: CRITICAL,HIGH,MEDIUM
           trivyignores: .trivyignore
-          skip-dirs: packages/ui,packages/aurora-backoffice-client,packages/aurora-portal-client,contracts/lib,.sst,node_modules
+          skip-dirs: packages/aurora-backoffice-client,packages/aurora-portal-client,contracts/lib,.sst,node_modules
         continue-on-error: true
 
       - name: Upload Trivy dependency results
