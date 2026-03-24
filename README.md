@@ -131,7 +131,7 @@ cd packages/website && pnpm run dev
 
 ### E2E Tests
 
-The repo includes a Playwright end-to-end test suite under `e2e/`. The `@playwright/test` package is already a devDependency, so `pnpm install` covers it.
+The repo includes a Playwright end-to-end test suite under `tests/e2e/`. The `@playwright/test` package is already a devDependency, so `pnpm install` covers it.
 
 **Install browser binaries** (one-time):
 
@@ -154,6 +154,20 @@ pnpm exec playwright show-report
 ```
 
 > CI runs these tests automatically against preview deployments on PRs.
+
+### Integration Tests
+
+Integration tests, located in tests/integration/, confirm that individual modules or services interact correctly with one another — for instance, ensuring Stripe webhook handlers produce the expected state transitions in DynamoDB — by running against real AWS and Stripe resources.
+
+While E2E tests (Playwright) cover full, business-critical user journeys spanning the entire system, integration tests focus more narrowly on backend logic at specific integration points.
+
+**Run tests** (requires deployed SST stage):
+
+```bash
+pnpm test:integration
+```
+
+Tests run inside `sst shell` so that SST resource bindings (table names, Stripe keys, etc.) are available as environment variables.
 
 ### Personal Dev Stack
 
@@ -327,7 +341,7 @@ After API changes, update the relevant Swagger spec and regenerate:
 Download the updated Swagger spec from the Aurora Portal API docs and save it to `packages/aurora-portal-client/aurora-portal.swagger.json`:
 
 ```bash
-curl https://portal-ff.dev.aur.lu/api/docs/swagger.json -o packages/aurora-portal-client/aurora-portal.swagger.json
+curl https://portal-ff.dev.aur.lu/api/v1/docs/swagger.json -o packages/aurora-portal-client/aurora-portal.swagger.json && oxfmt
 ```
 
 Reformat the file:

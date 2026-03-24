@@ -3,6 +3,7 @@ export {
   S3_REGION,
   OAUTH_STATE_COOKIE,
   CSRF_COOKIE_NAME,
+  GB_BYTES,
   TB_BYTES,
   TRIAL_STORAGE_LIMIT,
   TRIAL_EGRESS_LIMIT,
@@ -23,7 +24,15 @@ export type {
   ListBucketsResponse,
   CreateBucketRequest,
   CreateBucketResponse,
+  GetBucketResponse,
   DeleteBucketRequest,
+} from './api/buckets.js';
+
+export {
+  BUCKET_NAME_MIN_LENGTH,
+  BUCKET_NAME_MAX_LENGTH,
+  BUCKET_NAME_PATTERN,
+  CreateBucketSchema,
 } from './api/buckets.js';
 
 export type {

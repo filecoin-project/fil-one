@@ -1,16 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 
-import {
-  CopySimpleIcon,
-  DotsThreeIcon,
-  KeyIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@phosphor-icons/react/dist/ssr';
+import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
+import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
 import { CodeBlock } from '../components/CodeBlock';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Spinner } from '../components/Spinner';
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from '../components/Tabs';
 import { useToast } from '../components/Toast';
@@ -19,26 +15,7 @@ import type { AccessKey, ListAccessKeysResponse } from '@filone/shared';
 
 import { S3_ENDPOINT, S3_REGION } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
-import { formatDate } from '../lib/time.js';
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function StatusBadge({ status }: { status: AccessKey['status'] }) {
-  if (status === 'active') {
-    return (
-      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-        Active
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
-      Inactive
-    </span>
-  );
-}
+import { useCopyToClipboard } from '../lib/use-copy-to-clipboard.js';
 
 // ---------------------------------------------------------------------------
 // Tab 1: Access Keys
@@ -49,70 +26,6 @@ type AccessKeysTabProps = {
   onCreateOpen: () => void;
   onDelete: (id: string) => Promise<void>;
 };
-
-function ActionMenu({ onDelete }: { onDelete: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, right: 0 });
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  function handleOpen() {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    }
-    setOpen((o) => !o);
-  }
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={handleOpen}
-        className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-        aria-label="Key actions"
-      >
-        <DotsThreeIcon size={16} />
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          style={{ top: pos.top, right: pos.right }}
-          className="fixed z-50 w-40 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg"
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-          >
-            <TrashIcon size={14} />
-            Delete
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
   return (
@@ -126,62 +39,13 @@ function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
         </Button>
       </div>
 
-      {keys.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 bg-white py-16">
-          <KeyIcon size={40} className="mb-3 text-zinc-300" />
-          <p className="mb-1 text-sm font-medium text-zinc-900">No API keys yet</p>
-          <p className="mb-4 text-sm text-zinc-500">
-            Generate credentials to connect your applications via S3-compatible API
-          </p>
-          <Button variant="filled" icon={PlusIcon} onClick={onCreateOpen}>
-            Create your first key
-          </Button>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white">
-          <table className="min-w-full overflow-hidden rounded-lg">
-            <thead>
-              <tr>
-                <th className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Name
-                </th>
-                <th className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Status
-                </th>
-                <th className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
-                  Last Used
-                </th>
-                <th
-                  className="border-b border-zinc-200 bg-zinc-50 px-4 py-3"
-                  aria-label="Actions"
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((key) => (
-                <tr
-                  key={key.id}
-                  className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
-                >
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-zinc-900">{key.keyName}</p>
-                    <p className="font-mono text-xs text-zinc-500">{key.accessKeyId}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={key.status} />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-zinc-600">
-                    {key.lastUsedAt ? formatDate(key.lastUsedAt) : 'Never'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <ActionMenu onDelete={() => void onDelete(key.id)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AccessKeysTable
+        keys={keys}
+        showBuckets
+        showPermissions
+        onDelete={onDelete}
+        onCreateOpen={onCreateOpen}
+      />
     </>
   );
 }
@@ -191,19 +55,12 @@ function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
 // ---------------------------------------------------------------------------
 
 function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    void navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <button
       type="button"
-      onClick={handleCopy}
+      onClick={() => void copy(value)}
       title={copied ? 'Copied' : 'Copy'}
       aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
       className="ml-2 shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
@@ -516,7 +373,15 @@ export function ApiKeysPage() {
     };
   }, []);
 
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+
   async function handleDelete(id: string) {
+    setConfirmDeleteKey(id);
+  }
+
+  async function confirmDeleteKeyAction() {
+    if (!confirmDeleteKey) return;
+    const id = confirmDeleteKey;
     try {
       await apiRequest(`/access-keys/${id}`, { method: 'DELETE' });
       setKeys((prev) => prev.filter((k) => k.id !== id));
@@ -570,6 +435,15 @@ export function ApiKeysPage() {
           </TabPanel>
         </TabPanels>
       </Tabs>
+
+      <ConfirmDialog
+        open={confirmDeleteKey !== null}
+        onClose={() => setConfirmDeleteKey(null)}
+        onConfirm={confirmDeleteKeyAction}
+        title="Delete access key"
+        description="This access key will be permanently revoked. Any applications using it will lose access immediately."
+        confirmLabel="Delete key"
+      />
     </div>
   );
 }
