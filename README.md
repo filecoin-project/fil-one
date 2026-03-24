@@ -104,12 +104,12 @@ pnpx sst secret set StripePriceId <value> [--stage <stage>]
 pnpx sst secret set AuroraBackofficeToken <value> [--stage <stage>]
 pnpx sst secret set SendGridApiKey <value> [--stage <stage>]
 pnpx sst secret set GrafanaOtlpAuth <base64(instanceId:apiKey)> [--stage <stage>]
-pnpx sst secret set GrafanaLokiAuth <base64(instanceId:apiKey)> [--stage <stage>]
+pnpx sst secret set GrafanaLokiAuth '<instanceId>:<apiKey>' [--stage <stage>]
 ```
 
 Omit `--stage` to set for your personal dev stage (defaults to OS username).
 
-The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Machine (M2M) application** in Auth0 — see the [Auth0 M2M Setup](#auth0-machine-to-machine-m2m-application) section below. The `AuroraBackofficeToken` is from the Aurora Back Office dashboard — see the [API token](#api-token) section below. The `GrafanaOtlpAuth` and `GrafanaLokiAuth` secrets are Base64-encoded `instanceId:apiKey` from Grafana Cloud — see the [Observability](#observability) section below.
+The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Machine (M2M) application** in Auth0 — see the [Auth0 M2M Setup](#auth0-machine-to-machine-m2m-application) section below. The `AuroraBackofficeToken` is from the Aurora Back Office dashboard — see the [API token](#api-token) section below. The `GrafanaOtlpAuth` and `GrafanaLokiAuth` secrets are from Grafana Cloud — see the [Observability](#observability) section below.
 
 ## Commands
 
@@ -391,13 +391,16 @@ Traces and logs are sent to Grafana Cloud. See `docs/architectural-decisions/202
 
 Generate API keys in Grafana Cloud (grafana.com → your stack → Connections → API keys):
 
-- **GrafanaOtlpAuth**: Base64 encode `<instanceId>:<apiKey>` where instanceId is from the OTLP endpoint configuration
-- **GrafanaLokiAuth**: Base64 encode `<instanceId>:<apiKey>` where instanceId is your Loki instance ID
+- **GrafanaOtlpAuth**: Base64 encode `<instanceId>:<apiKey>` where instanceId is from the OTLP endpoint configuration (used in HTTP Basic Auth `Authorization` header)
+- **GrafanaLokiAuth**: Plain `<instanceId>:<apiKey>` where instanceId is your Loki instance ID (sent as-is in the Firehose `X-Amz-Firehose-Access-Key` header)
 
 ```bash
+# GrafanaOtlpAuth needs base64 encoding (HTTP Basic Auth)
 echo -n '<instanceId>:<apiKey>' | base64
 pnpx sst secret set GrafanaOtlpAuth <base64-value> [--stage <stage>]
-pnpx sst secret set GrafanaLokiAuth <base64-value> [--stage <stage>]
+
+# GrafanaLokiAuth uses plain text (Firehose access key)
+pnpx sst secret set GrafanaLokiAuth '<instanceId>:<apiKey>' [--stage <stage>]
 ```
 
 ## Contracts (`contracts/`)

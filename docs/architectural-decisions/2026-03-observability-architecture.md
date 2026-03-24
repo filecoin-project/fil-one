@@ -502,3 +502,4 @@ additive change that doesn't affect the tracing pipeline.
 - [AWS Firehose HTTP endpoint specification](https://docs.aws.amazon.com/firehose/latest/dev/httpdeliveryrequestresponse.html)
 - [ADOT Lambda documentation](https://aws-otel.github.io/docs/getting-started/lambda/)
 - [Grafana Tempo: Dedicated attribute columns](https://grafana.com/docs/tempo/latest/operations/dedicated_columns/)
+- [Grafana Cloud: Configure Logs with Firehose](https://grafana.com/docs/grafana-cloud/monitor-infrastructure/monitor-cloud-provider/aws/logs/firehose-logs/config-firehose-logs/)
