@@ -32,7 +32,7 @@ export default $config({
     };
   },
   async run() {
-    // ⚠️  All Lambda functions MUST be created via createFunction() to ensure
+    // ⚠️  All Lambda functions MUST be created via createFn() to ensure
     //     log forwarding is set up. Never use `new sst.aws.Function()` directly.
 
     // ── Secrets (set via: pnpx sst secret set <Name> <value>) ─────────
@@ -66,13 +66,13 @@ export default $config({
 
     // Discover Lambda functions that already exist in AWS.
     // Used to import functions that moved from api.route() children
-    // to standalone createFunction() resources.
+    // to standalone createFn() resources.
     const existingFunctions = await aws.lambda
       .getFunctions()
       .then((r) => new Set(r.functionNames.filter((n) => n.startsWith(`filone-${$app.stage}-`))));
 
     // Retain Lambda functions on delete during migration: when functions move
-    // from inline api.route() to standalone createFunction(), Pulumi sees two
+    // from inline api.route() to standalone createFn(), Pulumi sees two
     // different resources with the same physical name. Without retainOnDelete,
     // removing the old resource would destroy the Lambda that was just imported
     // into the new resource. Safe to remove after first successful deploy.
@@ -110,144 +110,15 @@ export default $config({
       visibilityTimeout: '90 seconds',
     });
 
-    // ── Firehose Log Pipeline (CloudWatch → Loki) ───────────────────
-    const firehoseBackupBucket = new sst.aws.Bucket('OtelFirehoseBackup', {
-      transform: {
-        bucket: { forceDestroy: true },
-      },
-    });
+    const { firehose, cwToFirehoseRole } = setupFirehoseLogPipeline(grafanaLokiAuth);
 
-    const firehoseLogGroup = new aws.cloudwatch.LogGroup('OtelFirehoseLogGroup', {
-      retentionInDays: 7,
-    });
-    const firehoseLogStream = new aws.cloudwatch.LogStream('OtelFirehoseLogStream', {
-      logGroupName: firehoseLogGroup.name,
-    });
-
-    const firehoseRole = new aws.iam.Role('OtelFirehoseRole', {
-      assumeRolePolicy: aws.iam.getPolicyDocumentOutput({
-        statements: [
-          {
-            actions: ['sts:AssumeRole'],
-            principals: [{ type: 'Service', identifiers: ['firehose.amazonaws.com'] }],
-          },
-        ],
-      }).json,
-      inlinePolicies: [
-        {
-          name: 'firehose-s3',
-          policy: $jsonStringify({
-            Version: '2012-10-17',
-            Statement: [
-              {
-                Effect: 'Allow',
-                Action: ['s3:PutObject', 's3:GetObject', 's3:ListBucket'],
-                Resource: [firehoseBackupBucket.arn, $interpolate`${firehoseBackupBucket.arn}/*`],
-              },
-              {
-                Effect: 'Allow',
-                Action: ['logs:PutLogEvents'],
-                Resource: [$interpolate`${firehoseLogGroup.arn}:*`],
-              },
-            ],
-          }),
-        },
-      ],
-    });
-
-    const firehose = new aws.kinesis.FirehoseDeliveryStream('OtelLogDelivery', {
-      destination: 'http_endpoint',
-      httpEndpointConfiguration: {
-        url: 'https://aws-logs-prod3.grafana.net/aws-logs/api/v1/push',
-        name: 'grafanacloud-filecoinfoundation-logs',
-        accessKey: grafanaLokiAuth.value,
-        bufferingInterval: 60,
-        bufferingSize: 1,
-        roleArn: firehoseRole.arn,
-        cloudwatchLoggingOptions: {
-          enabled: true,
-          logGroupName: firehoseLogGroup.name,
-          logStreamName: firehoseLogStream.name,
-        },
-        s3BackupMode: 'FailedDataOnly',
-        s3Configuration: {
-          bucketArn: firehoseBackupBucket.arn,
-          roleArn: firehoseRole.arn,
-        },
-        requestConfiguration: {
-          contentEncoding: 'GZIP',
-          commonAttributes: [
-            { name: 'lbl_environment', value: $app.stage },
-            { name: 'lbl_service', value: $interpolate`filone-${$app.stage}` },
-          ],
-        },
-      },
-    });
-
-    const cwToFirehoseRole = new aws.iam.Role('CwToFirehoseRole', {
-      assumeRolePolicy: aws.iam.getPolicyDocumentOutput({
-        statements: [
-          {
-            actions: ['sts:AssumeRole'],
-            principals: [{ type: 'Service', identifiers: ['logs.amazonaws.com'] }],
-          },
-        ],
-      }).json,
-      inlinePolicies: [
-        {
-          name: 'cw-to-firehose',
-          policy: $jsonStringify({
-            Version: '2012-10-17',
-            Statement: [
-              {
-                Effect: 'Allow',
-                Action: ['firehose:PutRecord', 'firehose:PutRecordBatch'],
-                Resource: [firehose.arn],
-              },
-            ],
-          }),
-        },
-      ],
-    });
-
-    function createFunction(fnName: string, args: sst.aws.FunctionArgs): sst.aws.Function {
-      const functionName = `filone-${$app.stage}-${fnName}`;
-      const logGroupName = `/aws/lambda/${functionName}`;
-
-      const fn = new sst.aws.Function(fnName, {
-        name: $interpolate`filone-${$app.stage}-${fnName}`,
-        ...args,
-        logging: { retention: '1 week', format: 'json' },
-        transform: {
-          function: (_fnArgs, opts) => {
-            if (existingFunctions.has(functionName)) {
-              opts.import = functionName;
-            }
-          },
-          logGroup: (_logGroupArgs, opts) => {
-            if (existingLogGroups.has(logGroupName)) {
-              opts.import = logGroupName;
-            }
-          },
-        },
+    const createFn = (fnName: string, args: sst.aws.FunctionArgs) =>
+      createFunction(fnName, args, {
+        existingFunctions,
+        existingLogGroups,
+        firehose,
+        cwToFirehoseRole,
       });
-
-      // Use the LogGroup resource reference (not a plain string) to ensure
-      // Pulumi creates the log group before the subscription filter.
-      const logGroup = fn.nodes.logGroup.apply((lg) => {
-        if (!lg) throw new Error(`LogGroup not created for function ${fnName}`);
-        return lg;
-      });
-
-      new aws.cloudwatch.LogSubscriptionFilter(`${fnName}LogFwd`, {
-        logGroup: logGroup.name,
-        filterPattern: '',
-        destinationArn: firehose.arn,
-        roleArn: cwToFirehoseRole.arn,
-      });
-
-      return fn;
-    }
 
     // ── S3 Bucket for user file storage ──────────────────────────────
     const userFilesBucket = new sst.aws.Bucket('UserFilesBucket');
@@ -354,7 +225,7 @@ export default $config({
     const siteUrl = router.url;
 
     // ── Deploy-time setup (Stripe webhook + Auth0 callbacks) ────────
-    const setupFn = createFunction('SetupIntegrations', {
+    const setupFn = createFn('SetupIntegrations', {
       handler: 'packages/backend/src/jobs/stack-setup/setup-integrations.handler',
       link: [
         stripeSecretKey,
@@ -475,7 +346,7 @@ export default $config({
         .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
         .join('');
 
-      const fn = createFunction(fnName, {
+      const fn = createFn(fnName, {
         handler: `packages/backend/src/handlers/${handler}.handler`,
         link: allResources,
         environment: {
@@ -639,7 +510,7 @@ export default $config({
     );
 
     // ── Tenant setup consumer ──────────────────────────────────────
-    const tenantSetupFn = createFunction('AuroraTenantSetup', {
+    const tenantSetupFn = createFn('AuroraTenantSetup', {
       handler: 'packages/backend/src/handlers/aurora-tenant-setup.handler',
       link: [userInfoTable, auroraBackofficeToken],
       environment: {
@@ -685,7 +556,7 @@ export default $config({
     });
 
     // ── Usage reporting (cron-based) ────────────────────────────────
-    const usageWorker = createFunction('UsageReportingWorker', {
+    const usageWorker = createFn('UsageReportingWorker', {
       handler: 'packages/backend/src/jobs/usage-reporting-worker.handler',
       link: [billingTable, stripeSecretKey, auroraBackofficeToken],
       environment: { ...auroraEnv, STRIPE_METER_EVENT_NAME: 'gb_month_meter' },
@@ -693,7 +564,7 @@ export default $config({
       memory: '256 MB',
     });
 
-    const usageOrchestrator = createFunction('UsageReportingOrchestrator', {
+    const usageOrchestrator = createFn('UsageReportingOrchestrator', {
       handler: 'packages/backend/src/jobs/usage-reporting-orchestrator.handler',
       link: [billingTable, userInfoTable],
       environment: {
@@ -721,3 +592,156 @@ export default $config({
     };
   },
 });
+
+// ── Firehose Log Pipeline (CloudWatch → Loki) ───────────────────
+function setupFirehoseLogPipeline(grafanaLokiAuth: sst.Secret) {
+  const firehoseBackupBucket = new sst.aws.Bucket('OtelFirehoseBackup', {
+    transform: {
+      bucket: { forceDestroy: true },
+    },
+  });
+
+  const firehoseLogGroup = new aws.cloudwatch.LogGroup('OtelFirehoseLogGroup', {
+    retentionInDays: 7,
+  });
+  const firehoseLogStream = new aws.cloudwatch.LogStream('OtelFirehoseLogStream', {
+    logGroupName: firehoseLogGroup.name,
+  });
+
+  const firehoseRole = new aws.iam.Role('OtelFirehoseRole', {
+    assumeRolePolicy: aws.iam.getPolicyDocumentOutput({
+      statements: [
+        {
+          actions: ['sts:AssumeRole'],
+          principals: [{ type: 'Service', identifiers: ['firehose.amazonaws.com'] }],
+        },
+      ],
+    }).json,
+    inlinePolicies: [
+      {
+        name: 'firehose-s3',
+        policy: $jsonStringify({
+          Version: '2012-10-17',
+          Statement: [
+            {
+              Effect: 'Allow',
+              Action: ['s3:PutObject', 's3:GetObject', 's3:ListBucket'],
+              Resource: [firehoseBackupBucket.arn, $interpolate`${firehoseBackupBucket.arn}/*`],
+            },
+            {
+              Effect: 'Allow',
+              Action: ['logs:PutLogEvents'],
+              Resource: [$interpolate`${firehoseLogGroup.arn}:*`],
+            },
+          ],
+        }),
+      },
+    ],
+  });
+
+  const firehose = new aws.kinesis.FirehoseDeliveryStream('OtelLogDelivery', {
+    destination: 'http_endpoint',
+    httpEndpointConfiguration: {
+      url: 'https://aws-logs-prod3.grafana.net/aws-logs/api/v1/push',
+      name: 'grafanacloud-filecoinfoundation-logs',
+      accessKey: grafanaLokiAuth.value,
+      bufferingInterval: 60,
+      bufferingSize: 1,
+      roleArn: firehoseRole.arn,
+      cloudwatchLoggingOptions: {
+        enabled: true,
+        logGroupName: firehoseLogGroup.name,
+        logStreamName: firehoseLogStream.name,
+      },
+      s3BackupMode: 'FailedDataOnly',
+      s3Configuration: {
+        bucketArn: firehoseBackupBucket.arn,
+        roleArn: firehoseRole.arn,
+      },
+      requestConfiguration: {
+        contentEncoding: 'GZIP',
+        commonAttributes: [
+          { name: 'lbl_environment', value: $app.stage },
+          { name: 'lbl_service', value: $interpolate`filone-${$app.stage}` },
+        ],
+      },
+    },
+  });
+
+  const cwToFirehoseRole = new aws.iam.Role('CwToFirehoseRole', {
+    assumeRolePolicy: aws.iam.getPolicyDocumentOutput({
+      statements: [
+        {
+          actions: ['sts:AssumeRole'],
+          principals: [{ type: 'Service', identifiers: ['logs.amazonaws.com'] }],
+        },
+      ],
+    }).json,
+    inlinePolicies: [
+      {
+        name: 'cw-to-firehose',
+        policy: $jsonStringify({
+          Version: '2012-10-17',
+          Statement: [
+            {
+              Effect: 'Allow',
+              Action: ['firehose:PutRecord', 'firehose:PutRecordBatch'],
+              Resource: [firehose.arn],
+            },
+          ],
+        }),
+      },
+    ],
+  });
+
+  return { firehose, cwToFirehoseRole };
+}
+
+// ── Lambda function factory (with log forwarding) ─────────────────
+function createFunction(
+  fnName: string,
+  args: sst.aws.FunctionArgs,
+  ctx: {
+    existingFunctions: Set<string>;
+    existingLogGroups: Set<string>;
+    firehose: aws.kinesis.FirehoseDeliveryStream;
+    cwToFirehoseRole: aws.iam.Role;
+  },
+): sst.aws.Function {
+  const functionName = `filone-${$app.stage}-${fnName}`;
+  const logGroupName = `/aws/lambda/${functionName}`;
+
+  const fn = new sst.aws.Function(fnName, {
+    name: $interpolate`filone-${$app.stage}-${fnName}`,
+    ...args,
+    logging: { retention: '1 week', format: 'json' },
+    transform: {
+      function: (_fnArgs, opts) => {
+        if (ctx.existingFunctions.has(functionName)) {
+          opts.import = functionName;
+        }
+      },
+      logGroup: (_logGroupArgs, opts) => {
+        if (ctx.existingLogGroups.has(logGroupName)) {
+          opts.import = logGroupName;
+        }
+      },
+    },
+  });
+
+  // Use the LogGroup resource reference (not a plain string) to ensure
+  // Pulumi creates the log group before the subscription filter.
+  const logGroup = fn.nodes.logGroup.apply((lg) => {
+    if (!lg) throw new Error(`LogGroup not created for function ${fnName}`);
+    return lg;
+  });
+
+  new aws.cloudwatch.LogSubscriptionFilter(`${fnName}LogFwd`, {
+    logGroup: logGroup.name,
+    filterPattern: '',
+    destinationArn: ctx.firehose.arn,
+    roleArn: ctx.cwToFirehoseRole.arn,
+  });
+
+  return fn;
+}
