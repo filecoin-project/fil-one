@@ -37,7 +37,6 @@ description = "Global allowlist"
 
 paths = [
   # External dependencies — not under our control
-  '''packages/ui/''',
   '''packages/aurora-backoffice-client/''',
   '''packages/aurora-portal-client/''',
   '''contracts/lib/''',
