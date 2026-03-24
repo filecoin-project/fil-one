@@ -517,7 +517,11 @@ export function BillingPage() {
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-[13px] font-medium text-[#0066ff] hover:underline"
                         >
-                          <DownloadSimpleIcon size={14} aria-hidden="true" />
+                          <DownloadSimpleIcon
+                            size={14}
+                            className="text-[#677183]"
+                            aria-hidden="true"
+                          />
                           PDF
                         </a>
                       )}
