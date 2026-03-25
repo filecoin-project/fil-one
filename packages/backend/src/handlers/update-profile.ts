@@ -67,6 +67,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     }
     await updateAuth0User(sub, { email: parsed.data.email, email_verified: false });
     // TODO: sync updated email to Stripe customer profile when we store a separate billing email
+    // https://linear.app/filecoin-foundation/issue/FIL-141/sync-stripe-customer-email-after-auth0-email-verification-via-auth0
     try {
       await sendVerificationEmail(sub);
     } catch (err) {
