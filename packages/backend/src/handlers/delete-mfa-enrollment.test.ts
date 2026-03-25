@@ -8,13 +8,14 @@ import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 
 const mockGetMfaEnrollments = vi.fn();
 const mockDeleteGuardianEnrollment = vi.fn();
+const mockDeleteAuthenticationMethod = vi.fn();
 const mockUpdateAuth0User = vi.fn();
 vi.mock('../lib/auth0-management.js', () => ({
   getConnectionType: (sub: string) => sub.split('|')[0] ?? 'unknown',
   getMfaEnrollments: (...args: unknown[]) => mockGetMfaEnrollments(...args),
   deleteGuardianEnrollment: (...args: unknown[]) => mockDeleteGuardianEnrollment(...args),
+  deleteAuthenticationMethod: (...args: unknown[]) => mockDeleteAuthenticationMethod(...args),
   updateAuth0User: (...args: unknown[]) => mockUpdateAuth0User(...args),
-  MFA_GUARDIAN_TYPES: new Set(['authenticator', 'webauthn-roaming', 'webauthn-platform']),
 }));
 
 vi.mock('sst', () => ({
@@ -181,5 +182,27 @@ describe('DELETE /api/mfa/enrollments/{enrollmentId} handler', () => {
       body: JSON.stringify({ message: 'Enrollment not found.' }),
     });
     expect(mockDeleteGuardianEnrollment).not.toHaveBeenCalled();
+  });
+
+  it('uses deleteAuthenticationMethod for email-type enrollments', async () => {
+    const emailEnrollmentId = 'email|dev_xyz';
+    setupAuthMocks();
+    mockGetMfaEnrollments.mockResolvedValue([
+      { id: emailEnrollmentId, type: 'email', status: 'confirmed' },
+    ]);
+    mockDeleteAuthenticationMethod.mockResolvedValue(undefined);
+    mockUpdateAuth0User.mockResolvedValue(undefined);
+
+    const result = await handler(deleteEnrollmentEvent(emailEnrollmentId), buildContext());
+
+    expect(result).toMatchObject({
+      statusCode: 200,
+      body: JSON.stringify({ message: 'MFA enrollment removed.' }),
+    });
+    expect(mockDeleteAuthenticationMethod).toHaveBeenCalledWith(MOCK_SUB, emailEnrollmentId);
+    expect(mockDeleteGuardianEnrollment).not.toHaveBeenCalled();
+    expect(mockUpdateAuth0User).toHaveBeenCalledWith(MOCK_SUB, {
+      app_metadata: { mfa_enrolling: false },
+    });
   });
 });

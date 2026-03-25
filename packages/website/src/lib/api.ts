@@ -160,6 +160,10 @@ export async function enrollMfa(email?: string): Promise<void> {
   redirectToLogin({ prompt: 'login', loginHint: email });
 }
 
+export function enrollEmailMfa(): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>('/mfa/enroll-email', { method: 'POST' });
+}
+
 export function disableMfa(): Promise<{ message: string }> {
   return apiRequest<{ message: string }>('/mfa/disable', { method: 'POST' });
 }

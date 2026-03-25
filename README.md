@@ -257,11 +257,12 @@ Example PR To add `staging.fil.one`: https://github.com/FilecoinFoundationWeb/Fi
 
 ## Auth0
 
-|                 |                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Dev environment | **FilOneDev**                                                                                                     |
-| Tenant domain   | `dev-oar2nhqh58xf5pwf.us.auth0.com`                                                                               |
-| Dashboard       | https://manage.auth0.com/dashboard/us/dev-oar2nhqh58xf5pwf/applications/hAHMVzFTsFMrtxHDfzOvQCLHgaAf3bPQ/settings |
+Two Auth0 tenants are used:
+
+| Environment | Tenant        | Domain                              | Dashboard                                                                                                                      |
+| ----------- | ------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Staging/dev | **FilOneDev** | `dev-oar2nhqh58xf5pwf.us.auth0.com` | [Dashboard](https://manage.auth0.com/dashboard/us/dev-oar2nhqh58xf5pwf/applications/hAHMVzFTsFMrtxHDfzOvQCLHgaAf3bPQ/settings) |
+| Production  | **fil-one**   | `fil-one.us.auth0.com`              | [Dashboard](https://manage.auth0.com/dashboard/us/fil-one)                                                                     |
 
 Auth0 credentials are managed as SST secrets (`Auth0ClientId`, `Auth0ClientSecret`). See the "Set SST secrets" step above.
 
@@ -278,12 +279,13 @@ Auth0 credentials are managed as SST secrets (`Auth0ClientId`, `Auth0ClientSecre
 
 ### Auth0 MFA Setup
 
-MFA is opt-in per user (database and social connections). Auth0 handles enrollment and challenge via Universal Login.
+MFA is opt-in per user (database and social connections). Auth0 handles enrollment and challenge via Universal Login. See `docs/MFAImplPlan.md` for the full architectural decision record.
 
-**1. Enable MFA factors** (Security > Multi-factor Auth) — manual, one-time:
+**1. Enable MFA factors** (Security > Multi-factor Auth) — manual, one-time per tenant:
 
 - Enable **One-time Password** (authenticator apps)
 - Enable **WebAuthn with FIDO Security Keys** (passkeys/security keys)
+- Enable **WebAuthn with FIDO Device Biometrics** (fingerprint, Face ID)
 - Enable **Email** (one-time code)
 - Set policy to **"Never"** (MFA is controlled entirely by the Post-Login Action)
 - Under additional settings, enable **"Customize MFA Factors using Actions"**
@@ -292,35 +294,22 @@ MFA is opt-in per user (database and social connections). Auth0 handles enrollme
 
 The deploy-time setup Lambda (`setup-integrations`) automatically creates, deploys, and binds an `MFA Enrollment Trigger` Action to the Login flow (staging/production only). This Action checks `app_metadata.mfa_enrolling` on each login — when `true`, it triggers MFA enrollment via Universal Login and clears the flag after success. No manual Action setup is needed.
 
-**3. Grant M2M scopes** (Applications > M2M app > APIs > Auth0 Management API):
+### Auth0 Machine-to-Machine (M2M) Applications
 
-The following scopes are required for MFA (in addition to existing scopes):
-
-- `delete:guardian_enrollments` — remove MFA factors when user disables MFA
-- `create:actions` — deploy-time setup creates the MFA Post-Login Action
-- `read:actions` — deploy-time setup checks if the Action already exists
-- `update:actions` — deploy-time setup updates the Action code if changed
-- `read:triggers` — deploy-time setup reads the Login flow bindings
-- `update:triggers` — deploy-time setup binds the Action to the Login flow
-
-Note: `read:users` (already granted) covers reading Guardian enrollments. `update:users_app_metadata` (already granted) covers setting the `mfa_enrolling` flag.
-
-### Auth0 Machine-to-Machine (M2M) Application
-
-Two separate M2M applications are used to limit the scope of credentials exposed to Lambda functions.
+Two separate M2M applications per tenant limit the blast radius of credentials. The deploy-time app is only available to the setup Lambda; the runtime app is available to request-time handlers.
 
 #### Deploy automation (`Auth0MgmtClientId` / `Auth0MgmtClientSecret`)
 
-Used only by the deploy-time setup Lambda to configure Auth0 on each deploy. Not available to runtime Lambda functions.
+Used only by the deploy-time setup Lambda to configure Auth0 on each deploy.
 
-**One-time setup in Auth0 Dashboard:**
+| Environment | App name          | Dashboard                                                                                                                     |
+| ----------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Staging     | `SSTSetupM2MApp`  | [Settings](https://manage.auth0.com/dashboard/us/dev-oar2nhqh58xf5pwf/applications/WaVEvlq7iAirQa15CPPZJX0leTKWPJgw/settings) |
+| Production  | Deploy Automation | [Settings](https://manage.auth0.com/dashboard/us/fil-one/applications/8t5J60CfojuktFBqppOseY8IzYQYYrcv/settings)              |
 
-1. Go to **Applications > Create Application**
-2. Choose **Machine to Machine Applications**
-3. Name it something like `Fil.one Deploy Automation`
-4. Authorize it for the **Auth0 Management API** (`https://<tenant>.us.auth0.com/api/v2/`)
-5. Grant these scopes: `read:clients`, `update:clients`, `read:email_provider`, `create:email_provider`, `update:email_provider`, `create:actions`, `read:actions`, `update:actions`, `read:triggers`, `update:triggers`
-6. Copy the **Client ID** and **Client Secret**
+**Required scopes** (Applications > M2M app > APIs > Auth0 Management API):
+
+`read:clients`, `update:clients`, `read:email_provider`, `create:email_provider`, `update:email_provider`, `create:actions`, `read:actions`, `update:actions`, `read:triggers`, `update:triggers`
 
 ```bash
 pnpx sst secret set Auth0MgmtClientId <M2M-client-id> [--stage <stage>]
@@ -329,16 +318,16 @@ pnpx sst secret set Auth0MgmtClientSecret <M2M-client-secret> [--stage <stage>]
 
 #### Runtime user management (`Auth0MgmtRuntimeClientId` / `Auth0MgmtRuntimeClientSecret`)
 
-Used by request-time Lambda handlers (`update-profile`, `resend-verification`, `enroll-mfa`, `disable-mfa`, `delete-mfa-enrollment`) to manage user records, trigger verification emails, and manage MFA enrollments.
+Used by request-time Lambda handlers (`update-profile`, `resend-verification`, `enroll-mfa`, `enroll-email-mfa`, `disable-mfa`, `delete-mfa-enrollment`) to manage user records, trigger verification emails, and manage MFA enrollments.
 
-**One-time setup in Auth0 Dashboard:**
+| Environment | App name    | Dashboard                                                                                                                     |
+| ----------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Staging     | Runtime M2M | [Settings](https://manage.auth0.com/dashboard/us/dev-oar2nhqh58xf5pwf/applications/CCONYSKqPecSTV8fxpfQJ7TLu6JseYSz/settings) |
+| Production  | Runtime M2M | [Settings](https://manage.auth0.com/dashboard/us/fil-one/applications/1VydX3EOVZDHmVF3IdKa7n7pzRuczj7O/settings)              |
 
-1. Go to **Applications > Create Application**
-2. Choose **Machine to Machine Applications**
-3. Name it something like `Fil.one Runtime`
-4. Authorize it for the **Auth0 Management API** (`https://<tenant>.us.auth0.com/api/v2/`)
-5. Grant these scopes: `read:users`, `update:users`, `update:users_app_metadata`, `create:user_tickets`, `delete:guardian_enrollments`
-6. Copy the **Client ID** and **Client Secret**
+**Required scopes** (Applications > M2M app > APIs > Auth0 Management API):
+
+`read:users`, `update:users`, `update:users_app_metadata`, `create:user_tickets`, `delete:users`, `delete:guardian_enrollments`, `read:authentication_methods`, `create:authentication_methods`, `delete:authentication_methods`
 
 ```bash
 pnpx sst secret set Auth0MgmtRuntimeClientId <M2M-client-id> [--stage <stage>]

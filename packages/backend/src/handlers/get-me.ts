@@ -43,7 +43,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   const connectionType = getConnectionType(sub);
 
   const includeMfa = event.queryStringParameters?.include === 'mfa';
-  const enrollments = includeMfa ? await getMfaEnrollments(sub) : [];
+  const enrollments = includeMfa ? await getMfaEnrollments(sub, { includeEmail: true }) : [];
 
   const body: MeResponse = {
     orgId,
@@ -56,7 +56,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     connectionType,
     mfaEnrollments: enrollments.map((e) => ({
       id: e.id,
-      type: e.type as 'authenticator' | 'webauthn-roaming' | 'webauthn-platform',
+      type: e.type as 'authenticator' | 'webauthn-roaming' | 'webauthn-platform' | 'email',
       name: e.name,
       createdAt: e.enrolled_at ?? '',
     })),

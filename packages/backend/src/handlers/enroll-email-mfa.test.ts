@@ -7,11 +7,11 @@ import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 // ---------------------------------------------------------------------------
 
 const mockGetMfaEnrollments = vi.fn();
-const mockFlagMfaEnrollment = vi.fn();
+const mockEnrollEmailMfa = vi.fn();
 vi.mock('../lib/auth0-management.js', () => ({
   getConnectionType: (sub: string) => sub.split('|')[0] ?? 'unknown',
   getMfaEnrollments: (...args: unknown[]) => mockGetMfaEnrollments(...args),
-  flagMfaEnrollment: (...args: unknown[]) => mockFlagMfaEnrollment(...args),
+  enrollEmailMfa: (...args: unknown[]) => mockEnrollEmailMfa(...args),
 }));
 
 vi.mock('sst', () => ({
@@ -44,7 +44,7 @@ const ddbMock = mockClient(DynamoDBClient);
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
 
-import { handler } from './enroll-mfa.js';
+import { handler } from './enroll-email-mfa.js';
 import { buildEvent, buildContext } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
@@ -52,36 +52,35 @@ import { buildEvent, buildContext } from '../test/lambda-test-utilities.js';
 // ---------------------------------------------------------------------------
 
 const MOCK_SUB = 'auth0|abc123';
-const MOCK_SOCIAL_SUB = 'google-oauth2|abc123';
 const MOCK_ORG_ID = 'org-1';
 const MOCK_USER_ID = 'user-1';
 const MOCK_EMAIL = 'user@example.com';
 const MOCK_CSRF_TOKEN = 'csrf-token-value';
 
-function enrollMfaEvent(sub: string = MOCK_SUB) {
+function enrollEmailEvent() {
   const event = buildEvent({
     cookies: [
       `hs_access_token=valid-token`,
       `hs_id_token=id-token`,
       `hs_csrf_token=${MOCK_CSRF_TOKEN}`,
     ],
-    userInfo: { userId: MOCK_USER_ID, orgId: MOCK_ORG_ID, email: MOCK_EMAIL, sub },
+    userInfo: { userId: MOCK_USER_ID, orgId: MOCK_ORG_ID, email: MOCK_EMAIL, sub: MOCK_SUB },
     method: 'POST',
-    rawPath: '/api/mfa/enroll',
+    rawPath: '/api/mfa/enroll-email',
   });
   event.headers['x-csrf-token'] = MOCK_CSRF_TOKEN;
   return event;
 }
 
-function setupAuthMocks(sub: string = MOCK_SUB) {
+function setupAuthMocks() {
   mockJwtVerify
-    .mockResolvedValueOnce({ payload: { sub } })
+    .mockResolvedValueOnce({ payload: { sub: MOCK_SUB } })
     .mockResolvedValueOnce({ payload: { email: MOCK_EMAIL, email_verified: true } });
 
   ddbMock
     .on(GetItemCommand, {
       TableName: 'UserInfoTable',
-      Key: { pk: { S: `SUB#${sub}` }, sk: { S: 'IDENTITY' } },
+      Key: { pk: { S: `SUB#${MOCK_SUB}` }, sk: { S: 'IDENTITY' } },
     })
     .resolves({
       Item: {
@@ -107,56 +106,40 @@ function setupAuthMocks(sub: string = MOCK_SUB) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('POST /api/mfa/enroll handler', () => {
+describe('POST /api/mfa/enroll-email handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ddbMock.reset();
   });
 
-  it('flags user for enrollment and returns 200 for database connection users', async () => {
+  it('enrolls email MFA when user has no existing MFA factors', async () => {
     setupAuthMocks();
     mockGetMfaEnrollments.mockResolvedValue([]);
-    mockFlagMfaEnrollment.mockResolvedValue(undefined);
+    mockEnrollEmailMfa.mockResolvedValue(undefined);
 
-    const result = await handler(enrollMfaEvent(), buildContext());
-
-    expect(result).toMatchObject({
-      statusCode: 200,
-      body: JSON.stringify({
-        message: 'MFA enrollment flag set. Client should redirect to Auth0.',
-      }),
-    });
-    expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SUB);
-  });
-
-  it('flags user for enrollment and returns 200 for social login users', async () => {
-    setupAuthMocks(MOCK_SOCIAL_SUB);
-    mockGetMfaEnrollments.mockResolvedValue([]);
-    mockFlagMfaEnrollment.mockResolvedValue(undefined);
-
-    const result = await handler(enrollMfaEvent(MOCK_SOCIAL_SUB), buildContext());
+    const result = await handler(enrollEmailEvent(), buildContext());
 
     expect(result).toMatchObject({
       statusCode: 200,
-      body: JSON.stringify({
-        message: 'MFA enrollment flag set. Client should redirect to Auth0.',
-      }),
+      body: JSON.stringify({ message: 'Email MFA has been enabled.' }),
     });
-    expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SOCIAL_SUB);
+    expect(mockEnrollEmailMfa).toHaveBeenCalledWith(MOCK_SUB, MOCK_EMAIL);
   });
 
-  it('returns 400 and does not flag enrollment when MFA is already enabled', async () => {
+  it('returns 400 when user already has MFA factors enrolled', async () => {
     setupAuthMocks();
     mockGetMfaEnrollments.mockResolvedValue([
-      { id: 'test', type: 'authenticator', status: 'confirmed' },
+      { id: 'otp|1', type: 'authenticator', status: 'confirmed' },
     ]);
 
-    const result = await handler(enrollMfaEvent(), buildContext());
+    const result = await handler(enrollEmailEvent(), buildContext());
 
     expect(result).toMatchObject({
       statusCode: 400,
-      body: JSON.stringify({ message: 'MFA is already enabled.' }),
+      body: JSON.stringify({
+        message: 'Email MFA can only be enabled when no other MFA methods are active.',
+      }),
     });
-    expect(mockFlagMfaEnrollment).not.toHaveBeenCalled();
+    expect(mockEnrollEmailMfa).not.toHaveBeenCalled();
   });
 });

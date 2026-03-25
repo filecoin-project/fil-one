@@ -487,6 +487,12 @@ export default $config({
       extraLink: mgmtRuntimeResources,
     });
     addRoute({
+      method: 'POST',
+      routePath: '/api/mfa/enroll-email',
+      handler: 'enroll-email-mfa',
+      extraLink: mgmtRuntimeResources,
+    });
+    addRoute({
       method: 'DELETE',
       routePath: '/api/mfa/enrollments/{enrollmentId}',
       handler: 'delete-mfa-enrollment',

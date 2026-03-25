@@ -27,7 +27,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
 
   return new ResponseBuilder()
     .status(200)
-    .body({ message: 'Redirect to Auth0 to complete MFA enrollment.' })
+    .body({ message: 'MFA enrollment flag set. Client should redirect to Auth0.' })
     .build();
 }
 

@@ -16,7 +16,7 @@ export interface MeResponse {
 
 export interface MfaEnrollment {
   id: string;
-  type: 'authenticator' | 'webauthn-roaming' | 'webauthn-platform';
+  type: 'authenticator' | 'webauthn-roaming' | 'webauthn-platform' | 'email';
   name?: string;
   createdAt: string;
 }

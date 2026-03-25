@@ -4,6 +4,8 @@ vi.mock('sst', () => ({
   Resource: {
     Auth0MgmtClientId: { value: 'mgmt-client-id' },
     Auth0MgmtClientSecret: { value: 'mgmt-client-secret' },
+    Auth0MgmtRuntimeClientId: { value: 'mgmt-runtime-client-id' },
+    Auth0MgmtRuntimeClientSecret: { value: 'mgmt-runtime-client-secret' },
   },
 }));
 
@@ -15,7 +17,9 @@ process.env.AUTH0_DOMAIN = 'test.auth0.com';
 import {
   flagMfaEnrollment,
   getMfaEnrollments,
+  enrollEmailMfa,
   deleteGuardianEnrollment,
+  deleteAuthenticationMethod,
   deleteAllAuthenticators,
   getConnectionType,
   MFA_GUARDIAN_TYPES,
@@ -115,7 +119,7 @@ describe('getMfaEnrollments', () => {
     vi.clearAllMocks();
   });
 
-  it('returns only confirmed MFA-type enrollments', async () => {
+  it('returns only confirmed MFA-type enrollments (excludes email by default)', async () => {
     setupFetchMock([
       {
         match: '/enrollments',
@@ -135,6 +139,30 @@ describe('getMfaEnrollments', () => {
 
     expect(result).toEqual([
       { id: 'otp|1', type: 'authenticator', status: 'confirmed', name: 'My OTP' },
+      { id: 'webauthn|3', type: 'webauthn-roaming', status: 'confirmed', name: 'My key' },
+    ]);
+  });
+
+  it('includes email enrollments when includeEmail is true', async () => {
+    setupFetchMock([
+      {
+        match: '/enrollments',
+        response: new Response(
+          JSON.stringify([
+            { id: 'otp|1', type: 'authenticator', status: 'confirmed', name: 'My OTP' },
+            { id: 'email|2', type: 'email', status: 'confirmed', name: 'auto email' },
+            { id: 'webauthn|3', type: 'webauthn-roaming', status: 'confirmed', name: 'My key' },
+          ]),
+          { status: 200 },
+        ),
+      },
+    ]);
+
+    const result = await getMfaEnrollments('auth0|abc123', { includeEmail: true });
+
+    expect(result).toEqual([
+      { id: 'otp|1', type: 'authenticator', status: 'confirmed', name: 'My OTP' },
+      { id: 'email|2', type: 'email', status: 'confirmed', name: 'auto email' },
       { id: 'webauthn|3', type: 'webauthn-roaming', status: 'confirmed', name: 'My key' },
     ]);
   });
@@ -170,6 +198,53 @@ describe('getMfaEnrollments', () => {
 });
 
 // ---------------------------------------------------------------------------
+// enrollEmailMfa
+// ---------------------------------------------------------------------------
+
+describe('enrollEmailMfa', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls POST on authentication-methods with email type', async () => {
+    let capturedUrl: string | undefined;
+    let capturedBody: Record<string, unknown> | undefined;
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/oauth/token')) return mockTokenResponse();
+      if (String(url).includes('/authentication-methods') && init?.method === 'POST') {
+        capturedUrl = String(url);
+        capturedBody = JSON.parse(init.body as string);
+        return new Response('{}', { status: 201 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await enrollEmailMfa('auth0|abc123', 'user@example.com');
+
+    expect(capturedUrl).toContain('/api/v2/users/auth0%7Cabc123/authentication-methods');
+    expect(capturedBody).toEqual({
+      type: 'email',
+      name: 'Email',
+      email: 'user@example.com',
+    });
+  });
+
+  it('throws on API error', async () => {
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/oauth/token')) return mockTokenResponse();
+      if (init?.method === 'POST') {
+        return new Response('Conflict', { status: 409 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await expect(enrollEmailMfa('auth0|abc123', 'user@example.com')).rejects.toThrow(
+      'Auth0 enroll email MFA failed (409): Conflict',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // deleteGuardianEnrollment
 // ---------------------------------------------------------------------------
 
@@ -191,7 +266,9 @@ describe('deleteGuardianEnrollment', () => {
 
     await deleteGuardianEnrollment('webauthn-roaming|dev_abc');
 
-    expect(deletedUrl).toContain('/api/v2/guardian/enrollments/webauthn-roaming|dev_abc');
+    expect(deletedUrl).toContain(
+      `/api/v2/guardian/enrollments/${encodeURIComponent('webauthn-roaming|dev_abc')}`,
+    );
   });
 
   it('throws on API error', async () => {
@@ -210,6 +287,48 @@ describe('deleteGuardianEnrollment', () => {
 });
 
 // ---------------------------------------------------------------------------
+// deleteAuthenticationMethod
+// ---------------------------------------------------------------------------
+
+describe('deleteAuthenticationMethod', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls DELETE on the authentication-methods endpoint', async () => {
+    let deletedUrl: string | undefined;
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/oauth/token')) return mockTokenResponse();
+      if (String(url).includes('/authentication-methods/') && init?.method === 'DELETE') {
+        deletedUrl = String(url);
+        return new Response(null, { status: 200 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await deleteAuthenticationMethod('auth0|abc123', 'email|dev_abc');
+
+    expect(deletedUrl).toContain(
+      `/api/v2/users/${encodeURIComponent('auth0|abc123')}/authentication-methods/${encodeURIComponent('email|dev_abc')}`,
+    );
+  });
+
+  it('throws on API error', async () => {
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/oauth/token')) return mockTokenResponse();
+      if (init?.method === 'DELETE') {
+        return new Response('Not found', { status: 404 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await expect(deleteAuthenticationMethod('auth0|abc123', 'nonexistent')).rejects.toThrow(
+      'Auth0 delete authentication method failed (404): Not found',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // deleteAllAuthenticators
 // ---------------------------------------------------------------------------
 
@@ -218,8 +337,9 @@ describe('deleteAllAuthenticators', () => {
     vi.clearAllMocks();
   });
 
-  it('deletes all MFA enrollments and clears mfa_enrolling flag', async () => {
-    const deletedIds: string[] = [];
+  it('deletes Guardian and email enrollments then clears mfa_enrolling flag', async () => {
+    const guardianDeletedIds: string[] = [];
+    const authMethodDeletedUrls: string[] = [];
     let patchBody: Record<string, unknown> | undefined;
 
     mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -237,8 +357,12 @@ describe('deleteAllAuthenticators', () => {
       }
       if (urlStr.includes('/guardian/enrollments/') && init?.method === 'DELETE') {
         const id = urlStr.split('/guardian/enrollments/')[1];
-        deletedIds.push(id);
+        guardianDeletedIds.push(id);
         return new Response('', { status: 200 });
+      }
+      if (urlStr.includes('/authentication-methods/') && init?.method === 'DELETE') {
+        authMethodDeletedUrls.push(urlStr);
+        return new Response(null, { status: 200 });
       }
       if (urlStr.includes('/api/v2/users/') && init?.method === 'PATCH') {
         patchBody = JSON.parse(init.body as string);
@@ -249,13 +373,19 @@ describe('deleteAllAuthenticators', () => {
 
     await deleteAllAuthenticators('auth0|abc123');
 
-    expect(deletedIds).toEqual(['otp|1', 'webauthn|2']);
+    expect(guardianDeletedIds).toEqual([
+      encodeURIComponent('otp|1'),
+      encodeURIComponent('webauthn|2'),
+    ]);
+    expect(authMethodDeletedUrls).toHaveLength(1);
+    expect(authMethodDeletedUrls[0]).toContain('/authentication-methods/');
     expect(patchBody).toEqual({
       app_metadata: { mfa_enrolling: false },
     });
   });
 
-  it('only clears flag when no MFA enrollments exist', async () => {
+  it('deletes email-only enrollments via authentication-methods', async () => {
+    const authMethodDeletedUrls: string[] = [];
     let patchBody: Record<string, unknown> | undefined;
 
     mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -267,6 +397,10 @@ describe('deleteAllAuthenticators', () => {
           { status: 200 },
         );
       }
+      if (urlStr.includes('/authentication-methods/') && init?.method === 'DELETE') {
+        authMethodDeletedUrls.push(urlStr);
+        return new Response(null, { status: 200 });
+      }
       if (urlStr.includes('/api/v2/users/') && init?.method === 'PATCH') {
         patchBody = JSON.parse(init.body as string);
         return new Response('{}', { status: 200 });
@@ -276,6 +410,7 @@ describe('deleteAllAuthenticators', () => {
 
     await deleteAllAuthenticators('auth0|abc123');
 
+    expect(authMethodDeletedUrls).toHaveLength(1);
     expect(patchBody).toEqual({
       app_metadata: { mfa_enrolling: false },
     });

@@ -333,23 +333,39 @@ const MFA_ACTION_NAME = 'MFA Enrollment Trigger';
 
 const MFA_ACTION_CODE = `
 exports.onExecutePostLogin = async (event, api) => {
-  const mfaFactors = (event.user.enrolledFactors || []).filter(
-    (f) => f.type === 'otp' || f.type === 'webauthn-roaming' || f.type === 'recovery-code'
+  const allMfaTypes = new Set([
+    'otp', 'webauthn-roaming', 'webauthn-platform', 'email', 'recovery-code',
+  ]);
+  const enrolledFactors = (event.user.enrolledFactors || []).filter(
+    (f) => allMfaTypes.has(f.type)
   );
-  const hasMfa = mfaFactors.length > 0;
+  const hasMfa = enrolledFactors.length > 0;
   const mfaEnrolling = event.user.app_metadata?.mfa_enrolling === true;
 
+  const challengeTypes = [
+    { type: 'otp' },
+    { type: 'webauthn-roaming' },
+    { type: 'webauthn-platform' },
+    { type: 'email' },
+  ];
+
   if (mfaEnrolling && !hasMfa) {
-    // User clicked "Enable" — let them choose OTP or WebAuthn.
-    // Email is not supported for enrollment via Actions.
-    api.authentication.enrollWithAny([{ type: 'otp' }, { type: 'webauthn-roaming' }]);
+    // User clicked "Enable with authenticator/key" — let them choose.
+    // Email enrollment is handled server-side via the Management API,
+    // not via Actions, so it is not offered here.
+    api.authentication.enrollWithAny([
+      { type: 'otp' },
+      { type: 'webauthn-roaming' },
+      { type: 'webauthn-platform' },
+    ]);
   } else if (mfaEnrolling && hasMfa) {
     // Already enrolled (e.g. re-login after enrolling). Clear the flag and challenge.
     api.user.setAppMetadata('mfa_enrolling', false);
-    api.authentication.challengeWithAny([{ type: 'otp' }, { type: 'webauthn-roaming' }, { type: 'email' }]);
+    api.authentication.challengeWithAny(challengeTypes);
   } else if (hasMfa) {
-    // Normal login for enrolled user — challenge with any enrolled factor.
-    api.authentication.challengeWithAny([{ type: 'otp' }, { type: 'webauthn-roaming' }, { type: 'email' }]);
+    // Normal login for enrolled user — challenge with any enrolled factor
+    // (including email-only users who enrolled via the Management API).
+    api.authentication.challengeWithAny(challengeTypes);
   }
   // No MFA enrolled and not enrolling — skip MFA.
 };

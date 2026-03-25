@@ -98,11 +98,27 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "DeleteMfaEnrollment": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "DeleteObject": {
       "name": string
       "type": "sst.aws.Function"
     }
+    "DisableMfa": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "DownloadObject": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "EnrollEmailMfa": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "EnrollMfa": {
       "name": string
       "type": "sst.aws.Function"
     }

@@ -12,6 +12,7 @@ import {
   updateProfile,
   changePassword,
   enrollMfa,
+  enrollEmailMfa,
   disableMfa,
   deleteMfaEnrollment,
 } from '../lib/api.js';
@@ -137,6 +138,8 @@ function formatEnrollmentType(type: MfaEnrollment['type']): string {
       return 'Security key';
     case 'webauthn-platform':
       return 'Device biometrics';
+    case 'email':
+      return 'Email';
     default:
       return type;
   }
@@ -158,7 +161,10 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [enrollingMfa, setEnrollingMfa] = useState(false);
+  const [enrollingEmail, setEnrollingEmail] = useState(false);
   const [disablingMfa, setDisablingMfa] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,8 +264,24 @@ export function SettingsPage() {
     }
   }
 
+  async function handleEnrollEmail() {
+    setEnrollingEmail(true);
+    try {
+      await enrollEmailMfa();
+      // Refresh MFA enrollments to show the new email factor
+      const data = await getMe({ include: 'mfa' });
+      setMe(data);
+      toast.success('Email two-factor authentication enabled');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to enable email MFA');
+    } finally {
+      setEnrollingEmail(false);
+    }
+  }
+
   async function handleDisableMfa() {
     setDisablingMfa(true);
+    setConfirmDisable(false);
     try {
       await disableMfa();
       setMe((prev) => (prev ? { ...prev, mfaEnrollments: [] } : prev));
@@ -272,6 +294,7 @@ export function SettingsPage() {
   }
 
   async function handleDeleteEnrollment(enrollment: MfaEnrollment) {
+    setConfirmDeleteId(null);
     try {
       await deleteMfaEnrollment(enrollment.id);
       setMe((prev) => {
@@ -410,63 +433,134 @@ export function SettingsPage() {
           description="Manage your account security"
         >
           <div className="flex flex-col gap-3">
-            <SettingRow
-              label="Two-factor authentication"
-              description={
-                me?.mfaEnrollments && me.mfaEnrollments.length > 0
-                  ? 'Your account is protected with two-factor authentication'
-                  : 'Add an extra layer of security to your account'
-              }
-              action={
-                <Button
-                  variant="ghost"
-                  size="compact"
-                  onClick={handleEnrollMfa}
-                  disabled={enrollingMfa}
-                >
-                  {enrollingMfa
-                    ? 'Redirecting...'
-                    : me?.mfaEnrollments && me.mfaEnrollments.length > 0
-                      ? 'Add another'
-                      : 'Enable'}
-                </Button>
-              }
-            />
-            {me?.mfaEnrollments && me.mfaEnrollments.length > 0 && (
-              <div className="flex flex-col gap-2 ml-0.5">
-                {me.mfaEnrollments.map((enrollment) => (
-                  <div
-                    key={enrollment.id}
-                    className="flex items-center justify-between rounded-md border border-[#e1e4ea] bg-zinc-50 px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-[13px] font-medium text-zinc-900">
-                        {formatEnrollmentType(enrollment.type)}
-                      </p>
-                      <p className="text-[11px] text-zinc-500">
-                        {enrollment.name ? `${enrollment.name} — ` : ''}
-                        Added {new Date(enrollment.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
+            {me?.mfaEnrollments && me.mfaEnrollments.length > 0 ? (
+              <>
+                <SettingRow
+                  label="Two-factor authentication"
+                  description="Your account is protected with two-factor authentication"
+                  action={
                     <Button
                       variant="ghost"
                       size="compact"
-                      onClick={() => handleDeleteEnrollment(enrollment)}
+                      onClick={handleEnrollMfa}
+                      disabled={enrollingMfa}
                     >
-                      Remove
+                      {enrollingMfa ? 'Redirecting...' : 'Add authenticator or key'}
                     </Button>
-                  </div>
-                ))}
-                {me.mfaEnrollments.length > 0 && (
+                  }
+                />
+                <div className="flex flex-col gap-2 ml-0.5">
+                  {me.mfaEnrollments.map((enrollment) => (
+                    <div
+                      key={enrollment.id}
+                      className="flex items-center justify-between rounded-md border border-[#e1e4ea] bg-zinc-50 px-3 py-2"
+                    >
+                      <div>
+                        <p className="text-[13px] font-medium text-zinc-900">
+                          {formatEnrollmentType(enrollment.type)}
+                        </p>
+                        <p className="text-[11px] text-zinc-500">
+                          {enrollment.name ? `${enrollment.name} — ` : ''}
+                          Added {new Date(enrollment.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {confirmDeleteId === enrollment.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-zinc-500">Remove?</span>
+                          <button
+                            className="text-[11px] text-red-600 font-medium hover:text-red-700"
+                            onClick={() => handleDeleteEnrollment(enrollment)}
+                          >
+                            Yes
+                          </button>
+                          <button
+                            className="text-[11px] text-zinc-500 hover:text-zinc-700"
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="compact"
+                          onClick={() => setConfirmDeleteId(enrollment.id)}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  {confirmDisable ? (
+                    <div className="flex items-center gap-2 self-start">
+                      <span className="text-[11px] text-zinc-500">
+                        Remove all MFA methods? This cannot be undone.
+                      </span>
+                      <button
+                        className="text-[11px] text-red-600 font-medium hover:text-red-700"
+                        onClick={handleDisableMfa}
+                        disabled={disablingMfa}
+                      >
+                        {disablingMfa ? 'Removing...' : 'Confirm'}
+                      </button>
+                      <button
+                        className="text-[11px] text-zinc-500 hover:text-zinc-700"
+                        onClick={() => setConfirmDisable(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-[11px] text-red-500 hover:text-red-700 self-start"
+                      onClick={() => setConfirmDisable(true)}
+                      disabled={disablingMfa}
+                    >
+                      Remove all MFA methods
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <SettingRow
+                  label="Two-factor authentication"
+                  description="Add an extra layer of security to your account"
+                  action={<span />}
+                />
+                <div className="flex flex-col gap-2 ml-0.5">
                   <button
-                    className="text-[11px] text-red-500 hover:text-red-700 self-start"
-                    onClick={handleDisableMfa}
-                    disabled={disablingMfa}
+                    className="flex items-center justify-between rounded-md border border-[#e1e4ea] bg-zinc-50 px-3 py-2.5 hover:bg-zinc-100 transition-colors text-left w-full"
+                    onClick={handleEnrollEmail}
+                    disabled={enrollingEmail}
                   >
-                    {disablingMfa ? 'Removing all...' : 'Remove all MFA methods'}
+                    <div>
+                      <p className="text-[13px] font-medium text-zinc-900">
+                        {enrollingEmail ? 'Enabling...' : 'Enable with email'}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        Receive a 6-digit code at your verified email address
+                      </p>
+                    </div>
                   </button>
-                )}
-              </div>
+                  <button
+                    className="flex items-center justify-between rounded-md border border-[#e1e4ea] bg-zinc-50 px-3 py-2.5 hover:bg-zinc-100 transition-colors text-left w-full"
+                    onClick={handleEnrollMfa}
+                    disabled={enrollingMfa}
+                  >
+                    <div>
+                      <p className="text-[13px] font-medium text-zinc-900">
+                        {enrollingMfa
+                          ? 'Redirecting...'
+                          : 'Enable with authenticator app or security key'}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        Use an app like Google Authenticator, or a hardware security key
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </>
             )}
             <div className="h-px bg-[#e1e4ea]" />
             {!social && (

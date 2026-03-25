@@ -5,8 +5,8 @@ import type { ErrorResponse } from '@filone/shared';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import {
   deleteGuardianEnrollment,
+  deleteAuthenticationMethod,
   getMfaEnrollments,
-  MFA_GUARDIAN_TYPES,
   updateAuth0User,
 } from '../lib/auth0-management.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -26,18 +26,22 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       .build();
   }
 
-  // Verify the enrollment belongs to this user and is an MFA type
-  const enrollments = await getMfaEnrollments(sub);
+  // Verify the enrollment belongs to this user (include email enrollments)
+  const enrollments = await getMfaEnrollments(sub, { includeEmail: true });
   const enrollment = enrollments.find((e) => e.id === enrollmentId);
 
-  if (!enrollment || !MFA_GUARDIAN_TYPES.has(enrollment.type)) {
+  if (!enrollment) {
     return new ResponseBuilder()
       .status(404)
       .body<ErrorResponse>({ message: 'Enrollment not found.' })
       .build();
   }
 
-  await deleteGuardianEnrollment(enrollmentId);
+  if (enrollment.type === 'email') {
+    await deleteAuthenticationMethod(sub, enrollmentId);
+  } else {
+    await deleteGuardianEnrollment(enrollmentId);
+  }
 
   // If this was the last MFA enrollment, clear the enrolling flag
   const remaining = enrollments.filter((e) => e.id !== enrollmentId);

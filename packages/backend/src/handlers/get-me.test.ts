@@ -354,7 +354,7 @@ describe('GET /api/me handler', () => {
 
     const result = await handler(authenticatedEvent({ include: 'mfa' }), buildContext());
 
-    expect(mockGetMfaEnrollments).toHaveBeenCalledWith(MOCK_SUB);
+    expect(mockGetMfaEnrollments).toHaveBeenCalledWith(MOCK_SUB, { includeEmail: true });
     expect(result).toMatchObject({
       statusCode: 200,
       body: JSON.stringify({
