@@ -318,7 +318,20 @@ export default $config({
     }
 
     // ── Data routes ──────────────────────────────────────────────────
-    addRoute('GET', '/api/buckets', 'list-buckets', auroraS3GatewayEnv, auroraS3GatewayPermissions);
+    addRoute(
+      'GET',
+      '/api/buckets',
+      'list-buckets',
+      {
+        AURORA_PORTAL_URL: auroraEnv.AURORA_PORTAL_URL,
+      },
+      [
+        {
+          actions: ['ssm:GetParameter'],
+          resources: [auroraApiKeySsmArn],
+        },
+      ],
+    );
     addRoute(
       'POST',
       '/api/buckets',
@@ -496,7 +509,7 @@ export default $config({
     // ── Usage reporting (cron-based) ────────────────────────────────
     const usageWorker = new sst.aws.Function('UsageReportingWorker', {
       handler: 'packages/backend/src/jobs/usage-reporting-worker.handler',
-      link: [billingTable, stripeSecretKey, auroraBackofficeToken],
+      link: [billingTable, stripeSecretKey, stripePriceId, auroraBackofficeToken],
       environment: { ...auroraEnv, STRIPE_METER_EVENT_NAME: 'gb_month_meter' },
       runtime: 'nodejs24.x',
       timeout: '60 seconds',
