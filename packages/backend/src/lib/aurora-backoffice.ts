@@ -173,9 +173,7 @@ export async function setupAuroraTenant({
 function deriveOverallSetupStep(components: ModelsComponentsStatus | undefined): ModelsSetupStep {
   if (!components) return 'NOT_STARTED';
   // Only check auth & s3 — compute is not set up yet
-  const steps = [components.auth, components.s3]
-    .map((c) => c?.lastSetupStep)
-    .filter((s) => s != null);
+  const steps = [components.auth?.lastSetupStep, components.s3?.lastSetupStep].filter(Boolean);
   if (steps.length === 0) return 'NOT_STARTED';
   const nonFinished = steps.find((s) => s !== 'FINISHED');
   return nonFinished ?? 'FINISHED';
