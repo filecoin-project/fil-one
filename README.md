@@ -120,7 +120,7 @@ pnpm run deploy:production      # Deploy to console.fil.one
 pnpm run deploy:infra:staging   # Deploy base infra (OIDC, IAM) to staging
 pnpm run deploy:infra:production # Deploy base infra (OIDC, IAM) to production
 pnpm run remove           # Remove your personal dev stack
-pnpm run lint             # Lint and typecheck all packages (via oxlint)
+pnpm run lint             # Lint and typecheck TypeScript code (via oxlint)
 pnpm run lint:fix         # Lint and auto-fix where possible
 ```
 
