@@ -304,7 +304,7 @@ export default $config({
     ];
 
     const { firehose, cwToFirehoseRole } = setupFirehoseLogPipeline(grafanaLokiAuth);
-    const createFn = (fnName: string, args: Exclude<sst.aws.FunctionArgs, 'name'>) =>
+    const createFn = (fnName: string, args: Omit<sst.aws.FunctionArgs, 'name'>) =>
       createFunction(fnName, args, { firehose, cwToFirehoseRole });
 
     function addRoute(
