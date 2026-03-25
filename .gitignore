@@ -7,7 +7,6 @@ build/
 *.d.ts.map
 .security-review/
 .semgrep/
-CLAUDE.md
 
 # SST
 .sst/
