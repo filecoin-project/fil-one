@@ -6,8 +6,8 @@ set -euo pipefail
 # Usage: bin/tail-tenant-setup-logs.sh [aws-logs-tail-options...]
 # Example: bin/tail-tenant-setup-logs.sh --since 1h --follow
 
-STAGE=$(jq -r '.stage' < .sst/stage.json 2>/dev/null) || {
-  echo "Error: could not read stage from .sst/stage.json" >&2
+STAGE=$(cat .sst/stage 2>/dev/null) || {
+  echo "Error: could not read stage from .sst/stage" >&2
   exit 1
 }
 
