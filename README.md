@@ -113,11 +113,8 @@ The `Auth0MgmtClientId` and `Auth0MgmtClientSecret` are from a **Machine-to-Mach
 
 ```bash
 pnpm run dev              # SST live dev mode (live Lambda debugging)
-pnpm run deploy           # Deploy personal dev stack (uses OS username as stage)
-pnpm run deploy:staging   # Deploy to staging.fil.one
-pnpm run deploy:production      # Deploy to app.fil.one
-pnpm run deploy:infra:staging   # Deploy base infra (OIDC, IAM) to staging
-pnpm run deploy:infra:production # Deploy base infra (OIDC, IAM) to production
+pnpm run build            # Build all packages for dev (default)
+pnpm deploy:dev           # Build and deploy personal dev stack (uses OS username as stage)
 pnpm run remove           # Remove your personal dev stack
 pnpm run lint             # Lint all packages
 pnpm run lint:fix         # Lint and auto-fix where possible
@@ -128,6 +125,18 @@ pnpm run typecheck        # tsc --noEmit across all packages
 # Local website dev server (for frontend-only changes)
 cd packages/website && pnpm run dev
 ```
+
+### Building for different stages
+
+The `build` script accepts a `STAGE` environment variable to control stage-specific configuration (e.g., which `.env` file the website uses):
+
+```bash
+pnpm run build                     # dev (default)
+STAGE=staging pnpm run build       # staging
+STAGE=production pnpm run build    # production
+```
+
+Non-website packages have identical builds across stages. The website uses Vite's `--mode` flag to load the correct `.env.<stage>` file.
 
 ### E2E Tests
 
@@ -172,25 +181,35 @@ Tests run inside `sst shell` so that SST resource bindings (table names, Stripe 
 ### Personal Dev Stack
 
 ```bash
-pnpx sst deploy
+pnpm deploy:dev
 ```
 
 Uses your OS username as the stage name. No custom domain — outputs a CloudFront URL.
 
-If you are having trouble deploying after SST Changes (eg, a version bump of SST or drift on components from manual actions), you may need to refresh the stack. To do this:
+If you are having trouble deploying after SST changes (e.g., a version bump of SST or drift on components from manual actions), you may need to refresh the stack:
 
-`pnpm run refresh`
-
-Then deploy: `pnpm run deploy`
+```bash
+pnpm run refresh
+pnpm deploy:dev
+```
 
 ### Staging / Production
 
+Staging and production deployments should go through CI/CD, not from dev machines. For reference, the CI/CD pipeline runs:
+
 ```bash
-pnpx sst deploy --stage staging
-pnpx sst deploy --stage production
+STAGE=staging pnpm run build && sst deploy --stage staging
+STAGE=production pnpm run build && sst deploy --stage production
 ```
 
 Custom domains require a pre-provisioned ACM certificate in us-east-1 and a DNS CNAME pointing to the CloudFront distribution (managed by a separate pipeline).
+
+Infrastructure-only deploys are available for cases where only the base infra (OIDC, IAM roles) needs updating:
+
+```bash
+pnpm run deploy:infra:staging
+pnpm run deploy:infra:production
+```
 
 ### Live Dev Mode
 

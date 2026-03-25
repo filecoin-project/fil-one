@@ -7,10 +7,8 @@
   "type": "module",
   "scripts": {
     "dev": "sst dev",
-    "build": "pnpm -r run build",
-    "deploy": "pnpm --filter @filone/website run build:staging && pnpm -r --filter '!@filone/website' run build && sst deploy",
-    "deploy:staging": "pnpm --filter @filone/website run build:staging && pnpm -r --filter '!@filone/website' run build && sst deploy --stage staging",
-    "deploy:production": "pnpm build && sst deploy --stage production",
+    "build": "pnpm -r run build && STAGE=${STAGE:-dev} pnpm --filter @filone/website run build:$STAGE",
+    "deploy:dev": "pnpm run build && sst deploy",
     "deploy:infra:staging": "cd infra && sst deploy --stage staging",
     "deploy:infra:production": "cd infra && sst deploy --stage production",
     "generate:api-clients": "pnpm --filter @filone/aurora-backoffice-client --filter @filone/aurora-portal-client generate",
