@@ -1,4 +1,4 @@
-import { CheckIcon, ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
+import { CheckIcon, ArrowRightIcon, PhoneIcon } from '@phosphor-icons/react/dist/ssr';
 import { Modal, ModalBody, ModalHeader } from '../Modal';
 
 type ChoosePlanDialogProps = {
