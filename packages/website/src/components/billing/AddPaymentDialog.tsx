@@ -123,7 +123,7 @@ function PaymentForm({
           {/* Expiry + CVC */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-[#3a4252]">Expiry date</label>
+              <label className="text-sm font-medium text-[#3a4252]">Expiry</label>
               <div className="rounded-md border border-[#e1e4ea] bg-[#fcfbf8] px-3 py-2.5">
                 <CardExpiryElement options={ELEMENT_OPTIONS} />
               </div>

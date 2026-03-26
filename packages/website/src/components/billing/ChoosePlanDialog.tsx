@@ -1,4 +1,4 @@
-import { CheckIcon, PhoneIcon, ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
+import { CheckIcon, ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
 import { Modal, ModalBody, ModalHeader } from '../Modal';
 
 type ChoosePlanDialogProps = {
@@ -9,18 +9,17 @@ type ChoosePlanDialogProps = {
 };
 
 const PAY_AS_YOU_GO_FEATURES = [
+  'Pay monthly',
   'No egress fees',
   'No API request fees',
   'Data integrity guarantees',
-  'Pay only for what you use',
 ];
 
 const BUSINESS_FEATURES = [
-  '1/3/5-year commitments',
-  'No egress or API fees',
+  'Purchase in 1, 3, or 5-year increments',
+  'No egress or API request fees',
   'Data integrity guarantees',
-  'Capacity assurance',
-  'Deployment SLAs',
+  'Capacity assurance and deployment SLAs',
 ];
 
 export function ChoosePlanDialog({
@@ -40,11 +39,17 @@ export function ChoosePlanDialog({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Pay as you go */}
           <div className="rounded-xl border border-[#e1e4ea] bg-white p-6 flex flex-col">
-            <h3 className="text-lg font-semibold text-[#14181f]">Pay as you go</h3>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#677183]">
+              Pay-as-you-go
+            </p>
             <div className="mt-3 flex items-baseline gap-1">
               <span className="text-3xl font-bold text-[#14181f]">$4.99</span>
-              <span className="text-sm text-[#677183]">/ TB / month</span>
+              <span className="text-sm text-[#677183]">TiB/month</span>
             </div>
+            <p className="mt-3 text-sm text-[#677183]">
+              Ideal for dynamic workloads or teams getting started with scalable, verifiable
+              storage.
+            </p>
 
             <ul className="mt-5 flex flex-col gap-2.5 flex-1">
               {PAY_AS_YOU_GO_FEATURES.map((f) => (
@@ -60,20 +65,23 @@ export function ChoosePlanDialog({
               onClick={onSelectPayAsYouGo}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#0066ff] to-[#0052cc] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             >
-              Get started
+              Upgrade now
               <ArrowRightIcon size={16} weight="bold" />
             </button>
           </div>
 
           {/* Business */}
-          <div className="rounded-xl border-2 border-[#0066ff] bg-white p-6 flex flex-col relative">
-            <span className="absolute -top-3 right-4 rounded-full bg-[#0066ff] px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white">
-              Best for enterprises
-            </span>
-            <h3 className="text-lg font-semibold text-[#14181f]">Business</h3>
+          <div className="rounded-xl border border-[#e1e4ea] bg-white p-6 flex flex-col">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#677183]">
+              Business plan
+            </p>
             <div className="mt-3">
               <span className="text-lg font-semibold text-[#14181f]">Custom pricing</span>
             </div>
+            <p className="mt-3 text-sm text-[#677183]">
+              Ideal for enterprises with predictable storage needs or compliance-driven
+              requirements.
+            </p>
 
             <ul className="mt-5 flex flex-col gap-2.5 flex-1">
               {BUSINESS_FEATURES.map((f) => (
@@ -96,7 +104,7 @@ export function ChoosePlanDialog({
         </div>
 
         <p className="mt-6 text-center text-xs text-[#99a0ae]">
-          All plans include unlimited buckets, access keys, and 24/7 support
+          All plans include unlimited buckets, API keys, and 24/7 support
         </p>
       </ModalBody>
     </Modal>
