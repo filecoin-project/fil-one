@@ -26,6 +26,7 @@ import { apiRequest, getUsage, getInvoices } from '../lib/api.js';
 import { daysUntil, formatDate } from '../lib/time.js';
 import { ChoosePlanDialog } from '../components/billing/ChoosePlanDialog.js';
 import { AddPaymentDialog } from '../components/billing/AddPaymentDialog.js';
+import { ContactSalesDialog } from '../components/billing/ContactSalesDialog.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,6 +70,7 @@ export function BillingPage() {
   const [planOpen, setPlanOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [clientSecret, setClientSecret] = useState('');
+  const [contactSalesOpen, setContactSalesOpen] = useState(false);
 
   const fetchBilling = useCallback(async () => {
     try {
@@ -141,6 +143,11 @@ export function BillingPage() {
 
   function handleUpgradeClick() {
     setPlanOpen(true);
+  }
+
+  function handleContactSales() {
+    setPlanOpen(false);
+    setContactSalesOpen(true);
   }
 
   async function handleSelectPayAsYouGo() {
@@ -590,12 +597,13 @@ export function BillingPage() {
               {/* Contact sales link */}
               <div className="mt-4 text-center">
                 <span className="text-xs text-[#99a0ae]">Questions about pricing? </span>
-                <a
-                  href="mailto:sales@fil.one"
+                <button
+                  type="button"
+                  onClick={() => setContactSalesOpen(true)}
                   className="text-xs font-medium text-[#0066ff] hover:underline"
                 >
-                  Contact sales →
-                </a>
+                  Contact sales &rarr;
+                </button>
               </div>
             </div>
           </div>
@@ -607,6 +615,7 @@ export function BillingPage() {
         open={planOpen}
         onClose={() => setPlanOpen(false)}
         onSelectPayAsYouGo={handleSelectPayAsYouGo}
+        onContactSales={handleContactSales}
       />
 
       <AddPaymentDialog
@@ -616,6 +625,8 @@ export function BillingPage() {
         onBack={handlePaymentBack}
         onSuccess={handlePaymentSuccess}
       />
+
+      <ContactSalesDialog open={contactSalesOpen} onClose={() => setContactSalesOpen(false)} />
     </div>
   );
 }
