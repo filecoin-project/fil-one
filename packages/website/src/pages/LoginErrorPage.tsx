@@ -1,5 +1,3 @@
-import { Button } from '../components/Button';
-
 type LoginErrorPageProps = {
   error: string;
 };
@@ -21,10 +19,10 @@ export function LoginErrorPage({ error }: LoginErrorPageProps) {
         <p className="text-sm text-zinc-500">{error}</p>
       </div>
 
-      {/* Login button */}
-      <Button variant="filled" className="w-full justify-center" href="/api/auth/login">
+      {/* Login button — uses <a> directly to trigger full navigation to the API endpoint */}
+      <a href="/api/auth/login" className="button button--filled w-full justify-center">
         Try signing in again
-      </Button>
+      </a>
     </div>
   );
 }
