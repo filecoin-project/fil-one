@@ -271,7 +271,7 @@ async function teardownAuth0Callbacks(
 
   const patch: Partial<Auth0Client> = {
     callbacks: removeValue(client.callbacks ?? [], callbackUrl),
-    allowed_logout_urls: removeValue(client.allowed_logout_urls ?? [], 'https://fil.one'),
+    // Do not remove the shared logout URL 'https://fil.one' here, as it is used by all stages.
     web_origins: removeValue(client.web_origins ?? [], siteUrl),
   };
 
