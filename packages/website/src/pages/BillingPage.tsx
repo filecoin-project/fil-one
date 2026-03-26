@@ -278,8 +278,8 @@ export function BillingPage() {
         {/* ── Left column ──────────────────────────────────────── */}
         <div className="flex-1 min-w-0 flex flex-col gap-6">
           {/* Plan card */}
-          <div className="rounded-lg border border-[rgba(0,128,255,0.2)] bg-white pb-[21px] pt-px px-px shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
-            <div className="flex items-center justify-between px-5 py-4">
+          <div className="rounded-lg border border-[rgba(0,128,255,0.2)] bg-white flex flex-col gap-4 py-4 px-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+            <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-[13px] font-medium tracking-[-0.325px] leading-[19.5px] text-[#14181f]">
                   {isActive || isPastDue || isGracePeriod || isCanceled
@@ -374,8 +374,8 @@ export function BillingPage() {
           </div>
 
           {/* Current usage card */}
-          <div className="rounded-lg border border-[#e1e4ea] bg-white p-px shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
-            <div className="px-5 pt-5 pb-3">
+          <div className="rounded-lg border border-[#e1e4ea] bg-white flex flex-col gap-5 p-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+            <div>
               <h3 className="text-[13px] font-medium tracking-[-0.325px] leading-[19.5px] text-[#14181f]">
                 Current usage
               </h3>
@@ -390,21 +390,23 @@ export function BillingPage() {
               </p>
             </div>
 
-            <div className="p-5">
+            <div className="flex flex-col gap-4 w-full">
               {/* Storage bar */}
-              <div className="flex items-center justify-between mb-[10px]">
-                <span className="text-[13px] text-[#677183]">Storage used</span>
-                <span className="text-[13px] font-medium text-[#14181f]">
-                  {formatBytes(storageUsed)}
-                  {storageLimit > 0 && ` / ${formatBytes(storageLimit)}`}
-                </span>
+              <div className="flex flex-col gap-[10px] w-full">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#677183]">Storage used</span>
+                  <span className="text-[13px] font-medium text-[#14181f]">
+                    {formatBytes(storageUsed)}
+                    {storageLimit > 0 && ` / ${formatBytes(storageLimit)}`}
+                  </span>
+                </div>
+                <ProgressBar value={storagePct} size="md" label="Storage usage" />
               </div>
-              <ProgressBar value={storagePct} size="md" label="Storage usage" />
 
               {/* Egress bar (trial only) */}
               {isTrialing && (
-                <>
-                  <div className="flex items-center justify-between mb-[10px] mt-4">
+                <div className="flex flex-col gap-[10px] w-full">
+                  <div className="flex items-center justify-between">
                     <span className="text-[13px] text-[#677183]">Egress used</span>
                     <span className="text-[13px] font-medium text-[#14181f]">
                       {formatBytes(egressUsed)}
@@ -412,16 +414,16 @@ export function BillingPage() {
                     </span>
                   </div>
                   <ProgressBar value={egressPct} size="md" label="Egress usage" />
-                  <p className="text-xs text-[#677183] mt-2">
+                  <p className="text-xs text-[#677183]">
                     No egress fees after upgrading to pay-as-you-go
                   </p>
-                </>
+                </div>
               )}
 
               {/* Estimated cost (active/grace) */}
               {(isActive || isPastDue || isGracePeriod) && (
-                <div className="mt-4 rounded-lg bg-[rgba(243,244,246,0.5)] p-3 flex items-center justify-between">
-                  <span className="text-[13px] font-medium text-[#14181f]">
+                <div className="w-full rounded-lg bg-[rgba(243,244,246,0.5)] p-3 flex items-center justify-between">
+                  <span className="text-[13px] font-normal text-[#677183]">
                     Estimated monthly cost
                   </span>
                   <span className="text-[18px] font-semibold leading-[28px] text-[#14181f]">
@@ -433,8 +435,8 @@ export function BillingPage() {
           </div>
 
           {/* Payment method card */}
-          <div className="rounded-lg border border-[#e1e4ea] bg-white flex flex-col gap-[20px] items-center pb-[21px] pt-px px-px shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
-            <div className="w-full px-5 pt-5 pb-3">
+          <div className="rounded-lg border border-[#e1e4ea] bg-white flex flex-col gap-5 p-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+            <div>
               <h3 className="text-[13px] font-medium tracking-[-0.325px] leading-[19.5px] text-[#14181f]">
                 Payment method
               </h3>
