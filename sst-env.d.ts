@@ -50,6 +50,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "AuthLogin": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "AuthLogout": {
       "name": string
       "type": "sst.aws.Function"
@@ -117,6 +121,10 @@ declare module "sst" {
     "GrafanaLokiAuth": {
       "type": "sst.sst.Secret"
       "value": string
+    }
+    "HeadObject": {
+      "name": string
+      "type": "sst.aws.Function"
     }
     "ListAccessKeys": {
       "name": string
