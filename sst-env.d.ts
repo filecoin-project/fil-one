@@ -46,6 +46,14 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "Auth0MgmtRuntimeClientId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "Auth0MgmtRuntimeClientSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "AuthCallback": {
       "name": string
       "type": "sst.aws.Function"
@@ -58,9 +66,9 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Dynamo"
     }
-    "SendGridApiKey": {
-      "type": "sst.sst.Secret"
-      "value": string
+    "ChangePassword": {
+      "name": string
+      "type": "sst.aws.Function"
     }
     "ConfirmOrg": {
       "name": string
@@ -122,6 +130,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "HeadObject": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "ListAccessKeys": {
       "name": string
       "type": "sst.aws.Function"
@@ -146,6 +158,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "ResendVerification": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "SetupIntegrations": {
       "name": string
       "type": "sst.aws.Function"
@@ -159,6 +175,10 @@ declare module "sst" {
       "value": string
     }
     "StripeWebhook": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "UpdateProfile": {
       "name": string
       "type": "sst.aws.Function"
     }
