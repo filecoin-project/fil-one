@@ -3,18 +3,20 @@ import { BookOpenIcon, SignOutIcon } from '@phosphor-icons/react/dist/ssr';
 import { DOCS_URL } from '@filone/shared';
 import type { MeResponse } from '@filone/shared';
 import { getMe, logout } from '../lib/api.js';
+import { useToast } from './Toast';
 
 export function AppHeader() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     getMe()
       .then(setMe)
       .catch(() => {
-        /* silent */
+        toast.error('Failed to refresh user info');
       });
   }, []);
 
