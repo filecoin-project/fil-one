@@ -20,7 +20,7 @@ export function LoginErrorPage({ error }: LoginErrorPageProps) {
       </div>
 
       {/* Login button — uses <a> directly to trigger full navigation to the API endpoint */}
-      <a href="/api/auth/login" className="button button--filled w-full justify-center">
+      <a href="/login" className="button button--filled w-full justify-center">
         Try signing in again
       </a>
     </div>

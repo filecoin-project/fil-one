@@ -18,11 +18,11 @@ function getCsrfToken(): string | undefined {
 export function redirectToLogin(): void {
   if (isRedirecting) return;
   isRedirecting = true;
-  window.location.href = `${API_URL}/api/auth/login`;
+  window.location.href = `${API_URL}/login`;
 }
 
 export function logout(): void {
-  window.location.href = `${API_URL}/api/auth/logout`;
+  window.location.href = `${API_URL}/logout`;
 }
 
 /**

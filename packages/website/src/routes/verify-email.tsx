@@ -10,7 +10,7 @@ export const Route = createRoute({
   path: '/verify-email',
   beforeLoad: () => {
     if (!document.cookie.includes('hs_logged_in')) {
-      throw redirect({ href: '/api/auth/login', reloadDocument: true });
+      throw redirect({ href: '/login', reloadDocument: true });
     }
   },
   component: VerifyEmailRoute,

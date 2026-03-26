@@ -6,7 +6,7 @@ export const Route = createRoute({
   getParentRoute: () => authRoute,
   beforeLoad: () => {
     // Redirect to the server-side login endpoint with signup hint.
-    throw redirect({ href: '/api/auth/login?screen_hint=signup', reloadDocument: true });
+    throw redirect({ href: '/login?screen_hint=signup', reloadDocument: true });
   },
   component: () => null,
 });

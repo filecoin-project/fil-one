@@ -153,6 +153,14 @@ export default $config({
           url: api.url,
           cachePolicy: AWS_CACHING_DISABLED_POLICY,
         },
+        '/login': {
+          url: api.url,
+          cachePolicy: AWS_CACHING_DISABLED_POLICY,
+        },
+        '/logout': {
+          url: api.url,
+          cachePolicy: AWS_CACHING_DISABLED_POLICY,
+        },
       },
       ...(domainName && certArn ? { domain: { name: domainName, dns: false, cert: certArn } } : {}),
       transform: {
@@ -231,8 +239,8 @@ export default $config({
               SiteUrl: siteUrl,
               Stage: $app.stage,
               // Bump to re-trigger: registers https://fil.one as allowed logout URL
-              // and /api/auth/login as initiate_login_uri
-              Version: '2.0',
+              // and /login as initiate_login_uri
+              Version: '2.1',
             },
           },
         },
@@ -446,7 +454,7 @@ export default $config({
     const allowedRedirectOrigins = allowedOrigins.join(',');
     addRoute({
       method: 'GET',
-      routePath: '/api/auth/login',
+      routePath: '/login',
       handler: 'auth-login',
       extraEnv: { WEBSITE_URL: siteUrl, ALLOWED_REDIRECT_ORIGINS: allowedRedirectOrigins },
     });
@@ -458,7 +466,7 @@ export default $config({
     });
     addRoute({
       method: 'GET',
-      routePath: '/api/auth/logout',
+      routePath: '/logout',
       handler: 'auth-logout',
       extraEnv: { WEBSITE_URL: siteUrl, ALLOWED_REDIRECT_ORIGINS: allowedRedirectOrigins },
     });

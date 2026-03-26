@@ -14,7 +14,7 @@ The Hyperspace SPA previously rendered custom sign-in and sign-up pages that col
 
 Remove the local sign-in and sign-up UI. Replace with two redirect mechanisms:
 
-### 1. Server-side entry point: `GET /api/auth/login`
+### 1. Server-side entry point: `GET /login`
 
 A new Lambda handler that generates the OAuth `state`, sets the `hs_oauth_state` cookie, and returns a 302 to Auth0's `/authorize` endpoint. Accepts optional query parameters:
 
@@ -25,22 +25,22 @@ This URL is stable and bookmarkable. Each visit generates a fresh state/cookie p
 
 ### 2. Client-side 401 handling: `redirectToLogin()`
 
-When the SPA is already loaded and a 401 response triggers re-authentication, `redirectToLogin()` navigates to `/api/auth/login` via `window.location.href`. This is a simple redirect — no Auth0 configuration is needed in the frontend.
+When the SPA is already loaded and a 401 response triggers re-authentication, `redirectToLogin()` navigates to `/login` via `window.location.href`. This is a simple redirect — no Auth0 configuration is needed in the frontend.
 
-**Why not return a 302 from the auth middleware instead?** The SPA makes API calls via `fetch()`, which follows HTTP redirects automatically and transparently. If the middleware returned a 302 to `/api/auth/login`, fetch would silently follow the redirect chain (middleware → `/api/auth/login` → Auth0) and return Auth0's HTML login page as the response body — the browser would never actually navigate. Only top-level document requests (link clicks, form submits, `window.location`) trigger real browser navigation on a 302. The 401 status code is the correct signal for "session expired" — it lets the client-side code perform a real navigation via `window.location.href`.
+**Why not return a 302 from the auth middleware instead?** The SPA makes API calls via `fetch()`, which follows HTTP redirects automatically and transparently. If the middleware returned a 302 to `/login`, fetch would silently follow the redirect chain (middleware → `/login` → Auth0) and return Auth0's HTML login page as the response body — the browser would never actually navigate. Only top-level document requests (link clicks, form submits, `window.location`) trigger real browser navigation on a 302. The 401 status code is the correct signal for "session expired" — it lets the client-side code perform a real navigation via `window.location.href`.
 
 ### Shared URL builder: `buildAuth0AuthorizeUrl()`
 
-The `/api/auth/login` Lambda uses `buildAuth0AuthorizeUrl()` from `@filone/shared` to construct the Auth0 URL. This is a pure function (no side effects) that takes domain, client ID, audience, redirect URI, state, and optional hints as parameters. The caller is responsible for generating the state value and persisting it. Having the URL builder in `@filone/shared` keeps the logic reusable if a second server-side caller is ever needed.
+The `/login` Lambda uses `buildAuth0AuthorizeUrl()` from `@filone/shared` to construct the Auth0 URL. This is a pure function (no side effects) that takes domain, client ID, audience, redirect URI, state, and optional hints as parameters. The caller is responsible for generating the state value and persisting it. Having the URL builder in `@filone/shared` keeps the logic reusable if a second server-side caller is ever needed.
 
 ### Auth0 configuration removed from frontend
 
-Because all login paths now go through `/api/auth/login`, the frontend no longer needs Auth0 credentials. The `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, and `VITE_AUTH0_AUDIENCE` environment variables have been removed from the SPA bundle, `.env.local`, and `.env.production`. Auth0 configuration lives exclusively in the backend (SST secrets and Lambda environment variables).
+Because all login paths now go through `/login`, the frontend no longer needs Auth0 credentials. The `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, and `VITE_AUTH0_AUDIENCE` environment variables have been removed from the SPA bundle, `.env.local`, and `.env.production`. Auth0 configuration lives exclusively in the backend (SST secrets and Lambda environment variables).
 
 ### Route behavior
 
-- `/sign-in` — TanStack Router `beforeLoad` redirects to `/api/auth/login`
-- `/sign-up` — redirects to `/api/auth/login?screen_hint=signup`
+- `/sign-in` — TanStack Router `beforeLoad` redirects to `/login`
+- `/sign-up` — redirects to `/login?screen_hint=signup`
 - The `_auth` layout guard still redirects already-authenticated users to `/dashboard` before the child route's `beforeLoad` runs
 
 ## Auth0 Authorize URL Structure
@@ -71,7 +71,7 @@ These values are set via SST Resource bindings and injected into the Lambda envi
 
 ```
 https://staging.fil.one/sign-in
-  → 302 /api/auth/login
+  → 302 /login
   → 302 https://dev-oar2nhqh58xf5pwf.us.auth0.com/authorize?client_id=hAHMVzFTsFMrtxHDfzOvQCLHgaAf3bPQ&redirect_uri=https%3A%2F%2Fstaging.fil.one%2Fapi%2Fauth%2Fcallback&...&state=<uuid>
 ```
 
@@ -79,7 +79,7 @@ https://staging.fil.one/sign-in
 
 ```
 https://dc6bx6mfz5y94.cloudfront.net/sign-in
-  → 302 /api/auth/login
+  → 302 /login
   → 302 Auth0 authorize URL with redirect_uri=https%3A%2F%2Fdc6bx6mfz5y94.cloudfront.net%2Fapi%2Fauth%2Fcallback
 ```
 
@@ -88,8 +88,8 @@ The CloudFront distribution URL must be registered as an Allowed Callback URL in
 ### Direct API entry point (bookmarkable)
 
 ```
-https://staging.fil.one/api/auth/login
-https://staging.fil.one/api/auth/login?screen_hint=signup
+https://staging.fil.one/login
+https://staging.fil.one/login?screen_hint=signup
 ```
 
 These can be linked from external sites, emails, or documentation without requiring the SPA to load.
@@ -100,7 +100,7 @@ After clearing session cookies, the logout handler redirects to Auth0's `/v2/log
 
 ## Consequences
 
-- External links and bookmarks can point to `/api/auth/login` for immediate server-side redirect without loading JS.
+- External links and bookmarks can point to `/login` for immediate server-side redirect without loading JS.
 - Auth0 configuration (`VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`) has been fully removed from the frontend bundle. Auth0 credentials live exclusively in the backend, reducing the attack surface of the SPA.
 - The `SignInPage` and `SignUpPage` components are now unused and can be removed.
 - Logout returns users to `https://fil.one` via Auth0's `/v2/logout` with `returnTo=https://fil.one`, taking them to the marketing site rather than back into the login flow.

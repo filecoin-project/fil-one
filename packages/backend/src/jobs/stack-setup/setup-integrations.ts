@@ -243,7 +243,7 @@ async function setupAuth0Callbacks(
   const client = await getAuth0Client(domain, token, clientId);
 
   const callbackUrl = `${siteUrl}/api/auth/callback`;
-  const loginUrl = `${siteUrl}/api/auth/login`;
+  const loginUrl = `${siteUrl}/login`;
 
   const patch: Partial<Auth0Client> = {
     callbacks: addUnique(client.callbacks ?? [], callbackUrl),

@@ -562,7 +562,7 @@ describe('setup-integrations', () => {
       );
 
       expect(capturedAuth0PatchBody).toMatchObject({
-        initiate_login_uri: 'https://staging.fil.one/api/auth/login',
+        initiate_login_uri: 'https://staging.fil.one/login',
       });
     });
 
@@ -577,7 +577,7 @@ describe('setup-integrations', () => {
         ],
         allowed_logout_urls: ['https://fil.one'],
         web_origins: ['https://app.example.com'],
-        initiate_login_uri: 'https://app.example.com/api/auth/login',
+        initiate_login_uri: 'https://app.example.com/login',
       });
 
       await handler(
