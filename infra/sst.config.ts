@@ -37,10 +37,21 @@ export default $config({
     setupMetricStreamPipeline(grafanaPrometheusAuth);
 
     // ── OIDC Identity Provider for GitHub Actions ────────────────────
-    const github = new aws.iam.OpenIdConnectProvider('GithubOidcProvider', {
-      url: 'https://token.actions.githubusercontent.com',
-      clientIdLists: ['sts.amazonaws.com'],
-    });
+    // The provider is account-wide (one per URL). Look up an existing one
+    // first; only create it when deploying to a fresh account.
+    let githubOidcArn: string;
+    try {
+      const existing = await aws.iam.getOpenIdConnectProvider({
+        url: 'https://token.actions.githubusercontent.com',
+      });
+      githubOidcArn = existing.arn;
+    } catch {
+      const provider = new aws.iam.OpenIdConnectProvider('GithubOidcProvider', {
+        url: 'https://token.actions.githubusercontent.com',
+        clientIdLists: ['sts.amazonaws.com'],
+      });
+      githubOidcArn = provider.arn;
+    }
 
     // IAM Role for GitHub Actions
     const roleName = `filone-infra-${$app.stage}-github`;
@@ -51,7 +62,7 @@ export default $config({
         Statement: [
           {
             Effect: 'Allow',
-            Principal: { Federated: github.arn },
+            Principal: { Federated: githubOidcArn },
             Action: 'sts:AssumeRoleWithWebIdentity',
             Condition: {
               StringLike: {
