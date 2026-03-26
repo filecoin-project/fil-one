@@ -106,7 +106,7 @@ jobs:
           GRAFANA_PROMETHEUS_AUTH: ${{ secrets.CI_GRAFANA_PROMETHEUS_AUTH }}
 
       - name: Build
-        run: pnpm run build:dev
+        run: pnpm build
 
       - name: Deploy SST stage
         run: pnpm exec sst deploy --stage "$STAGE"
@@ -261,7 +261,7 @@ jobs:
           role-to-assume: arn:aws:iam::654654381893:role/filone-infra-staging-github
           aws-region: us-east-2
 
-      - run: pnpm run build:staging
+      - run: pnpm build
 
       - run: pnpm exec sst deploy --stage staging
 

@@ -116,9 +116,7 @@ There are two Auth0 M2M credentials with different scopes — see the [Auth0 M2M
 
 ```bash
 pnpm run dev              # SST live dev mode (live Lambda debugging)
-pnpm run build:dev        # Build all packages for dev stage
-pnpm run build:staging    # Build all packages for staging stage
-pnpm run build:production # Build all packages for production stage
+pnpm run build            # Build all packages
 pnpm run deploy:dev       # Build and deploy personal dev stack (uses OS username as stage)
 pnpm run remove           # Remove your personal dev stack
 pnpm run lint             # Lint and typecheck TypeScript code (via oxlint)
@@ -131,18 +129,6 @@ pnpm run lint:fix         # Lint and auto-fix where possible
 # Local website dev server (for frontend-only changes)
 cd packages/website && pnpm run dev
 ```
-
-### Building for different stages
-
-Each stage has an explicit build script:
-
-```bash
-pnpm run build:dev        # dev
-pnpm run build:staging    # staging
-pnpm run build:production # production
-```
-
-Non-website packages have identical builds across stages. The website uses Vite's `--mode` flag to load the correct `.env.<stage>` file.
 
 ### E2E Tests
 
@@ -253,7 +239,7 @@ Auth0 credentials are managed as SST secrets (`Auth0ClientId`, `Auth0ClientSecre
 
 **API setup** (APIs > Create API):
 
-- **Identifier (audience)**: `app.fil.one` (prod) — this must match `AUTH0_AUDIENCE` in `sst.config.ts` and website env. It's what makes Auth0 issue a JWT access token (instead of an opaque one) and is the `aud` claim the middleware validates.
+- **Identifier (audience)**: `app.fil.one` (prod) — this must match `AUTH0_AUDIENCE` in `sst.config.ts`. It's what makes Auth0 issue a JWT access token (instead of an opaque one) and is the `aud` claim the middleware validates.
 - Under the API's **Machine to Machine Applications** tab, authorize your application so it can exchange tokens.
 
 ### Auth0 Machine-to-Machine (M2M) Application
