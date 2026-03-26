@@ -17,7 +17,7 @@ function futureDate(daysFromNow: number): string {
 describe('expired grace period → canceled + DISABLED', () => {
   const userId = `enforcer-grace-${crypto.randomUUID().slice(0, 8)}`;
   const orgId = `org-grace-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = `tenant-${crypto.randomUUID().slice(0, 8)}`;
+  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
 
   beforeAll(async () => {
     await seedOrgProfile(orgId, tenantId);
@@ -53,7 +53,7 @@ describe('expired grace period → canceled + DISABLED', () => {
 describe('active grace period → WRITE_LOCK applied', () => {
   const userId = `enforcer-active-${crypto.randomUUID().slice(0, 8)}`;
   const orgId = `org-active-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = `tenant-${crypto.randomUUID().slice(0, 8)}`;
+  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
 
   beforeAll(async () => {
     await seedOrgProfile(orgId, tenantId);
@@ -89,7 +89,7 @@ describe('active grace period → WRITE_LOCK applied', () => {
 describe('expired trial (within grace window) → grace_period', () => {
   const userId = `enforcer-trial-grace-${crypto.randomUUID().slice(0, 8)}`;
   const orgId = `org-trial-grace-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = `tenant-${crypto.randomUUID().slice(0, 8)}`;
+  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
 
   beforeAll(async () => {
     await seedOrgProfile(orgId, tenantId);
@@ -126,7 +126,7 @@ describe('expired trial (within grace window) → grace_period', () => {
 describe('fully expired trial (past grace) → canceled', () => {
   const userId = `enforcer-trial-exp-${crypto.randomUUID().slice(0, 8)}`;
   const orgId = `org-trial-exp-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = `tenant-${crypto.randomUUID().slice(0, 8)}`;
+  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
 
   beforeAll(async () => {
     await seedOrgProfile(orgId, tenantId);
@@ -162,7 +162,7 @@ describe('mixed batch — only expired records get canceled', () => {
   const expiredUserId = `enforcer-mix-exp-${crypto.randomUUID().slice(0, 8)}`;
   const activeUserId = `enforcer-mix-act-${crypto.randomUUID().slice(0, 8)}`;
   const orgId = `org-mix-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = `tenant-${crypto.randomUUID().slice(0, 8)}`;
+  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
 
   beforeAll(async () => {
     await seedOrgProfile(orgId, tenantId);
