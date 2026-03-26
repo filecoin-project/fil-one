@@ -7,7 +7,6 @@ import {
   ArrowUpRightIcon,
   WarningIcon,
   DownloadSimpleIcon,
-  SparkleIcon,
   LightningIcon,
   ShieldCheckIcon,
   LockSimpleIcon,
@@ -375,50 +374,58 @@ export function BillingPage() {
           </div>
 
           {/* Current usage card */}
-          <div className="rounded-xl border border-[#e1e4ea] bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-semibold text-[#14181f] mb-1">Current usage</h3>
-            <p className="text-xs text-[#99a0ae] mb-4">
-              {isTrialing
-                ? 'Storage and egress during your free trial'
-                : isActive || isPastDue || isGracePeriod
-                  ? 'Your usage this billing period'
-                  : isCanceled
-                    ? 'Usage at time of cancellation'
-                    : 'Storage and egress during your free trial'}
-            </p>
-
-            {/* Storage bar */}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-[#3a4252]">Storage used</span>
-              <span className="text-sm font-medium text-[#14181f]">
-                {formatBytes(storageUsed)}
-                {storageLimit > 0 && ` / ${formatBytes(storageLimit)}`}
-              </span>
+          <div className="rounded-lg border border-[#e1e4ea] bg-white pb-[21px] shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)]">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-[13px] font-medium tracking-[-0.325px] leading-[19.5px] text-[#14181f]">
+                Current usage
+              </h3>
+              <p className="text-[13px] text-[#677183] leading-[19.5px] mt-1">
+                {isTrialing
+                  ? 'Storage and egress during your free trial'
+                  : isActive || isPastDue || isGracePeriod
+                    ? 'Your usage this billing period'
+                    : isCanceled
+                      ? 'Usage at time of cancellation'
+                      : 'Storage and egress during your free trial'}
+              </p>
             </div>
-            <ProgressBar value={storagePct} size="sm" label="Storage usage" />
 
-            {/* Egress bar (trial only) */}
-            {isTrialing && (
-              <>
-                <div className="flex items-center justify-between mb-2 mt-4">
-                  <span className="text-sm text-[#3a4252]">Egress used</span>
-                  <span className="text-sm font-medium text-[#14181f]">
-                    {formatBytes(egressUsed)}
-                    {egressLimit > 0 && ` / ${formatBytes(egressLimit)}`}
-                  </span>
-                </div>
-                <ProgressBar value={egressPct} size="sm" label="Egress usage" />
-                <p className="text-xs text-[#99a0ae] mt-2">
-                  No egress fees after upgrading to pay-as-you-go
-                </p>
-              </>
-            )}
+            <div className="px-5">
+              {/* Storage bar */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[13px] text-[#677183]">Storage used</span>
+                <span className="text-[13px] font-medium text-[#14181f]">
+                  {formatBytes(storageUsed)}
+                  {storageLimit > 0 && ` / ${formatBytes(storageLimit)}`}
+                </span>
+              </div>
+              <ProgressBar value={storagePct} size="md" label="Storage usage" />
+
+              {/* Egress bar (trial only) */}
+              {isTrialing && (
+                <>
+                  <div className="flex items-center justify-between mb-2 mt-4">
+                    <span className="text-[13px] text-[#677183]">Egress used</span>
+                    <span className="text-[13px] font-medium text-[#14181f]">
+                      {formatBytes(egressUsed)}
+                      {egressLimit > 0 && ` / ${formatBytes(egressLimit)}`}
+                    </span>
+                  </div>
+                  <ProgressBar value={egressPct} size="md" label="Egress usage" />
+                  <p className="text-xs text-[#677183] mt-2">
+                    No egress fees after upgrading to pay-as-you-go
+                  </p>
+                </>
+              )}
+            </div>
 
             {/* Estimated cost (active/grace) */}
             {(isActive || isPastDue || isGracePeriod) && (
-              <div className="mt-4 flex items-center justify-between rounded-lg bg-[#f8fafc] px-4 py-3">
-                <span className="text-sm text-[#3a4252]">Estimated monthly cost</span>
-                <span className="text-sm font-semibold text-[#14181f]">
+              <div className="mx-[1px] mt-4 rounded-lg bg-[rgba(243,244,246,0.5)] border border-[rgba(225,228,234,0.5)] p-[13px] flex items-center justify-between">
+                <span className="text-[13px] font-medium text-[#14181f]">
+                  Estimated monthly cost
+                </span>
+                <span className="text-[18px] font-semibold leading-[28px] text-[#14181f]">
                   {formatCents(estimatedCost)}
                 </span>
               </div>
@@ -612,7 +619,7 @@ export function BillingPage() {
                   onClick={handleUpgradeClick}
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#0066ff] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
                 >
-                  <SparkleIcon size={16} weight="fill" />
+                  <LightningIcon size={16} weight="fill" />
                   {isTrialing ? 'Upgrade now' : 'Reactivate'}
                 </button>
               )}
