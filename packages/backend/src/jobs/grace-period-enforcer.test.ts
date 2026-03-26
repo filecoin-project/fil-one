@@ -286,7 +286,7 @@ describe('grace-period-enforcer', () => {
         (c) =>
           c.args[0].input.ExpressionAttributeValues?.[':status']?.S === SubscriptionStatus.Canceled,
       );
-    expect(cancelCall).toBeDefined();
+    expect(cancelCall).toBeUndefined();
     // But Aurora should NOT be called
     expect(mockUpdateTenantStatus).not.toHaveBeenCalled();
   });

@@ -107,6 +107,17 @@ export async function handler(): Promise<void> {
       const currentAuroraStatus = orgResult.Item?.auroraTenantStatus?.S;
       const tenantReady = auroraTenantId && isOrgSetupComplete(setupStatus);
 
+      if (!tenantReady) {
+        skipped++;
+        console.warn('[grace-period-enforcer] Tenant not ready, skipping', {
+          userId: candidate.userId,
+          orgId: candidate.orgId,
+          auroraTenantId,
+          setupStatus,
+        });
+        continue;
+      }
+
       if (candidate.action === 'cancel') {
         // Transition DynamoDB status to canceled
         await dynamo.send(
@@ -122,15 +133,13 @@ export async function handler(): Promise<void> {
         );
         canceled++;
 
-        if (tenantReady) {
-          await updateTenantStatus({ tenantId: auroraTenantId, status: 'DISABLED' });
-          await setOrgAuroraTenantStatus(candidate.orgId, 'DISABLED');
-          console.log('[grace-period-enforcer] Canceled + disabled', {
-            userId: candidate.userId,
-            orgId: candidate.orgId,
-            previousStatus: candidate.subscriptionStatus,
-          });
-        }
+        await updateTenantStatus({ tenantId: auroraTenantId, status: 'DISABLED' });
+        await setOrgAuroraTenantStatus(candidate.orgId, 'DISABLED');
+        console.log('[grace-period-enforcer] Canceled + disabled', {
+          userId: candidate.userId,
+          orgId: candidate.orgId,
+          previousStatus: candidate.subscriptionStatus,
+        });
       } else if (candidate.action === 'write_lock') {
         // Non-expired grace period — ensure Aurora is WRITE_LOCKED
         if (currentAuroraStatus === 'WRITE_LOCKED') {
@@ -138,17 +147,13 @@ export async function handler(): Promise<void> {
           continue;
         }
 
-        if (tenantReady) {
-          await updateTenantStatus({ tenantId: auroraTenantId, status: 'WRITE_LOCKED' });
-          await setOrgAuroraTenantStatus(candidate.orgId, 'WRITE_LOCKED');
-          writeLocked++;
-          console.log('[grace-period-enforcer] WRITE_LOCKED (retry)', {
-            userId: candidate.userId,
-            orgId: candidate.orgId,
-          });
-        } else {
-          skipped++;
-        }
+        await updateTenantStatus({ tenantId: auroraTenantId, status: 'WRITE_LOCKED' });
+        await setOrgAuroraTenantStatus(candidate.orgId, 'WRITE_LOCKED');
+        writeLocked++;
+        console.log('[grace-period-enforcer] WRITE_LOCKED (retry)', {
+          userId: candidate.userId,
+          orgId: candidate.orgId,
+        });
       }
     } catch (error) {
       failed++;
