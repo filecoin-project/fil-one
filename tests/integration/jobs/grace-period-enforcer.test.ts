@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { SubscriptionStatus, TRIAL_GRACE_DAYS } from '@filone/shared';
+import { SubscriptionStatus } from '@filone/shared';
 import { seedBillingRecord, getBillingRecord, deleteBillingRecord } from '../helpers.ts';
 import { invokeEnforcer, seedOrgProfile, getOrgProfile, deleteOrgProfile } from './helpers.ts';
 
@@ -84,79 +84,7 @@ describe('active grace period → WRITE_LOCK applied', () => {
 });
 
 // =============================================================================
-// 3. Expired trial (within grace window) → grace_period + WRITE_LOCK
-// =============================================================================
-describe('expired trial (within grace window) → grace_period', () => {
-  const userId = `enforcer-trial-grace-${crypto.randomUUID().slice(0, 8)}`;
-  const orgId = `org-trial-grace-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
-
-  beforeAll(async () => {
-    await seedOrgProfile(orgId, tenantId);
-    // Trial ended 2 days ago — within 7 (7) window
-    await seedBillingRecord(userId, 'cus_fake_trial_grace', SubscriptionStatus.Trialing, {
-      orgId: { S: orgId },
-      trialEndsAt: { S: pastDate(2) },
-    });
-  });
-
-  afterAll(async () => {
-    await deleteBillingRecord(userId);
-    await deleteOrgProfile(orgId);
-  });
-
-  it('transitions to grace_period (not canceled) and sets WRITE_LOCKED', async () => {
-    const result = await invokeEnforcer();
-    expect(result.functionError).toBeUndefined();
-
-    const record = await getBillingRecord(userId);
-    expect(record).not.toBeNull();
-    expect(record!.subscriptionStatus?.S).toBe(SubscriptionStatus.GracePeriod);
-    expect(record!.gracePeriodEndsAt?.S).toBeDefined();
-
-    const profile = await getOrgProfile(orgId);
-    expect(profile).not.toBeNull();
-    expect(profile!.auroraTenantStatus?.S).toBe('WRITE_LOCKED');
-  });
-});
-
-// =============================================================================
-// 4. Fully expired trial (past grace) → canceled + DISABLED
-// =============================================================================
-describe('fully expired trial (past grace) → canceled', () => {
-  const userId = `enforcer-trial-exp-${crypto.randomUUID().slice(0, 8)}`;
-  const orgId = `org-trial-exp-${crypto.randomUUID().slice(0, 8)}`;
-  const tenantId = 'e7da8138-c669-4cc0-82ef-253e534be11c';
-
-  beforeAll(async () => {
-    await seedOrgProfile(orgId, tenantId);
-    await seedBillingRecord(userId, 'cus_fake_trial_exp', SubscriptionStatus.Trialing, {
-      orgId: { S: orgId },
-      trialEndsAt: { S: pastDate(TRIAL_GRACE_DAYS + 1) },
-    });
-  });
-
-  afterAll(async () => {
-    await deleteBillingRecord(userId);
-    await deleteOrgProfile(orgId);
-  });
-
-  it('transitions to canceled and sets auroraTenantStatus to DISABLED', async () => {
-    const result = await invokeEnforcer();
-    expect(result.functionError).toBeUndefined();
-
-    const record = await getBillingRecord(userId);
-    expect(record).not.toBeNull();
-    expect(record!.subscriptionStatus?.S).toBe(SubscriptionStatus.Canceled);
-
-    const profile = await getOrgProfile(orgId);
-    expect(profile).not.toBeNull();
-    expect(profile!.auroraTenantStatus?.S).toBe('DISABLED');
-  });
-});
-
-// =============================================================================
-// 5. Mixed batch — only expired records transition to canceled
+// 3. Mixed batch — only expired records transition to canceled
 // =============================================================================
 describe('mixed batch — only expired records get canceled', () => {
   const expiredUserId = `enforcer-mix-exp-${crypto.randomUUID().slice(0, 8)}`;

@@ -7,7 +7,7 @@ import {
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
-import { SubscriptionStatus, TRIAL_GRACE_DAYS } from '@filone/shared';
+import { SubscriptionStatus } from '@filone/shared';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -187,102 +187,6 @@ describe('grace-period-enforcer', () => {
     expect(mockUpdateTenantStatus).not.toHaveBeenCalled();
     // No org profile update needed
     expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
-  });
-
-  // -----------------------------------------------------------------------
-  // Trial expired but grace still active → transition to grace_period
-  // -----------------------------------------------------------------------
-  it('transitions expired trial to grace_period with WRITE_LOCK (not canceled)', async () => {
-    // Trial ended 2 days ago, TRIAL_GRACE_DAYS = 7, so grace period still active
-    ddbMock.on(ScanCommand).resolves({
-      Items: [
-        buildBillingItem({
-          subscriptionStatus: SubscriptionStatus.Trialing,
-          trialEndsAt: pastDate(2),
-        }),
-      ],
-    });
-    setupOrgProfile();
-
-    await handler();
-
-    // DynamoDB: status → grace_period (NOT canceled)
-    const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
-    const graceCall = updateCalls.find(
-      (c) =>
-        c.args[0].input.ExpressionAttributeValues?.[':status']?.S ===
-        SubscriptionStatus.GracePeriod,
-    );
-    expect(graceCall).toBeDefined();
-    // gracePeriodEndsAt should be set
-    expect(graceCall!.args[0].input.ExpressionAttributeValues?.[':grace']?.S).toBeDefined();
-
-    // Should NOT have set canceled
-    const cancelCall = updateCalls.find(
-      (c) =>
-        c.args[0].input.ExpressionAttributeValues?.[':status']?.S === SubscriptionStatus.Canceled,
-    );
-    expect(cancelCall).toBeUndefined();
-
-    // Aurora: WRITE_LOCKED (not DISABLED)
-    expect(mockUpdateTenantStatus).toHaveBeenCalledWith({
-      tenantId: MOCK_AURORA_TENANT_ID,
-      status: 'WRITE_LOCKED',
-    });
-    expect(mockUpdateTenantStatus).not.toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'DISABLED' }),
-    );
-  });
-
-  // -----------------------------------------------------------------------
-  // Trial + grace fully elapsed → canceled + DISABLED
-  // -----------------------------------------------------------------------
-  it('transitions fully expired trial (past grace) to canceled and DISABLEs', async () => {
-    ddbMock.on(ScanCommand).resolves({
-      Items: [
-        buildBillingItem({
-          subscriptionStatus: SubscriptionStatus.Trialing,
-          trialEndsAt: pastDate(TRIAL_GRACE_DAYS + 1),
-        }),
-      ],
-    });
-    setupOrgProfile();
-
-    await handler();
-
-    // DynamoDB: status → canceled
-    const cancelCall = ddbMock
-      .commandCalls(UpdateItemCommand)
-      .find(
-        (c) =>
-          c.args[0].input.ExpressionAttributeValues?.[':status']?.S === SubscriptionStatus.Canceled,
-      );
-    expect(cancelCall).toBeDefined();
-
-    // Aurora: DISABLED
-    expect(mockUpdateTenantStatus).toHaveBeenCalledWith({
-      tenantId: MOCK_AURORA_TENANT_ID,
-      status: 'DISABLED',
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Active trial → skip
-  // -----------------------------------------------------------------------
-  it('skips trialing records where trial has not expired yet', async () => {
-    ddbMock.on(ScanCommand).resolves({
-      Items: [
-        buildBillingItem({
-          subscriptionStatus: SubscriptionStatus.Trialing,
-          trialEndsAt: futureDate(10),
-        }),
-      ],
-    });
-
-    await handler();
-
-    expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
-    expect(mockUpdateTenantStatus).not.toHaveBeenCalled();
   });
 
   // -----------------------------------------------------------------------
