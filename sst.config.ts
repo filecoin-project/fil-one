@@ -227,6 +227,9 @@ export default $config({
               ServiceToken: setupFn.arn,
               SiteUrl: siteUrl,
               Stage: $app.stage,
+              // Bump to re-trigger: registers https://fil.one as allowed logout URL
+              // and /api/auth/login as initiate_login_uri
+              Version: '2.0',
             },
           },
         },
