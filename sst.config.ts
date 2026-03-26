@@ -96,7 +96,7 @@ export default $config({
     const stage = $app.stage;
     const isProduction = stage === 'production';
     const isStaging = stage === 'staging';
-    const isEphemeralStage = stage !== 'production' && stage !== 'staging';
+    const isEphemeralStage = !isProduction && !isStaging;
 
     let domainName = 'staging.fil.one';
     let certArn: string | undefined;
