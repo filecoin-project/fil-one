@@ -243,10 +243,10 @@ export function SettingsPage() {
           <div className="flex flex-col gap-4">
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1.5">
-                <Label>Full name</Label>
+                <Label className="text-zinc-900">Full name</Label>
                 {social ? (
                   <>
-                    <Input value={name} onChange={() => {}} disabled />
+                    <Input value={name} onChange={() => undefined} disabled />
                     <p className="text-[11px] text-zinc-500">
                       Managed by {provider?.label}.{' '}
                       <a
@@ -260,20 +260,28 @@ export function SettingsPage() {
                     </p>
                   </>
                 ) : (
-                  <Input value={name} onChange={setName} placeholder="Your full name" />
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your full name"
+                  />
                 )}
               </div>
               <div className="flex flex-1 flex-col gap-1.5">
-                <Label>Company name</Label>
-                <Input value={orgName} onChange={setOrgName} placeholder="Your company" />
+                <Label className="text-zinc-900">Company name</Label>
+                <Input
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="Your company"
+                />
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Email</Label>
+            <div className="flex flex-col gap-2">
+              <Label className="text-zinc-900">Email</Label>
               {social ? (
                 <>
-                  <Input value={email} onChange={() => {}} disabled />
+                  <Input value={email} onChange={() => undefined} disabled />
                   <p className="text-[11px] text-zinc-500">
                     Managed by {provider?.label}.{' '}
                     <a
@@ -288,7 +296,11 @@ export function SettingsPage() {
                 </>
               ) : (
                 <>
-                  <Input value={email} onChange={setEmail} placeholder="you@example.com" />
+                  <Input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
                   <p className="text-[11px] text-zinc-500">
                     You will need to verify any email change.
                   </p>

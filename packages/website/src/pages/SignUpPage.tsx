@@ -64,7 +64,7 @@ export function SignUpPage() {
             type="email"
             placeholder="you@example.com"
             value={email}
-            onChange={setEmail}
+            onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
           />

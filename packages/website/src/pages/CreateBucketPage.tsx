@@ -160,9 +160,9 @@ export function CreateBucketPage() {
               <Input
                 id="bucket-name"
                 value={name}
-                onChange={(v) => {
-                  setName(v);
-                  if (nameError) validateName(v);
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) validateName(e.target.value);
                 }}
                 onBlur={() => {
                   if (name.trim()) validateName(name);
@@ -234,7 +234,7 @@ export function CreateBucketPage() {
                     <Input
                       id="key-name"
                       value={keyName}
-                      onChange={setKeyName}
+                      onChange={(e) => setKeyName(e.target.value)}
                       placeholder="e.g., Production API Key"
                       autoComplete="off"
                     />

@@ -215,7 +215,7 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
               <Input
                 id="object-tags"
                 value={tagInput}
-                onChange={setTagInput}
+                onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
                 placeholder="Type a tag and press Enter"
                 autoComplete="off"

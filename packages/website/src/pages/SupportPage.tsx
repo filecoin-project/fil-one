@@ -93,7 +93,12 @@ export function SupportPage() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-zinc-700">Name</label>
-              <Input value={formName} onChange={setFormName} placeholder="Your name" required />
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Your name"
+                required
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -101,7 +106,7 @@ export function SupportPage() {
               <Input
                 type="email"
                 value={formEmail}
-                onChange={setFormEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
               />
@@ -111,7 +116,7 @@ export function SupportPage() {
               <label className="text-sm font-medium text-zinc-700">Subject</label>
               <Input
                 value={formSubject}
-                onChange={setFormSubject}
+                onChange={(e) => setFormSubject(e.target.value)}
                 placeholder="How can we help?"
                 required
               />

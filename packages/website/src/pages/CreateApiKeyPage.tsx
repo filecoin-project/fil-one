@@ -113,7 +113,7 @@ export function CreateApiKeyPage() {
                   <Input
                     id="key-name"
                     value={keyName}
-                    onChange={setKeyName}
+                    onChange={(e) => setKeyName(e.target.value)}
                     placeholder="e.g., Production API Key"
                   />
                   <p className="text-xs text-zinc-500">

@@ -97,7 +97,7 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
                 type="text"
                 placeholder="Acme Inc."
                 value={orgName}
-                onChange={setOrgName}
+                onChange={(e) => setOrgName(e.target.value)}
                 required
                 autoFocus
                 autoComplete="organization"
