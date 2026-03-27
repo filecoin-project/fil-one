@@ -1,5 +1,5 @@
 import type { AccessKeyPermission } from '@filone/shared';
-import { Checkbox } from './Checkbox';
+import { Checkbox } from './Checkbox/index.js';
 
 type PermissionOption = {
   value: AccessKeyPermission;

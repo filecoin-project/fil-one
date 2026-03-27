@@ -4,8 +4,8 @@ import { SpinnerIcon } from '@phosphor-icons/react/dist/ssr';
 import type { AccessKeyBucketScope, ListBucketsResponse } from '@filone/shared';
 
 import { apiRequest } from '../lib/api.js';
-import { Checkbox } from './Checkbox.js';
-import { Icon } from './Icon.js';
+import { Checkbox } from './Checkbox/index.js';
+import { Icon } from './Icon/index.js';
 
 type AccessKeyBucketScopeFieldsProps = {
   bucketScope: AccessKeyBucketScope;
@@ -89,7 +89,7 @@ export function AccessKeyBucketScopeFields({
           {loading && (
             <div className="flex items-center justify-center py-6" role="status">
               <span className="text-brand-700 animate-spin">
-                <Icon component={SpinnerIcon} size={20} />
+                <Icon component={SpinnerIcon} size="md" />
               </span>
               <span className="sr-only">Loading buckets</span>
             </div>

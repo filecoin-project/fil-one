@@ -42,9 +42,9 @@ export function useFileUpload({ bucketName, tags, onSuccess }: UseFileUploadOpti
     }
   }, []);
 
-  const handleObjectNameChange = useCallback((value: string) => {
+  const handleObjectNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     userEditedName.current = true;
-    setObjectName(value);
+    setObjectName(e.target.value);
   }, []);
 
   const handleUpload = useCallback(async () => {
