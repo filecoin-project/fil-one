@@ -97,8 +97,8 @@ The pipeline:
 - CloudWatch Metrics → Metric Stream (OpenTelemetry 1.0 format) → Firehose →
   Grafana Cloud Prometheus (`aws-metric-streams` endpoint)
 
-Additional AWS namespaces (API Gateway, SQS, DynamoDB, etc.) can be added to
-the Metric Stream's include filter as needed.
+Additional AWS namespaces can be added to the Metric Stream's include filter
+as needed.
 
 **Deployment scope.** The metric stream pipeline is deployed once per account via
 the `infra/` stack (not per-stage via the main stack), because CloudWatch Metric
