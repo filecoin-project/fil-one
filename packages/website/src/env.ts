@@ -20,6 +20,3 @@ export const DEV_BYPASS_AUTH: boolean = import.meta.env['VITE_DEV_BYPASS_AUTH'] 
 export const STRIPE_PUBLISHABLE_KEY: string =
   import.meta.env['VITE_STRIPE_PUBLISHABLE_KEY'] ??
   'pk_test_51T2zW1AHbTIJ60DDv74RQYurdM94j0qvnJoqtrzurlbDsFgoE6SvQkTFccVKwp9kFkfv9wWC128IIpjHvmuLoVWX00ki9J0mN6';
-
-/** Set VITE_DEV_BYPASS_AUTH=true in .env.local to skip Auth0 and render the app without a backend. */
-export const DEV_BYPASS_AUTH: boolean = import.meta.env['VITE_DEV_BYPASS_AUTH'] === 'true';
