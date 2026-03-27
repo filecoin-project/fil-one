@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Input } from '../components/Input';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
 import { Button } from '../components/Button';
-import { DividerWithLabel } from '../components/DividerWithLabel';
+import { DividerWithLabel } from '../components/DividerWithLabel/index.js';
+import { Heading } from '../components/Heading/index.js';
 import { redirectToLogin } from '../lib/api.js';
 
 export function SignInPage() {
@@ -24,12 +26,13 @@ export function SignInPage() {
       </div>
 
       {/* Heading */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-zinc-950">Welcome back</h1>
-        <p className="text-sm text-zinc-500">
-          Sign in to continue to start storing on the filecoin network!
-        </p>
-      </div>
+      <Heading
+        tag="h1"
+        size="2xl"
+        description="Sign in to continue to start storing on the filecoin network!"
+      >
+        Welcome back
+      </Heading>
 
       {/* Social buttons — redirect to Auth0 Universal Login with connection hint */}
       {/* TODO [Option D]: Social connections configured in Auth0 dashboard. When on a
@@ -58,21 +61,19 @@ export function SignInPage() {
       {/* Form — collects email only; Auth0 Universal Login handles credentials */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="sign-in-email" className="text-sm font-medium text-zinc-700">
-            Email
-          </label>
+          <Label htmlFor="sign-in-email">Email</Label>
           <Input
             id="sign-in-email"
             type="email"
             placeholder="you@example.com"
             value={email}
-            onChange={setEmail}
+            onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
           />
         </div>
 
-        <Button variant="filled" type="submit" className="w-full justify-center">
+        <Button variant="default" type="submit" className="w-full justify-center">
           Continue
         </Button>
       </form>

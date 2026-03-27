@@ -11,11 +11,14 @@ import {
 
 import { formatBytes } from '@filone/shared';
 
-import { Breadcrumb } from '../components/Breadcrumb';
+import { Breadcrumb } from '../components/Breadcrumb/index.js';
 import { Button } from '../components/Button';
-import { Input } from '../components/Input';
-import { ProgressBar } from '../components/ProgressBar';
-import { Spinner } from '../components/Spinner';
+import { Heading } from '../components/Heading/index.js';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
+import { TextArea } from '../components/TextArea/index.js';
+import { ProgressBar } from '../components/ProgressBar/index.js';
+import { Spinner } from '../components/Spinner/index.js';
 import { useFileUpload } from '../lib/use-file-upload.js';
 
 // ---------------------------------------------------------------------------
@@ -92,10 +95,9 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
         >
           <ArrowLeftIcon size={16} aria-hidden="true" />
         </button>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Upload object</h1>
-          <p className="text-[13px] text-zinc-500">Upload files to store on Filecoin</p>
-        </div>
+        <Heading tag="h1" description="Upload files to store on Filecoin">
+          Upload object
+        </Heading>
       </div>
 
       {/* Idle — form */}
@@ -104,7 +106,7 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
           <div className="flex flex-col gap-5">
             {/* File dropzone */}
             <div className="flex flex-col gap-2.5">
-              <label className="text-xs font-medium text-zinc-900">File</label>
+              <Label className="text-xs text-zinc-900">File</Label>
 
               {!upload.selectedFile ? (
                 <div
@@ -154,9 +156,9 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
 
             {/* Object name */}
             <div className="flex flex-col gap-2.5">
-              <label htmlFor="object-name" className="text-xs font-medium text-zinc-900">
+              <Label htmlFor="object-name" className="text-xs text-zinc-900">
                 Object name
-              </label>
+              </Label>
               <Input
                 id="object-name"
                 value={upload.objectName}
@@ -171,24 +173,24 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
 
             {/* Description */}
             <div className="flex flex-col gap-2.5">
-              <label htmlFor="object-description" className="text-xs font-medium text-zinc-900">
+              <Label htmlFor="object-description" className="text-xs text-zinc-900">
                 Description <span className="font-normal text-zinc-400">(optional)</span>
-              </label>
-              <textarea
+              </Label>
+              <TextArea
                 id="object-description"
                 value={upload.objectDescription}
                 onChange={(e) => upload.setObjectDescription(e.target.value)}
                 placeholder="A short description of this object"
                 rows={2}
-                className="block w-full rounded-lg border border-zinc-200 p-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-2 focus:outline-brand-600"
+                className="min-h-0"
               />
             </div>
 
             {/* Tags */}
             <div className="flex flex-col gap-2.5">
-              <label htmlFor="object-tags" className="text-xs font-medium text-zinc-900">
+              <Label htmlFor="object-tags" className="text-xs text-zinc-900">
                 Tags <span className="font-normal text-zinc-400">(optional)</span>
-              </label>
+              </Label>
 
               {/* Tag chips */}
               {tags.length > 0 && (
@@ -215,7 +217,7 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
               <Input
                 id="object-tags"
                 value={tagInput}
-                onChange={setTagInput}
+                onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
                 placeholder="Type a tag and press Enter"
                 autoComplete="off"
@@ -226,12 +228,8 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
             </div>
 
             {/* Submit */}
-            <Button
-              variant="filled"
-              icon={ArrowUpIcon}
-              disabled={!canUpload}
-              onClick={upload.handleUpload}
-            >
+            <Button variant="default" disabled={!canUpload} onClick={upload.handleUpload}>
+              <ArrowUpIcon className="size-4" />
               Upload object
             </Button>
           </div>
@@ -286,7 +284,7 @@ export function UploadObjectPage({ bucketName }: UploadObjectPageProps) {
               {upload.selectedFile?.name} has been stored on Filecoin.
             </p>
             <Button
-              variant="filled"
+              variant="default"
               onClick={() => void navigate({ to: '/buckets/$bucketName', params: { bucketName } })}
             >
               Back to bucket

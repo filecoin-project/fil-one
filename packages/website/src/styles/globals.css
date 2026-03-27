@@ -1,5 +1,4 @@
 @import './button.css';
-@import './modal.css';
 @import './state-card.css';
 @import './table.css';
 @import './tabs.css';
@@ -33,6 +32,8 @@
 @theme inline {
   --font-sans: var(--font-funnel-sans);
   --font-heading: var(--font-aspekta);
+  --font-mono:
+    'Inconsolata Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @utility brand-outline {

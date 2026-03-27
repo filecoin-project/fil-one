@@ -11,8 +11,8 @@ import {
   ChatCircleIcon,
 } from '@phosphor-icons/react/dist/ssr';
 import { Link, useMatchRoute } from '@tanstack/react-router';
-import { ProgressBar } from './ProgressBar.js';
-import { Button } from './Button.js';
+import { ProgressBar } from './ProgressBar/index.js';
+import { Button } from './Button';
 import { SubscriptionStatus, getUsageLimits, formatBytes } from '@filone/shared';
 import type { BillingInfo, UsageResponse } from '@filone/shared';
 import { getBilling, getUsage } from '../lib/api.js';
@@ -167,8 +167,8 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             </div>
           </div>
           <div className="mt-3">
-            <Button variant="filled" href="/billing" className="w-full justify-center text-xs">
-              Upgrade
+            <Button variant="default" asChild className="w-full justify-center text-xs">
+              <Link to="/billing">Upgrade</Link>
             </Button>
           </div>
         </div>
@@ -182,8 +182,8 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             upgrade or download your data.
           </p>
           <div className="mt-3">
-            <Button variant="filled" href="/billing" className="w-full justify-center text-xs">
-              Upgrade
+            <Button variant="default" asChild className="w-full justify-center text-xs">
+              <Link to="/billing">Upgrade</Link>
             </Button>
           </div>
         </div>
@@ -197,8 +197,8 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             reactivate or download your data.
           </p>
           <div className="mt-3">
-            <Button variant="filled" href="/billing" className="w-full justify-center text-xs">
-              Reactivate
+            <Button variant="default" asChild className="w-full justify-center text-xs">
+              <Link to="/billing">Reactivate</Link>
             </Button>
           </div>
         </div>
@@ -212,8 +212,8 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             {graceDays !== null ? ` ${graceDays} days remaining.` : ''}
           </p>
           <div className="mt-3">
-            <Button variant="filled" href="/billing" className="w-full justify-center text-xs">
-              Update payment
+            <Button variant="default" asChild className="w-full justify-center text-xs">
+              <Link to="/billing">Update payment</Link>
             </Button>
           </div>
         </div>
@@ -226,8 +226,8 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             Account canceled. Reactivate to regain access.
           </p>
           <div className="mt-3">
-            <Button variant="filled" href="/billing" className="w-full justify-center text-xs">
-              Reactivate
+            <Button variant="default" asChild className="w-full justify-center text-xs">
+              <Link to="/billing">Reactivate</Link>
             </Button>
           </div>
         </div>

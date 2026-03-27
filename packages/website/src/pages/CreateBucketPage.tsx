@@ -13,11 +13,13 @@ import type {
   CreateBucketResponse,
   CreateAccessKeyResponse,
 } from '@filone/shared';
+import { Heading } from '../components/Heading/index.js';
 import { S3_REGION, CreateBucketSchema } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
 import { expiresAtFromForm } from '../lib/time.js';
 
-import { Input } from '../components/Input';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
 import { AccessKeyPermissionsFields } from '../components/AccessKeyPermissionsFields';
 import { AccessKeyExpirationFields } from '../components/AccessKeyExpirationFields';
 import type { ExpirationOption } from '../components/AccessKeyExpirationFields';
@@ -141,10 +143,9 @@ export function CreateBucketPage() {
         >
           <ArrowLeftIcon size={16} aria-hidden="true" />
         </button>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Create bucket</h1>
-          <p className="text-[13px] text-zinc-500">S3-compatible storage on Filecoin</p>
-        </div>
+        <Heading tag="h1" description="S3-compatible storage on Filecoin">
+          Create bucket
+        </Heading>
       </div>
 
       {/* Two-column layout */}
@@ -154,15 +155,15 @@ export function CreateBucketPage() {
           <div className="flex flex-col gap-5">
             {/* Bucket name */}
             <div className="flex flex-col gap-2.5">
-              <label htmlFor="bucket-name" className="text-xs font-medium text-zinc-900">
+              <Label htmlFor="bucket-name" className="text-xs text-zinc-900">
                 Bucket name
-              </label>
+              </Label>
               <Input
                 id="bucket-name"
                 value={name}
-                onChange={(v) => {
-                  setName(v);
-                  if (nameError) validateName(v);
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) validateName(e.target.value);
                 }}
                 onBlur={() => {
                   if (name.trim()) validateName(name);
@@ -182,9 +183,9 @@ export function CreateBucketPage() {
 
             {/* Region */}
             <div className="flex flex-col gap-2.5">
-              <label htmlFor="bucket-region" className="text-xs font-medium text-zinc-900">
+              <Label htmlFor="bucket-region" className="text-xs text-zinc-900">
                 Region
-              </label>
+              </Label>
               <select
                 id="bucket-region"
                 value={region}
@@ -199,7 +200,7 @@ export function CreateBucketPage() {
 
             {/* API key section */}
             <div className="flex flex-col gap-3">
-              <label className="text-xs font-medium text-zinc-900">API key</label>
+              <Label className="text-xs text-zinc-900">API key</Label>
 
               {/* Dropdown-styled selector */}
               <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5">
@@ -228,13 +229,13 @@ export function CreateBucketPage() {
                 <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 p-4">
                   {/* Key name */}
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="key-name" className="text-xs font-medium text-zinc-900">
+                    <Label htmlFor="key-name" className="text-xs text-zinc-900">
                       Key name
-                    </label>
+                    </Label>
                     <Input
                       id="key-name"
                       value={keyName}
-                      onChange={setKeyName}
+                      onChange={(e) => setKeyName(e.target.value)}
                       placeholder="e.g., Production API Key"
                       autoComplete="off"
                     />

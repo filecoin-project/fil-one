@@ -15,11 +15,12 @@ import {
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { CopyableField } from '../components/CopyableField';
+import { Heading } from '../components/Heading/index.js';
+import { ConfirmDialog } from '../components/ConfirmDialog/index.js';
+import { CopyableField } from '../components/CopyableField/index.js';
 import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../components/Tabs';
-import { Breadcrumb } from '../components/Breadcrumb';
-import { Spinner } from '../components/Spinner';
+import { Breadcrumb } from '../components/Breadcrumb/index.js';
+import { Spinner } from '../components/Spinner/index.js';
 import { useToast } from '../components/Toast';
 import { AddBucketKeyModal } from '../components/AddBucketKeyModal';
 import { formatBytes, S3_ENDPOINT, S3_REGION } from '@filone/shared';
@@ -278,10 +279,11 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
       {/* Page header */}
       <div className="mt-2 mb-2 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900">{bucketName}</h1>
+        <Heading tag="h1" size="2xl">
+          {bucketName}
+        </Heading>
         <Button
-          variant="filled"
-          icon={ArrowUpIcon}
+          variant="default"
           onClick={() =>
             void navigate({
               to: '/buckets/$bucketName/upload',
@@ -289,6 +291,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
             })
           }
         >
+          <ArrowUpIcon className="size-4" />
           Upload object
         </Button>
       </div>
@@ -330,8 +333,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                   Upload your first object to this bucket
                 </p>
                 <Button
-                  variant="filled"
-                  icon={ArrowUpIcon}
+                  variant="default"
                   onClick={() =>
                     void navigate({
                       to: '/buckets/$bucketName/upload',
@@ -339,6 +341,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
                     })
                   }
                 >
+                  <ArrowUpIcon className="size-4" />
                   Upload object
                 </Button>
               </div>
@@ -511,10 +514,13 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
               {/* API keys section */}
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-medium text-zinc-900">API keys</h2>
+                  <Heading tag="h2" size="sm">
+                    API keys
+                  </Heading>
                   <p className="text-sm text-zinc-500">Keys with access to this bucket</p>
                 </div>
-                <Button variant="filled" icon={PlusIcon} onClick={() => setAddKeyOpen(true)}>
+                <Button variant="default" onClick={() => setAddKeyOpen(true)}>
+                  <PlusIcon className="size-4" />
                   Add key
                 </Button>
               </div>
@@ -536,7 +542,9 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
               {/* Access endpoints section */}
               <div className="mt-8">
-                <h2 className="mb-3 text-[13px] font-medium text-zinc-900">Access endpoints</h2>
+                <Heading tag="h2" size="sm" className="mb-3">
+                  Access endpoints
+                </Heading>
                 <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-col gap-3">
                     <CopyableField label="S3 Endpoint" value={S3_ENDPOINT} />

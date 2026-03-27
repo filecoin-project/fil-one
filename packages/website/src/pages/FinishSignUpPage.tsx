@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Input } from '../components/Input';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
 import { Button } from '../components/Button';
+import { Heading } from '../components/Heading/index.js';
 import { confirmOrg, logout } from '../lib/api.js';
 import type { MeResponse } from '@filone/shared';
 
@@ -79,25 +81,24 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
           )}
 
           {/* Heading */}
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold text-zinc-950">Finish setting up your account</h1>
-            <p className="text-sm text-zinc-500">
-              Give your organization a name to get started. You can change this later in settings.
-            </p>
-          </div>
+          <Heading
+            tag="h1"
+            size="2xl"
+            description="Give your organization a name to get started. You can change this later in settings."
+          >
+            Finish setting up your account
+          </Heading>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="org-name" className="text-sm font-medium text-zinc-700">
-                Organization name
-              </label>
+              <Label htmlFor="org-name">Organization name</Label>
               <Input
                 id="org-name"
                 type="text"
                 placeholder="Acme Inc."
                 value={orgName}
-                onChange={setOrgName}
+                onChange={(e) => setOrgName(e.target.value)}
                 required
                 autoFocus
                 autoComplete="organization"
@@ -107,7 +108,7 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
             </div>
 
             <Button
-              variant="filled"
+              variant="default"
               type="submit"
               className="w-full justify-center"
               disabled={submitting}
@@ -124,9 +125,9 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
           Almost there!
         </div>
 
-        <h2 className="mb-4 max-w-sm text-center text-3xl font-semibold text-zinc-950">
+        <Heading tag="h2" size="3xl" className="mb-4 max-w-sm text-center">
           Welcome to Fil.one
-        </h2>
+        </Heading>
 
         <p className="mb-10 max-w-sm text-center text-base text-zinc-600">
           S3-compatible storage on Filecoin. Set up your organization to start storing objects with

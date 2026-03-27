@@ -1,69 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
-import {
-  CopySimpleIcon,
-  DotsThreeIcon,
-  KeyIcon,
-  PlusIcon,
-  TrashIcon,
-} from '@phosphor-icons/react/dist/ssr';
+import { DotsThreeIcon, KeyIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { AccessKey } from '@filone/shared';
 
+import { Badge } from './Badge/index.js';
 import { Button } from './Button';
+import { CopyButton } from './CopyButton';
 import { formatDate } from '../lib/time.js';
-import { useCopyToClipboard } from '../lib/use-copy-to-clipboard.js';
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function StatusBadge({ status }: { status: AccessKey['status'] }) {
-  if (status === 'active') {
-    return (
-      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-        Active
-      </span>
-    );
-  }
-  return (
-    <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
-      Inactive
-    </span>
-  );
-}
-
-function PermissionBadge({ permission }: { permission: string }) {
-  return (
-    <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-[10px] font-medium uppercase text-zinc-600">
-      {permission}
-    </span>
-  );
-}
-
-function BucketBadge({ name }: { name: string }) {
-  return (
-    <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-[10px] font-normal text-zinc-800">
-      {name}
-    </span>
-  );
-}
-
-function CopyButton({ value }: { value: string }) {
-  const { copied, copy } = useCopyToClipboard();
-
-  return (
-    <button
-      type="button"
-      onClick={() => void copy(value)}
-      title={copied ? 'Copied' : 'Copy'}
-      aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
-      className="rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-    >
-      <CopySimpleIcon size={12} />
-    </button>
-  );
-}
 
 function ActionMenu({ onDelete }: { onDelete: () => void }) {
   const [open, setOpen] = useState(false);
@@ -159,7 +103,8 @@ export function AccessKeysTable({
         <p className="mb-1 text-sm font-medium text-zinc-900">{emptyTitle}</p>
         <p className="mb-4 text-sm text-zinc-500">{emptyDescription}</p>
         {onCreateOpen && (
-          <Button variant="filled" icon={PlusIcon} onClick={onCreateOpen}>
+          <Button variant="default" onClick={onCreateOpen}>
+            <PlusIcon className="size-4" />
             Create your first key
           </Button>
         )}
@@ -204,7 +149,7 @@ export function AccessKeysTable({
                 <p className="text-sm font-medium text-zinc-900">{key.keyName}</p>
                 <div className="flex items-center gap-1">
                   <p className="font-mono text-xs text-zinc-500">{key.accessKeyId}</p>
-                  <CopyButton value={key.accessKeyId} />
+                  <CopyButton value={key.accessKeyId} size={12} className="rounded p-0.5" />
                 </div>
               </td>
 
@@ -213,9 +158,15 @@ export function AccessKeysTable({
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {key.bucketScope === 'all' ? (
-                      <BucketBadge name="All Buckets" />
+                      <Badge className="border-transparent text-[10px] font-normal">
+                        All Buckets
+                      </Badge>
                     ) : (
-                      (key.buckets ?? []).map((b) => <BucketBadge key={b} name={b} />)
+                      (key.buckets ?? []).map((b) => (
+                        <Badge key={b} className="border-transparent text-[10px] font-normal">
+                          {b}
+                        </Badge>
+                      ))
                     )}
                   </div>
                 </td>
@@ -226,7 +177,9 @@ export function AccessKeysTable({
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {(key.permissions ?? []).map((p) => (
-                      <PermissionBadge key={p} permission={p} />
+                      <Badge key={p} className="text-[10px] uppercase">
+                        {p}
+                      </Badge>
                     ))}
                   </div>
                 </td>
@@ -234,7 +187,9 @@ export function AccessKeysTable({
 
               {/* Status */}
               <td className="px-4 py-3">
-                <StatusBadge status={key.status} />
+                <Badge variant={key.status === 'active' ? 'success' : 'default'}>
+                  {key.status === 'active' ? 'Active' : 'Inactive'}
+                </Badge>
               </td>
 
               {/* Last Used */}

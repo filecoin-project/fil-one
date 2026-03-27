@@ -10,14 +10,16 @@ import {
   TrashIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
-import { Breadcrumb } from '../components/Breadcrumb';
-import { CodeBlock } from '../components/CodeBlock';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { CopyableField } from '../components/CopyableField';
-import { Spinner } from '../components/Spinner';
+import { Breadcrumb } from '../components/Breadcrumb/index.js';
+import { CodeBlock } from '../components/CodeBlock/index.js';
+import { Heading } from '../components/Heading/index.js';
+import { ConfirmDialog } from '../components/ConfirmDialog/index.js';
+import { CopyableField } from '../components/CopyableField/index.js';
+import { Spinner } from '../components/Spinner/index.js';
 import { formatBytes, S3_ENDPOINT } from '@filone/shared';
 
 import type { ObjectMetadataResponse } from '@filone/shared';
+import { Badge } from '../components/Badge/index.js';
 import { apiRequest } from '../lib/api.js';
 import { formatDateTime } from '../lib/time.js';
 import { useObjectActions } from '../lib/use-object-actions.js';
@@ -169,7 +171,7 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
           <ArrowLeftIcon size={16} aria-hidden="true" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{objectKey}</h1>
+          <Heading tag="h1">{objectKey}</Heading>
           <p className="text-[13px] text-zinc-500">
             <span className="underline">{metadata?.filCid ? 'Sealed on Filecoin' : 'Queued'}</span>
             <span> &bull; {bucketName}</span>
@@ -227,7 +229,9 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
       {/* CID card */}
       <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-900">Content Identifier (CID)</h2>
+          <Heading tag="h2" size="sm">
+            Content Identifier (CID)
+          </Heading>
           <OffloadStatusBadge filCid={metadata?.filCid} />
         </div>
         <p className="mb-3 text-xs text-zinc-500">
@@ -246,7 +250,9 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
 
       {/* Object details card */}
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium text-zinc-900">Object details</h2>
+        <Heading tag="h2" size="sm" className="mb-3">
+          Object details
+        </Heading>
         <div className="flex flex-col gap-2">
           <DetailRow label="Name" value={objectKey} mono />
           {metadata && <DetailRow label="Size" value={formatBytes(metadata.sizeBytes)} mono />}
@@ -334,7 +340,9 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
 
       {/* API access example card */}
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium text-zinc-900">API access example</h2>
+        <Heading tag="h2" size="sm" className="mb-3">
+          API access example
+        </Heading>
         <CodeBlock code={apiExample} language="bash" />
       </div>
 
@@ -367,16 +375,16 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
 function OffloadStatusBadge({ filCid }: { filCid?: string }) {
   if (filCid) {
     return (
-      <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-600">
+      <Badge variant="success" className="text-[11px] font-semibold">
         Sealed
-      </span>
+      </Badge>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-500">
+    <Badge className="text-[11px] font-semibold gap-1.5">
       <Spinner ariaLabel="Queued" size={10} />
       Queued
-    </span>
+    </Badge>
   );
 }

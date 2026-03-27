@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 
-import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
+import { PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
-import { CodeBlock } from '../components/CodeBlock';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Spinner } from '../components/Spinner';
+import { CodeBlock } from '../components/CodeBlock/index.js';
+import { ConfirmDialog } from '../components/ConfirmDialog/index.js';
+import { CopyButton } from '../components/CopyButton';
+import { Heading } from '../components/Heading/index.js';
+import { Spinner } from '../components/Spinner/index.js';
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from '../components/Tabs';
 import { useToast } from '../components/Toast';
 
@@ -15,7 +17,6 @@ import type { AccessKey, ListAccessKeysResponse } from '@filone/shared';
 
 import { S3_ENDPOINT, S3_REGION } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
-import { useCopyToClipboard } from '../lib/use-copy-to-clipboard.js';
 
 // ---------------------------------------------------------------------------
 // Tab 1: Access Keys
@@ -34,7 +35,8 @@ function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
         <span className="text-sm text-zinc-600">
           {keys.length === 1 ? '1 key' : `${keys.length} keys`}
         </span>
-        <Button variant="filled" icon={PlusIcon} onClick={onCreateOpen}>
+        <Button variant="default" onClick={onCreateOpen}>
+          <PlusIcon className="size-4" />
           Create new key
         </Button>
       </div>
@@ -53,22 +55,6 @@ function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
 // ---------------------------------------------------------------------------
 // Tab 2: Connection Details
 // ---------------------------------------------------------------------------
-
-function CopyButton({ value }: { value: string }) {
-  const { copied, copy } = useCopyToClipboard();
-
-  return (
-    <button
-      type="button"
-      onClick={() => void copy(value)}
-      title={copied ? 'Copied' : 'Copy'}
-      aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
-      className="ml-2 shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-    >
-      <CopySimpleIcon size={14} />
-    </button>
-  );
-}
 
 function ConnectionDetailsTab() {
   const [sdkTab, setSdkTab] = useState<'python' | 'nodejs' | 'go'>('python');
@@ -166,19 +152,21 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
         <div className="flex items-center border-b border-zinc-100 px-4 py-3">
           <span className="w-28 shrink-0 text-sm text-zinc-500">S3 Endpoint</span>
           <span className="flex-1 font-mono text-sm text-zinc-900">{S3_ENDPOINT}</span>
-          <CopyButton value={S3_ENDPOINT} />
+          <CopyButton value={S3_ENDPOINT} size={14} className="ml-2 rounded p-1" />
         </div>
         <div className="flex items-center px-4 py-3">
           <span className="w-28 shrink-0 text-sm text-zinc-500">Region</span>
           <span className="flex-1 font-mono text-sm text-zinc-900">{S3_REGION}</span>
-          <CopyButton value={S3_REGION} />
+          <CopyButton value={S3_REGION} size={14} className="ml-2 rounded p-1" />
         </div>
       </div>
 
       {/* Quickstart CLI */}
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-900">Quickstart (AWS CLI)</h3>
+          <Heading tag="h3" size="sm">
+            Quickstart (AWS CLI)
+          </Heading>
           <a
             href="https://docs.fil.one"
             target="_blank"
@@ -223,7 +211,9 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 
       {/* SDK Examples */}
       <div>
-        <h3 className="mb-4 text-sm font-semibold text-zinc-900">SDK examples</h3>
+        <Heading tag="h3" size="sm" className="mb-4">
+          SDK examples
+        </Heading>
         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
           {/* Tab bar */}
           <div className="flex border-b border-zinc-200 bg-zinc-50">
@@ -278,7 +268,9 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 
       {/* Migrating from AWS S3 */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-zinc-900">Migrating from AWS S3</h3>
+        <Heading tag="h3" size="sm" className="mb-2">
+          Migrating from AWS S3
+        </Heading>
         <p className="mb-4 text-sm text-zinc-600">
           Fil One is fully S3-compatible. In most cases, you only need to change two settings in
           your existing code.
@@ -411,10 +403,13 @@ export function ApiKeysPage() {
 
   return (
     <div className="p-8">
-      <h1 className="mb-1 text-2xl font-semibold text-zinc-900">API Keys</h1>
-      <p className="mb-6 text-sm text-zinc-500">
-        Manage credentials and connect via S3-compatible API
-      </p>
+      <Heading
+        tag="h1"
+        description="Manage credentials and connect via S3-compatible API"
+        className="mb-6"
+      >
+        API Keys
+      </Heading>
 
       <Tabs>
         <TabList>
