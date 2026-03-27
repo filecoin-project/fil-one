@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
+import { Badge } from '../components/Badge/index.js';
 import { Button } from '../components/Button';
-import { Spinner } from '../components/Spinner';
+import { Heading } from '../components/Heading/index.js';
+import { Spinner } from '../components/Spinner/index.js';
 import { useToast } from '../components/Toast';
 
 import type { Bucket, ListBucketsResponse } from '@filone/shared';
@@ -79,12 +81,11 @@ export function BucketsPage() {
     <div className="p-6">
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900">Buckets</h1>
-        <Button
-          variant="filled"
-          icon={PlusIcon}
-          onClick={() => navigate({ to: '/buckets/create' })}
-        >
+        <Heading tag="h1" size="2xl">
+          Buckets
+        </Heading>
+        <Button variant="default" onClick={() => navigate({ to: '/buckets/create' })}>
+          <PlusIcon className="size-4" />
           Create bucket
         </Button>
       </div>
@@ -97,11 +98,8 @@ export function BucketsPage() {
           <p className="mb-6 text-sm text-zinc-500">
             Create your first bucket to start storing objects
           </p>
-          <Button
-            variant="filled"
-            icon={PlusIcon}
-            onClick={() => navigate({ to: '/buckets/create' })}
-          >
+          <Button variant="default" onClick={() => navigate({ to: '/buckets/create' })}>
+            <PlusIcon className="size-4" />
             Create bucket
           </Button>
         </div>
@@ -143,15 +141,9 @@ export function BucketsPage() {
                   <td className="px-4 py-3 text-zinc-600">{bucket.region}</td>
                   <td className="px-4 py-3 text-zinc-600">{formatDate(bucket.createdAt)}</td>
                   <td className="px-4 py-3">
-                    {bucket.isPublic ? (
-                      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-                        Public
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600">
-                        Private
-                      </span>
-                    )}
+                    <Badge variant={bucket.isPublic ? 'success' : 'default'}>
+                      {bucket.isPublic ? 'Public' : 'Private'}
+                    </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

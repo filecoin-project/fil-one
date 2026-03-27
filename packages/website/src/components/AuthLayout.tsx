@@ -5,6 +5,8 @@ import {
   LightningIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
+import { Heading } from './Heading/index.js';
+
 type AuthLayoutProps = {
   children: React.ReactNode;
 };
@@ -49,9 +51,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         </div>
 
         {/* Heading */}
-        <h1 className="mb-4 max-w-sm text-center text-3xl font-semibold text-zinc-950">
+        <Heading tag="h1" size="3xl" className="mb-4 max-w-sm text-center">
           S3-compatible storage on Filecoin
-        </h1>
+        </Heading>
 
         {/* Subtext */}
         <p className="mb-10 max-w-sm text-center text-base text-zinc-600">

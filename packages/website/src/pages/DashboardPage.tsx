@@ -11,7 +11,8 @@ import { Link } from '@tanstack/react-router';
 const UsageTrends = lazy(() => import('./UsageTrends'));
 
 import { Button } from '../components/Button';
-import { ProgressBar } from '../components/ProgressBar';
+import { Heading } from '../components/Heading/index.js';
+import { ProgressBar } from '../components/ProgressBar/index.js';
 import { formatBytes } from '@filone/shared';
 
 import { PlanId, SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';
@@ -182,7 +183,9 @@ export function DashboardPage() {
     <div className="p-6">
       {/* 1. Page header */}
       <div className="mb-5 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-zinc-900">Dashboard</h1>
+        <Heading tag="h1" size="lg">
+          Dashboard
+        </Heading>
         <Link
           to="/buckets"
           className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] hover:bg-zinc-50"
@@ -435,8 +438,11 @@ export function DashboardPage() {
           <div className="flex flex-col items-center gap-3 py-8 text-center">
             <p className="text-sm font-medium text-zinc-700">No activity yet</p>
             <p className="text-sm text-zinc-500">Create a bucket to start storing objects</p>
-            <Button variant="filled" icon={PlusIcon} href="/buckets">
-              Create bucket
+            <Button variant="default" asChild>
+              <Link to="/buckets">
+                <PlusIcon className="size-4" />
+                Create bucket
+              </Link>
             </Button>
           </div>
         ) : (

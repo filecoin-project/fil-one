@@ -13,9 +13,11 @@ import { expiresAtFromForm } from '../lib/time.js';
 import { AccessKeyExpirationFields } from '../components/AccessKeyExpirationFields.js';
 import type { ExpirationOption } from '../components/AccessKeyExpirationFields.js';
 import { AccessKeyBucketScopeFields } from '../components/AccessKeyBucketScopeFields.js';
+import { Heading } from '../components/Heading/index.js';
 import { AccessKeyPermissionsFields } from '../components/AccessKeyPermissionsFields.js';
-import { Button } from '../components/Button.js';
-import { Input } from '../components/Input.js';
+import { Button } from '../components/Button';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
 import { SaveCredentialsModal } from '../components/SaveCredentialsModal.js';
 import { useToast } from '../components/Toast/index.js';
 
@@ -91,12 +93,9 @@ export function CreateApiKeyPage() {
           >
             <ArrowLeftIcon size={16} />
           </button>
-          <div>
-            <h1 className="text-xl font-semibold text-zinc-900">Create API key</h1>
-            <p className="text-sm text-zinc-500">
-              Generate credentials for S3-compatible API access
-            </p>
-          </div>
+          <Heading tag="h1" description="Generate credentials for S3-compatible API access">
+            Create API key
+          </Heading>
         </div>
 
         {/* Two-column layout */}
@@ -107,13 +106,11 @@ export function CreateApiKeyPage() {
               <div className="flex flex-col gap-6">
                 {/* Key name */}
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="key-name" className="text-sm font-medium text-zinc-700">
-                    Key name
-                  </label>
+                  <Label htmlFor="key-name">Key name</Label>
                   <Input
                     id="key-name"
                     value={keyName}
-                    onChange={setKeyName}
+                    onChange={(e) => setKeyName(e.target.value)}
                     placeholder="e.g., Production API Key"
                   />
                   <p className="text-xs text-zinc-500">
@@ -123,7 +120,7 @@ export function CreateApiKeyPage() {
 
                 {/* Permissions */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium text-zinc-700">What can this key do?</label>
+                  <Label>What can this key do?</Label>
                   <AccessKeyPermissionsFields value={permissions} onChange={setPermissions} />
                   {permissions.length === 0 && (
                     <p className="text-xs text-red-600">Select at least one permission.</p>
@@ -132,9 +129,7 @@ export function CreateApiKeyPage() {
 
                 {/* Bucket scope */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium text-zinc-700">
-                    Which buckets can this key access?
-                  </label>
+                  <Label>Which buckets can this key access?</Label>
                   <p className="text-xs text-zinc-500">
                     Restrict access to specific buckets or allow all
                   </p>
@@ -148,9 +143,7 @@ export function CreateApiKeyPage() {
 
                 {/* Expiration */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium text-zinc-700">
-                    When should it expire?
-                  </label>
+                  <Label>When should it expire?</Label>
                   <p className="text-xs text-zinc-500">Set an expiration date for added security</p>
                   <AccessKeyExpirationFields
                     value={expiration}
@@ -162,7 +155,7 @@ export function CreateApiKeyPage() {
               </div>
             </div>
 
-            <Button type="submit" variant="filled" disabled={!canSubmit}>
+            <Button type="submit" variant="default" disabled={!canSubmit}>
               {creating ? 'Creating...' : 'Create API key'}
             </Button>
           </form>

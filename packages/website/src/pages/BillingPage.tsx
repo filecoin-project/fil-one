@@ -10,7 +10,9 @@ import {
   DownloadSimpleIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
-import { ProgressBar } from '../components/ProgressBar';
+import { Heading } from '../components/Heading/index.js';
+import { ProgressBar } from '../components/ProgressBar/index.js';
+import { Badge } from '../components/Badge/index.js';
 import { useToast } from '../components/Toast';
 import { formatBytes } from '@filone/shared';
 
@@ -184,7 +186,9 @@ export function BillingPage() {
   if (loading && !billing) {
     return (
       <div className="p-8">
-        <h1 className="text-2xl font-semibold text-[#14181f] mb-6">Billing</h1>
+        <Heading tag="h1" size="2xl" className="mb-6">
+          Billing
+        </Heading>
         <div className="flex gap-6">
           <div className="flex-1 flex flex-col gap-4">
             <SkeletonCard height="h-40" />
@@ -202,7 +206,9 @@ export function BillingPage() {
   if (error && !billing) {
     return (
       <div className="p-8">
-        <h1 className="text-2xl font-semibold text-[#14181f] mb-6">Billing</h1>
+        <Heading tag="h1" size="2xl" className="mb-6">
+          Billing
+        </Heading>
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
           Failed to load billing information: {error}
         </div>
@@ -214,7 +220,9 @@ export function BillingPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-[#14181f] mb-6">Billing</h1>
+      <Heading tag="h1" size="2xl" className="mb-6">
+        Billing
+      </Heading>
 
       {/* Past due warning banner */}
       {isPastDue && (
@@ -304,11 +312,11 @@ export function BillingPage() {
                 </div>
 
                 <div>
-                  <h2 className="text-lg font-semibold text-[#14181f]">
+                  <Heading tag="h2" size="lg">
                     {isActive || isPastDue || isGracePeriod || isCanceled
                       ? 'Pay-as-you-go'
                       : 'Free Trial'}
-                  </h2>
+                  </Heading>
                   <p className="text-sm text-[#677183]">
                     {isActive || isPastDue
                       ? 'Unlimited storage, pay only for what you use'
@@ -324,27 +332,15 @@ export function BillingPage() {
               </div>
 
               {/* Status badge */}
-              {isTrialing && (
-                <span className="rounded-full bg-[#dbeafe] px-3 py-1 text-xs font-semibold text-[#1e40af]">
-                  Trial
-                </span>
-              )}
+              {isTrialing && <Badge variant="info">Trial</Badge>}
               {(isActive || isPastDue) && (
-                <span className="flex items-center gap-1 rounded-full bg-[rgba(16,183,127,0.1)] px-3 py-1 text-xs font-semibold text-[#059669]">
-                  <CheckCircleIcon size={14} weight="fill" />
+                <Badge variant="success">
+                  <CheckCircleIcon size={12} weight="fill" />
                   Active
-                </span>
+                </Badge>
               )}
-              {isGracePeriod && (
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                  Grace Period
-                </span>
-              )}
-              {isCanceled && (
-                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-                  Canceled
-                </span>
-              )}
+              {isGracePeriod && <Badge variant="warning">Grace Period</Badge>}
+              {isCanceled && <Badge variant="destructive">Canceled</Badge>}
             </div>
 
             {/* Trial CTA banner */}
@@ -401,7 +397,9 @@ export function BillingPage() {
 
           {/* Current usage card */}
           <div className="rounded-xl border border-[#e1e4ea] bg-white p-6">
-            <h3 className="text-sm font-semibold text-[#14181f] mb-1">Current usage</h3>
+            <Heading tag="h3" size="sm" className="mb-1">
+              Current usage
+            </Heading>
             <p className="text-xs text-[#99a0ae] mb-4">
               {isActive || isPastDue || isGracePeriod
                 ? 'Your usage this billing period'
@@ -433,7 +431,9 @@ export function BillingPage() {
 
           {/* Payment method card */}
           <div className="rounded-xl border border-[#e1e4ea] bg-white p-6">
-            <h3 className="text-sm font-semibold text-[#14181f] mb-4">Payment method</h3>
+            <Heading tag="h3" size="sm" className="mb-4">
+              Payment method
+            </Heading>
 
             {billing?.paymentMethod ? (
               <div className="flex items-center justify-between">
@@ -487,7 +487,9 @@ export function BillingPage() {
           )}
           {!isTrialing && !invoicesLoading && (
             <div className="rounded-xl border border-[#e1e4ea] bg-white p-6">
-              <h3 className="text-[13px] font-semibold text-[#14181f] mb-0.5">Invoice history</h3>
+              <Heading tag="h3" size="sm" className="mb-0.5">
+                Invoice history
+              </Heading>
               <p className="text-[13px] text-[#99a0ae] mb-4">Recent billing statements</p>
 
               {invoicesError && (

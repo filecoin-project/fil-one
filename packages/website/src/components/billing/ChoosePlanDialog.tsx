@@ -1,5 +1,6 @@
 import { CheckIcon, PhoneIcon, ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
-import { Modal, ModalBody, ModalHeader } from '../Modal';
+import { Dialog, DialogBody, DialogHeader } from '../Dialog';
+import { Heading } from '../Heading/index.js';
 
 type ChoosePlanDialogProps = {
   open: boolean;
@@ -24,9 +25,9 @@ const BUSINESS_FEATURES = [
 
 export function ChoosePlanDialog({ open, onClose, onSelectPayAsYouGo }: ChoosePlanDialogProps) {
   return (
-    <Modal open={open} onClose={onClose} size="lg">
-      <ModalHeader onClose={onClose}>Choose your plan</ModalHeader>
-      <ModalBody>
+    <Dialog open={open} onClose={onClose} size="lg">
+      <DialogHeader onClose={onClose}>Choose your plan</DialogHeader>
+      <DialogBody>
         <p className="text-sm text-[#677183] mb-6">
           Simple, transparent pricing for teams of all sizes
         </p>
@@ -34,7 +35,9 @@ export function ChoosePlanDialog({ open, onClose, onSelectPayAsYouGo }: ChoosePl
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Pay as you go */}
           <div className="rounded-xl border border-[#e1e4ea] bg-white p-6 flex flex-col">
-            <h3 className="text-lg font-semibold text-[#14181f]">Pay as you go</h3>
+            <Heading tag="h3" size="lg">
+              Pay as you go
+            </Heading>
             <div className="mt-3 flex items-baseline gap-1">
               <span className="text-3xl font-bold text-[#14181f]">$4.99</span>
               <span className="text-sm text-[#677183]">/ TB / month</span>
@@ -64,7 +67,9 @@ export function ChoosePlanDialog({ open, onClose, onSelectPayAsYouGo }: ChoosePl
             <span className="absolute -top-3 right-4 rounded-full bg-[#0066ff] px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white">
               Best for enterprises
             </span>
-            <h3 className="text-lg font-semibold text-[#14181f]">Business</h3>
+            <Heading tag="h3" size="lg">
+              Business
+            </Heading>
             <div className="mt-3">
               <span className="text-lg font-semibold text-[#14181f]">Custom pricing</span>
             </div>
@@ -91,7 +96,7 @@ export function ChoosePlanDialog({ open, onClose, onSelectPayAsYouGo }: ChoosePl
         <p className="mt-6 text-center text-xs text-[#99a0ae]">
           All plans include unlimited buckets, access keys, and 24/7 support
         </p>
-      </ModalBody>
-    </Modal>
+      </DialogBody>
+    </Dialog>
   );
 }

@@ -4,8 +4,10 @@ import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { UserIcon, BellIcon, ShieldCheckIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { Button } from '../components/Button';
-import { Input } from '../components/Input';
-import { Spinner } from '../components/Spinner';
+import { Heading } from '../components/Heading/index.js';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
+import { Spinner } from '../components/Spinner/index.js';
 import { useToast } from '../components/Toast';
 import { getMe, updateProfile, changePassword } from '../lib/api.js';
 import { getProvider, isSocialConnection, UpdateProfileSchema } from '@filone/shared';
@@ -231,10 +233,9 @@ export function SettingsPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-1">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Settings</h1>
-        <p className="text-[13px] text-zinc-500">Manage your profile and preferences</p>
-      </div>
+      <Heading tag="h1" description="Manage your profile and preferences">
+        Settings
+      </Heading>
 
       <div className="mt-6 flex max-w-[672px] flex-col gap-6">
         {/* Profile */}
@@ -242,10 +243,10 @@ export function SettingsPage() {
           <div className="flex flex-col gap-4">
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-zinc-900">Full name</label>
+                <Label className="text-zinc-900">Full name</Label>
                 {social ? (
                   <>
-                    <Input value={name} onChange={() => {}} disabled />
+                    <Input value={name} onChange={undefined} readOnly disabled />
                     <p className="text-[11px] text-zinc-500">
                       Managed by {provider?.label}.{' '}
                       <a
@@ -259,20 +260,28 @@ export function SettingsPage() {
                     </p>
                   </>
                 ) : (
-                  <Input value={name} onChange={setName} placeholder="Your full name" />
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your full name"
+                  />
                 )}
               </div>
               <div className="flex flex-1 flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-zinc-900">Company name</label>
-                <Input value={orgName} onChange={setOrgName} placeholder="Your company" />
+                <Label className="text-zinc-900">Company name</Label>
+                <Input
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="Your company"
+                />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-medium text-zinc-900">Email</label>
+              <Label className="text-zinc-900">Email</Label>
               {social ? (
                 <>
-                  <Input value={email} onChange={() => {}} disabled />
+                  <Input value={email} onChange={undefined} readOnly disabled />
                   <p className="text-[11px] text-zinc-500">
                     Managed by {provider?.label}.{' '}
                     <a
@@ -287,7 +296,11 @@ export function SettingsPage() {
                 </>
               ) : (
                 <>
-                  <Input value={email} onChange={setEmail} placeholder="you@example.com" />
+                  <Input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
                   <p className="text-[11px] text-zinc-500">
                     You will need to verify any email change.
                   </p>
@@ -296,7 +309,11 @@ export function SettingsPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="filled" onClick={handleSaveProfile} disabled={saving || !hasChanges}>
+              <Button
+                variant="default"
+                onClick={handleSaveProfile}
+                disabled={saving || !hasChanges}
+              >
                 {saving ? 'Saving...' : 'Save changes'}
               </Button>
               {hasChanges && (
@@ -352,7 +369,7 @@ export function SettingsPage() {
                   label="Two-factor authentication"
                   description="Add an extra layer of security to your account"
                   action={
-                    <Button variant="ghost" size="compact" disabled>
+                    <Button variant="ghost" size="sm" disabled>
                       Enable
                     </Button>
                   }
@@ -370,7 +387,7 @@ export function SettingsPage() {
                 action={
                   <Button
                     variant="ghost"
-                    size="compact"
+                    size="sm"
                     onClick={handleChangePassword}
                     disabled={changingPassword}
                   >

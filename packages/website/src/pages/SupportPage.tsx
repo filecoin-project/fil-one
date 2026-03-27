@@ -3,8 +3,10 @@ import { useState } from 'react';
 import { CalendarIcon, ChatCircleIcon, EnvelopeIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { Button } from '../components/Button';
-import { Input } from '../components/Input';
-import { TextArea } from '../components/TextArea';
+import { Input } from '../components/Input/index.js';
+import { Label } from '../components/Label/index.js';
+import { TextArea } from '../components/TextArea/index.js';
+import { Heading } from '../components/Heading/index.js';
 import { useToast } from '../components/Toast';
 
 // ---------------------------------------------------------------------------
@@ -32,14 +34,18 @@ export function SupportPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-zinc-900 mb-6">Talk to an Expert</h1>
+      <Heading tag="h1" size="2xl" className="mb-6">
+        Talk to an Expert
+      </Heading>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* ---------------------------------------------------------------- */}
         {/* Left column — contact info */}
         {/* ---------------------------------------------------------------- */}
         <div className="rounded-lg border border-zinc-200 bg-white p-6">
-          <h2 className="text-lg font-semibold text-zinc-900 mb-2">Get in touch</h2>
+          <Heading tag="h2" size="lg" className="mb-2">
+            Get in touch
+          </Heading>
           <p className="text-sm text-zinc-600 mb-6">We typically respond within 1 business day.</p>
 
           {/* Email support */}
@@ -79,8 +85,8 @@ export function SupportPage() {
           </div>
 
           {/* UNKNOWN: Real Calendly / scheduling link not provided — using # as placeholder. */}
-          <Button variant="ghost" href="#">
-            Schedule call →
+          <Button variant="ghost" asChild>
+            <a href="#">Schedule call →</a>
           </Button>
         </div>
 
@@ -88,40 +94,47 @@ export function SupportPage() {
         {/* Right column — contact form */}
         {/* ---------------------------------------------------------------- */}
         <div className="rounded-lg border border-zinc-200 bg-white p-6">
-          <h2 className="text-lg font-semibold text-zinc-900 mb-4">Send a message</h2>
+          <Heading tag="h2" size="lg" className="mb-4">
+            Send a message
+          </Heading>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700">Name</label>
-              <Input value={formName} onChange={setFormName} placeholder="Your name" required />
+              <Label>Name</Label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="Your name"
+                required
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700">Email</label>
+              <Label>Email</Label>
               <Input
                 type="email"
                 value={formEmail}
-                onChange={setFormEmail}
+                onChange={(e) => setFormEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700">Subject</label>
+              <Label>Subject</Label>
               <Input
                 value={formSubject}
-                onChange={setFormSubject}
+                onChange={(e) => setFormSubject(e.target.value)}
                 placeholder="How can we help?"
                 required
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700">Message</label>
+              <Label>Message</Label>
               <TextArea
                 value={formMessage}
-                onChange={setFormMessage}
+                onChange={(e) => setFormMessage(e.target.value)}
                 placeholder="Describe your question or issue..."
                 rows={5}
                 required
@@ -129,7 +142,7 @@ export function SupportPage() {
             </div>
 
             <div className="flex justify-end">
-              <Button variant="filled" type="submit">
+              <Button variant="default" type="submit">
                 Send message
               </Button>
             </div>
