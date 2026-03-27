@@ -242,7 +242,7 @@ export function SettingsPage() {
         <SectionCard icon={UserIcon} title="Profile" description="Your personal information">
           <div className="flex flex-col gap-4">
             <div className="flex gap-3">
-              <div className="flex flex-1 flex-col gap-1.5">
+              <div className="flex flex-1 flex-col gap-2.5">
                 <Label className="text-zinc-900">Full name</Label>
                 {social ? (
                   <>
@@ -267,7 +267,7 @@ export function SettingsPage() {
                   />
                 )}
               </div>
-              <div className="flex flex-1 flex-col gap-1.5">
+              <div className="flex flex-1 flex-col gap-2.5">
                 <Label className="text-zinc-900">Company name</Label>
                 <Input
                   value={orgName}
@@ -277,7 +277,7 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               <Label className="text-zinc-900">Email</Label>
               {social ? (
                 <>
