@@ -8,9 +8,8 @@ import { AccessKeyExpirationFields } from './AccessKeyExpirationFields.js';
 import type { ExpirationOption } from './AccessKeyExpirationFields.js';
 import { AccessKeyPermissionsFields } from './AccessKeyPermissionsFields.js';
 import { Button } from './Button';
-import { Input } from './Input/index.js';
-import { Label } from './Label/index.js';
-import { Dialog, DialogBody, DialogFooter, DialogHeader } from './Dialog';
+import { Input } from './Input.js';
+import { Modal, ModalBody, ModalFooter, ModalHeader } from './Modal/index.js';
 import { SaveCredentialsModal } from './SaveCredentialsModal.js';
 import { useToast } from './Toast/index.js';
 
@@ -108,13 +107,13 @@ export function AddBucketKeyModal({
   const canSubmit = keyName.trim().length > 0 && permissions.length > 0 && !creating;
 
   return (
-    <Dialog open={open} onClose={handleClose} size="md">
-      <DialogHeader onClose={handleClose}>Create API key for {bucketName}</DialogHeader>
-      <DialogBody>
+    <Modal open={open} onClose={handleClose} size="md">
+      <ModalHeader onClose={handleClose}>Create API key for {bucketName}</ModalHeader>
+      <ModalBody>
         <div className="flex flex-col gap-4">
           {/* Key name */}
           <div className="flex flex-col gap-1.5">
-            <Label>Key name</Label>
+            <label className="text-sm font-medium text-zinc-700">Key name</label>
             <Input
               value={keyName}
               onChange={(e) => setKeyName(e.target.value)}
@@ -124,7 +123,7 @@ export function AddBucketKeyModal({
 
           {/* Permissions */}
           <div className="flex flex-col gap-2">
-            <Label>Permissions</Label>
+            <label className="text-sm font-medium text-zinc-700">Permissions</label>
             <AccessKeyPermissionsFields value={permissions} onChange={setPermissions} />
             {permissions.length === 0 && (
               <p className="text-xs text-red-600">Select at least one permission.</p>
@@ -133,7 +132,7 @@ export function AddBucketKeyModal({
 
           {/* Expiration */}
           <div className="flex flex-col gap-2">
-            <Label>Expiration</Label>
+            <label className="text-sm font-medium text-zinc-700">Expiration</label>
             <AccessKeyExpirationFields
               value={expiration}
               customDate={customDate}
@@ -142,8 +141,8 @@ export function AddBucketKeyModal({
             />
           </div>
         </div>
-      </DialogBody>
-      <DialogFooter>
+      </ModalBody>
+      <ModalFooter>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={handleClose}>
             Cancel
@@ -152,7 +151,7 @@ export function AddBucketKeyModal({
             {creating ? 'Creating...' : 'Create & add key'}
           </Button>
         </div>
-      </DialogFooter>
-    </Dialog>
+      </ModalFooter>
+    </Modal>
   );
 }

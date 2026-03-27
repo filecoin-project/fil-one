@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   SquaresFourIcon,
   DatabaseIcon,
@@ -9,13 +9,14 @@ import {
   CaretRightIcon,
   BookOpenIcon,
   ChatCircleIcon,
+  SignOutIcon,
 } from '@phosphor-icons/react/dist/ssr';
 import { Link, useMatchRoute } from '@tanstack/react-router';
-import { ProgressBar } from './ProgressBar/index.js';
+import { ProgressBar } from './ProgressBar';
 import { Button } from './Button';
 import { SubscriptionStatus, getUsageLimits, formatBytes } from '@filone/shared';
-import type { BillingInfo, UsageResponse } from '@filone/shared';
-import { getBilling, getUsage } from '../lib/api.js';
+import type { BillingInfo, MeResponse, UsageResponse } from '@filone/shared';
+import { getBilling, getMe, getUsage, logout } from '../lib/api.js';
 import { daysUntil, formatDateTime } from '../lib/time.js';
 
 type SidebarNavProps = {
@@ -41,6 +42,26 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
   const matchRoute = useMatchRoute();
   const [billing, setBilling] = useState<BillingInfo | null>(null);
   const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(e.target as Node) &&
+        userButtonRef.current &&
+        !userButtonRef.current.contains(e.target as Node)
+      ) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [userMenuOpen]);
 
   useEffect(() => {
     const refresh = () => {
@@ -59,6 +80,17 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
     window.addEventListener('billing:updated', refresh);
     return () => window.removeEventListener('billing:updated', refresh);
   }, []);
+
+  useEffect(() => {
+    getMe()
+      .then(setMe)
+      .catch(() => {
+        /* silent */
+      });
+  }, []);
+
+  const displayName = me?.name || me?.email || 'User';
+  const initial = displayName.charAt(0).toUpperCase();
 
   const isTrialing = billing?.subscription.status === SubscriptionStatus.Trialing;
   const isGracePeriod = billing?.subscription.status === SubscriptionStatus.GracePeriod;
@@ -92,27 +124,79 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
 
   return (
     <nav className="flex h-full flex-col border-r border-zinc-200 bg-white">
-      {/* Logo + collapse toggle */}
-      <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-zinc-200 px-3">
-        <div className="flex items-center gap-2 overflow-hidden">
-          {/* Logo mark */}
-          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-brand-600 text-sm font-bold text-white">
-            F
+      {/* User + collapse toggle */}
+      <div
+        className={`relative flex h-14 flex-shrink-0 items-center px-2 ${collapsed ? 'justify-center' : 'gap-1'}`}
+      >
+        <button
+          ref={userButtonRef}
+          type="button"
+          onClick={() => setUserMenuOpen((o) => !o)}
+          className={`flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-zinc-100 ${collapsed ? '' : 'flex-1'}`}
+        >
+          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">
+            {initial}
           </span>
           {!collapsed && (
-            <span className="truncate text-sm font-semibold text-zinc-900">Fil.one</span>
+            <div className="min-w-0 text-left overflow-hidden">
+              <p className="truncate text-sm font-medium text-zinc-900 leading-tight">
+                {displayName}
+              </p>
+              {me?.orgName && (
+                <p className="truncate text-xs text-zinc-500 leading-tight">{me.orgName}</p>
+              )}
+            </div>
           )}
-        </div>
+        </button>
+
+        {/* User dropdown */}
+        {userMenuOpen && (
+          <div
+            ref={userMenuRef}
+            className="absolute left-2 top-14 z-50 w-52 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg"
+          >
+            <Link
+              to="/support"
+              onClick={() => setUserMenuOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100"
+            >
+              <ChatCircleIcon size={18} className="flex-shrink-0 text-zinc-400" />
+              Talk to an expert
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100"
+            >
+              <SignOutIcon size={18} className="flex-shrink-0 text-zinc-400" />
+              Log out
+            </button>
+          </div>
+        )}
 
         {/* Collapse toggle */}
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-        >
-          {collapsed ? <CaretRightIcon size={16} /> : <CaretLeftIcon size={16} />}
-        </button>
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label="Collapse sidebar"
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+          >
+            <CaretLeftIcon size={16} />
+          </button>
+        )}
+
+        {/* Collapsed expand button — floats outside sidebar */}
+        {collapsed && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label="Expand sidebar"
+            className="absolute -right-3 top-4 flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm hover:text-zinc-600"
+          >
+            <CaretRightIcon size={14} />
+          </button>
+        )}
       </div>
 
       {/* Primary nav items */}
@@ -134,7 +218,7 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
                 .join(' ')}
               activeProps={{ className: 'bg-brand-50 text-brand-700' }}
             >
-              <Icon size={18} className="flex-shrink-0" />
+              <Icon size={18} className={`flex-shrink-0 ${isActive ? '' : 'text-zinc-400'}`} />
               {!collapsed && <span>{label}</span>}
             </Link>
           );
@@ -247,23 +331,9 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <BookOpenIcon size={18} className="flex-shrink-0" />
+          <BookOpenIcon size={18} className="flex-shrink-0 text-zinc-400" />
           {!collapsed && <span>Documentation</span>}
         </a>
-
-        <Link
-          to="/support"
-          title={collapsed ? 'Talk to an expert' : undefined}
-          className={[
-            'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100',
-            collapsed ? 'justify-center' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          <ChatCircleIcon size={18} className="flex-shrink-0" />
-          {!collapsed && <span>Talk to an expert</span>}
-        </Link>
       </div>
     </nav>
   );

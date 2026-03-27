@@ -4,7 +4,7 @@ import { DotsThreeIcon, KeyIcon, PlusIcon, TrashIcon } from '@phosphor-icons/rea
 
 import type { AccessKey } from '@filone/shared';
 
-import { Badge } from './Badge/index.js';
+import { Badge } from './Badge';
 import { Button } from './Button';
 import { CopyButton } from './CopyButton';
 import { formatDate } from '../lib/time.js';

@@ -4,8 +4,8 @@ import { SpinnerIcon } from '@phosphor-icons/react/dist/ssr';
 import type { AccessKeyBucketScope, ListBucketsResponse } from '@filone/shared';
 
 import { apiRequest } from '../lib/api.js';
-import { Checkbox } from './Checkbox/index.js';
-import { Icon } from './Icon/index.js';
+import { Checkbox } from './Checkbox';
+import { Icon } from './Icon';
 
 type AccessKeyBucketScopeFieldsProps = {
   bucketScope: AccessKeyBucketScope;
