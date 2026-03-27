@@ -151,18 +151,7 @@ export default $config({
         name: $interpolate`filone-${$app.stage}-security-headers`,
         securityHeadersConfig: {
           contentSecurityPolicy: {
-            contentSecurityPolicy: [
-              "default-src 'none'",
-              "script-src 'self' https://js.stripe.com",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self'",
-              "font-src 'self'",
-              "connect-src 'self' https://api.stripe.com",
-              'frame-src https://js.stripe.com',
-              "frame-ancestors 'none'",
-              "base-uri 'none'",
-              "form-action 'none'",
-            ].join('; '),
+            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com https://*.s3.${$app.stage === 'production' ? '' : 'staging.'}fil.one; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
             override: true,
           },
           frameOptions: {
@@ -177,7 +166,7 @@ export default $config({
             override: true,
           },
           strictTransportSecurity: {
-            accessControlMaxAgeSec: 31536000,
+            accessControlMaxAgeSec: 2592000, // 30 days
             includeSubdomains: true,
             override: true,
           },
