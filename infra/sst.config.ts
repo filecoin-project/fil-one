@@ -214,7 +214,6 @@ function setupMetricStreamPipeline(grafanaPrometheusAuth: sst.Secret) {
     outputFormat: 'opentelemetry1.0',
     includeFilters: [
       { namespace: 'AWS/Lambda', metricNames: [] },
-      { namespace: 'AWS/CloudFront', metricNames: [] },
       { namespace: 'AWS/ApiGateway', metricNames: [] },
       { namespace: 'AWS/SQS', metricNames: [] },
       { namespace: 'AWS/DynamoDB', metricNames: [] },

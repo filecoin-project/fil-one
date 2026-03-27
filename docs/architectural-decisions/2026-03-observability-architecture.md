@@ -87,18 +87,22 @@ API Gateway V2 setup.
 Metrics delivery uses a two-step approach:
 
 **Step 1 (implemented): AWS-provided metrics via CloudWatch Metric Stream.**
+
 A CloudWatch Metric Stream forwards AWS-provided metrics (`AWS/Lambda`,
-`AWS/CloudFront`, `AWS/ApiGateway`, `AWS/SQS`, `AWS/DynamoDB`) to Grafana Cloud
+`AWS/ApiGateway`, `AWS/SQS`, `AWS/DynamoDB`) to Grafana Cloud
 Prometheus via a Kinesis Firehose delivery stream. This gives us Lambda duration,
-invocations, errors, throttles, CDN cache/error rates, API latency, queue depth,
-and table throttles in Grafana dashboards with zero application code changes.
-The pipeline:
+invocations, errors, throttles, API latency, queue depth, and table throttles in
+Grafana dashboards with zero application code changes. The pipeline:
 
 - CloudWatch Metrics → Metric Stream (OpenTelemetry 1.0 format) → Firehose →
   Grafana Cloud Prometheus (`aws-metric-streams` endpoint)
 
 Additional AWS namespaces can be added to the Metric Stream's include filter
 as needed.
+
+CloudFront metrics are not yet included because CloudFront is a global service
+whose metrics are only published in us-east-1, while our staging & production
+stacks deploys to us-east-2.
 
 **Deployment scope.** The metric stream pipeline is deployed once per account via
 the `infra/` stack (not per-stage via the main stack), because CloudWatch Metric
@@ -453,7 +457,7 @@ injection.
 - **Verified log pipeline.** The CloudWatch → Firehose → Loki pipeline has been
   tested and confirmed working end-to-end.
 - **AWS metrics in Grafana.** CloudWatch Metric Stream forwards AWS-provided
-  metrics (Lambda, CloudFront, API Gateway, SQS, DynamoDB) to Grafana Cloud
+  metrics (Lambda, API Gateway, SQS, DynamoDB) to Grafana Cloud
   Prometheus with zero application code changes.
 - **Clear path to custom metrics.** EMF → CloudWatch Metrics → the existing
   Metric Stream → Grafana Prometheus can be added incrementally without
