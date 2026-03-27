@@ -62,8 +62,9 @@ export async function baseHandler(
     try {
       buckets = (await listBuckets(gatewayUrl, credentials)).buckets;
     } catch (err) {
-      const code = (err as { Code?: string }).Code;
-      if (code === 'AccessDenied') {
+      const errName = (err as { name?: string }).name;
+      const errCode = (err as { Code?: string }).Code;
+      if (errName === 'AccessDenied' || errCode === 'AccessDenied') {
         console.warn(
           '[get-activity] AccessDenied listing buckets — tenant may have no buckets yet',
           {

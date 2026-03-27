@@ -450,6 +450,22 @@ describe('get-activity baseHandler', () => {
     ddbMock.on(QueryCommand).resolves({ Items: [] });
 
     const err = new Error('Access Denied.');
+    err.name = 'AccessDenied';
+    mockListBuckets.mockRejectedValue(err);
+
+    const event = buildEvent({ userInfo: USER_INFO });
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(String(result.body));
+    expect(body.activities).toStrictEqual([]);
+  });
+
+  it('returns 200 with empty buckets when listBuckets throws AccessDenied via Code fallback', async () => {
+    mockOrgProfile(AURORA_TENANT_ID);
+    ddbMock.on(QueryCommand).resolves({ Items: [] });
+
+    const err = new Error('Access Denied.');
     Object.assign(err, { Code: 'AccessDenied' });
     mockListBuckets.mockRejectedValue(err);
 
