@@ -562,6 +562,7 @@ describe('authMiddleware', () => {
               sk: { S: 'PROFILE' },
               sub: { S: MOCK_SUB },
               orgId: { S: MOCK_ORG_ID },
+              marketingEmailsOptedIn: { BOOL: true },
               createdAt: { S: expect.any(String) },
             },
           },
