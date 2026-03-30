@@ -21,6 +21,7 @@ import {
 import { getAuthSecrets } from '../lib/auth-secrets.js';
 import { OrgSetupStatus } from '../lib/org-setup-status.js';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { suggestOrgName } from '../lib/suggest-org-name.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -147,6 +148,7 @@ interface IdTokenClaims {
   email: string | null;
   emailVerified: boolean;
   name: string | null;
+  picture: string | null;
 }
 
 /**
@@ -164,19 +166,20 @@ async function extractIdTokenClaims({
   clientId: string;
   issuer: string;
 }): Promise<IdTokenClaims> {
-  if (!idToken) return { email: null, emailVerified: false, name: null };
+  if (!idToken) return { email: null, emailVerified: false, name: null, picture: null };
   try {
     const { payload } = await jwtVerify(idToken, jwks, { audience: clientId, issuer });
     return {
       email: (payload.email as string) ?? null,
       emailVerified: (payload.email_verified as boolean) ?? false,
       name: (payload.name as string) ?? null,
+      picture: (payload.picture as string) ?? null,
     };
   } catch (err) {
     console.warn('[auth] ID token verification failed, continuing without email', {
       error: (err as Error).message,
     });
-    return { email: null, emailVerified: false, name: null };
+    return { email: null, emailVerified: false, name: null, picture: null };
   }
 }
 
@@ -192,12 +195,14 @@ async function attachIdentity({
   email,
   emailVerified,
   name,
+  picture,
 }: {
   event: APIGatewayProxyEventV2;
   sub: string;
   email: string | null;
   emailVerified: boolean;
   name: string | null;
+  picture: string | null;
 }): Promise<APIGatewayProxyStructuredResultV2 | null> {
   const resolved = await resolveUserAndOrg(sub, email);
   (
@@ -209,6 +214,7 @@ async function attachIdentity({
     email: resolved.email ?? undefined,
     emailVerified,
     name: name ?? undefined,
+    picture: picture ?? undefined,
   };
   if (!resolved.orgConfirmed && !ORG_CONFIRM_BYPASS_ROUTES.has(event.rawPath)) {
     return orgNotConfirmedResponse();
@@ -241,8 +247,7 @@ async function resolveUserAndOrg(sub: string, email: string | null): Promise<Res
     }),
   );
 
-  // TODO: Improve the org display name (e.g. use the user's organization name from Auth0)
-  const orgName = (email && email.split('@')[1]) ?? 'My Organization';
+  const orgName = (email && suggestOrgName(email)) ?? 'My Organization';
 
   if (result.Item?.userId?.S && result.Item?.orgId?.S) {
     const userId = result.Item.userId.S;
@@ -349,20 +354,16 @@ export function authMiddleware() {
     const idToken = cookies[COOKIE_NAMES.ID_TOKEN];
     const refreshToken = cookies[COOKIE_NAMES.REFRESH_TOKEN];
 
-    // TODO [Option D]: AUTH0_DOMAIN env var will change to custom domain
-    // (e.g. auth.fil.one). JWKS, issuer, and token endpoints use the same domain.
     const domain = process.env.AUTH0_DOMAIN!;
     const audience = process.env.AUTH0_AUDIENCE!;
     const issuer = `https://${domain}/`;
     const secrets = getAuthSecrets();
     const jwks = getJWKS(domain);
 
-    const hasCookies = {
-      accessToken: !!accessToken,
-      idToken: !!idToken,
-      refreshToken: !!refreshToken,
-    };
-    console.warn('[auth] Starting auth check', { hasCookies });
+    // Stash refresh token so the after hook can force-refresh if a handler requests it
+    if (refreshToken) {
+      request.internal.refreshToken = refreshToken;
+    }
 
     // Stash refresh token so the after hook can force-refresh if a handler requests it
     if (refreshToken) {
@@ -388,6 +389,7 @@ export function authMiddleware() {
           email: idClaims.email,
           emailVerified: idClaims.emailVerified,
           name: idClaims.name,
+          picture: idClaims.picture,
         });
         if (blocked) return blocked;
         return; // Valid — continue to handler
@@ -411,13 +413,13 @@ export function authMiddleware() {
           clientId: secrets.AUTH0_CLIENT_ID,
           issuer,
         });
-        console.warn('[auth] Token refresh succeeded');
         const blocked = await attachIdentity({
           event,
           sub: refreshedSub,
           email: refreshedClaims.email,
           emailVerified: refreshedClaims.emailVerified,
           name: refreshedClaims.name,
+          picture: refreshedClaims.picture,
         });
         if (blocked) return blocked;
         return; // Continue to handler
@@ -452,6 +454,7 @@ export function authMiddleware() {
           email: idClaims.email,
           emailVerified: idClaims.emailVerified,
           name: idClaims.name,
+          picture: idClaims.picture,
         });
         if (blocked) return blocked;
         return;

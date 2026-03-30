@@ -12,6 +12,7 @@ export interface MeResponse {
   name?: string;
   connectionType?: string;
   mfaEnrollments: MfaEnrollment[];
+  picture?: string;
 }
 
 export interface MfaEnrollment {

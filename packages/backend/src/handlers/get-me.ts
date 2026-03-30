@@ -16,7 +16,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
-  const { orgId, email, emailVerified, sub, name } = getUserInfo(event);
+  const { orgId, email, emailVerified, sub, name, picture } = getUserInfo(event);
 
   const { Item } = await getDynamoClient().send(
     new GetItemCommand({
@@ -53,13 +53,14 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     email,
     orgSetupComplete: isOrgSetupComplete(setupStatus),
     name,
-    connectionType,
     mfaEnrollments: enrollments.map((e) => ({
       id: e.id,
       type: e.type as 'authenticator' | 'webauthn-roaming' | 'webauthn-platform' | 'email',
       name: e.name,
       createdAt: e.enrolled_at ?? '',
     })),
+    picture,
+    connectionType: getConnectionType(sub),
   };
 
   // Only include suggested name if org is not yet confirmed

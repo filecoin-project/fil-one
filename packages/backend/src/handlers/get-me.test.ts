@@ -129,8 +129,8 @@ describe('GET /api/me handler', () => {
         emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: true,
-        connectionType: 'auth0',
         mfaEnrollments: [],
+        connectionType: 'auth0',
       }),
     });
   });
@@ -162,8 +162,8 @@ describe('GET /api/me handler', () => {
         emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: false,
-        connectionType: 'auth0',
         mfaEnrollments: [],
+        connectionType: 'auth0',
       }),
     });
   });
@@ -194,8 +194,8 @@ describe('GET /api/me handler', () => {
         emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: false,
-        connectionType: 'auth0',
         mfaEnrollments: [],
+        connectionType: 'auth0',
       }),
     });
   });
@@ -274,8 +274,8 @@ describe('GET /api/me handler', () => {
         emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: false,
-        connectionType: 'auth0',
         mfaEnrollments: [],
+        connectionType: 'auth0',
       }),
     });
   });
@@ -364,7 +364,6 @@ describe('GET /api/me handler', () => {
         emailVerified: true,
         email: MOCK_EMAIL,
         orgSetupComplete: true,
-        connectionType: 'auth0',
         mfaEnrollments: [
           {
             id: 'webauthn-roaming|dev_abc',
@@ -373,6 +372,7 @@ describe('GET /api/me handler', () => {
             createdAt: '2026-03-24T00:20:17.000Z',
           },
         ],
+        connectionType: 'auth0',
       }),
     });
   });
