@@ -68,7 +68,7 @@ describe('presign-upload baseHandler', () => {
       secretAccessKey: 's3_secret',
     });
     mockGetPresignedPutObjectUrl.mockResolvedValue(
-      'https://s3.staging.fil.one/my-bucket/photos/cat.jpg?sig=abc',
+      `${expectedS3Url}/my-bucket/photos/cat.jpg?sig=abc`,
     );
 
     const event = buildEvent({
@@ -82,7 +82,7 @@ describe('presign-upload baseHandler', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
     expect(body).toStrictEqual({
-      url: 'https://s3.staging.fil.one/my-bucket/photos/cat.jpg?sig=abc',
+      url: `${expectedS3Url}/my-bucket/photos/cat.jpg?sig=abc`,
       key: 'photos/cat.jpg',
     });
 

@@ -64,7 +64,7 @@ describe('download-object baseHandler', () => {
       secretAccessKey: 's3_secret',
     });
     mockGetPresignedGetObjectUrl.mockResolvedValue(
-      'https://s3.staging.fil.one/my-bucket/photos/cat.jpg?sig=get123',
+      `${expectedS3Url}/my-bucket/photos/cat.jpg?sig=get123`,
     );
 
     const event = buildEvent({
@@ -78,7 +78,7 @@ describe('download-object baseHandler', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
     expect(body).toStrictEqual({
-      url: 'https://s3.staging.fil.one/my-bucket/photos/cat.jpg?sig=get123',
+      url: `${expectedS3Url}/my-bucket/photos/cat.jpg?sig=get123`,
     });
 
     expect(mockGetAuroraS3Credentials).toHaveBeenCalledWith('test', 'aurora-t-1');
