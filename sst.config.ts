@@ -133,13 +133,6 @@ export default $config({
         allowCredentials: true,
         maxAge: '1 day',
       },
-      ...(isEphemeralStage && {
-        transform: {
-          stage: (args) => {
-            args.name = $app.stage;
-          },
-        },
-      }),
     });
 
     // ── Website (S3 + CloudFront via sst.aws.Router) ─────────────────
