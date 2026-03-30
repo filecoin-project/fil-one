@@ -145,11 +145,11 @@ export default $config({
       },
     });
 
-    // TODO: once https://eu-west-1.s3.staging.fil.one is live, switch the staging URL as well
-    // https://github.com/filecoin-project/fil-one/pull/111
-    const auroraS3GatewayUrl = isProduction
-      ? 'https://eu-west-1.s3.fil.one'
-      : 'https://s3.dev.aur.lu';
+    const { getS3Endpoint, S3_REGION, Stage } = await import('@filone/shared');
+    const auroraS3GatewayUrl = getS3Endpoint(
+      S3_REGION,
+      isProduction ? Stage.Production : Stage.Staging,
+    );
 
     // ── CloudFront security headers (CSP applied to the HTML document) ──
     const responseHeadersPolicy = new aws.cloudfront.ResponseHeadersPolicy(
@@ -158,7 +158,7 @@ export default $config({
         name: $interpolate`filone-${$app.stage}-security-headers`,
         securityHeadersConfig: {
           contentSecurityPolicy: {
-            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://lh3.googleusercontent.com https://s.gravatar.com https://cdn.auth0.com; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com ${auroraS3GatewayUrl}; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https://lh3.googleusercontent.com https://s.gravatar.com https://cdn.auth0.com; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com ${auroraS3GatewayUrl}; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
             override: true,
           },
           frameOptions: {

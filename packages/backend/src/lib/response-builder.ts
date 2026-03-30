@@ -57,7 +57,7 @@ export class ResponseBuilder {
         'Content-Type': 'application/json',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Strict-Transport-Security': 'max-age=2592000; includeSubDomains',
       },
       body: JSON.stringify(this._body),
       ...(this._cookies.length > 0 && { cookies: this._cookies }),
