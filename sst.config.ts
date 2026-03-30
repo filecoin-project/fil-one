@@ -45,6 +45,7 @@ export default $config({
     const auth0MgmtRuntimeClientId = new sst.Secret('Auth0MgmtRuntimeClientId');
     const auth0MgmtRuntimeClientSecret = new sst.Secret('Auth0MgmtRuntimeClientSecret');
     const stripeSecretKey = new sst.Secret('StripeSecretKey');
+    const stripePublishableKey = new sst.Secret('StripePublishableKey');
     const stripePriceId = new sst.Secret('StripePriceId');
     const auroraBackofficeToken = new sst.Secret('AuroraBackofficeToken');
     const grafanaLokiAuth = new sst.Secret('GrafanaLokiAuth');
@@ -283,6 +284,7 @@ export default $config({
       auth0ClientId,
       auth0ClientSecret,
       stripeSecretKey,
+      stripePublishableKey,
       stripePriceId,
       auroraBackofficeToken,
     ];
@@ -310,10 +312,10 @@ export default $config({
       AURORA_REGION_ID: 'ff',
     };
 
-    // TODO: switch to https://eu-west-1.s3.fil.one (production) and https://eu-west-1.s3.staging.fil.one (non-prod).
+    // TODO: once https://eu-west-1.s3.staging.fil.one is live, switch the staging URL as well
     // https://github.com/filecoin-project/fil-one/pull/111
     const auroraS3GatewayUrl = isProduction
-      ? 'https://a-fil-one-s3.aur.lu'
+      ? 'https://eu-west-1.s3.fil.one'
       : 'https://s3.dev.aur.lu';
 
     const auroraApiKeySsmArn = $interpolate`arn:aws:ssm:*:*:parameter/filone/${$app.stage}/aurora-portal/tenant-api-key/*`;
