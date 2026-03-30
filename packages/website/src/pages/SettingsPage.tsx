@@ -7,7 +7,13 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
-import { getMe, updateProfile, changePassword } from '../lib/api.js';
+import {
+  getMe,
+  updateProfile,
+  changePassword,
+  getPreferences,
+  updatePreferences,
+} from '../lib/api.js';
 import { getProvider, isSocialConnection, UpdateProfileSchema } from '@filone/shared';
 import type { MeResponse } from '@filone/shared';
 
@@ -67,29 +73,39 @@ function ToggleRow({
   description,
   enabled,
   disabled,
+  onChange,
+  saving,
 }: {
   label: string;
   description: string;
   enabled: boolean;
   disabled?: boolean;
+  onChange?: () => void;
+  saving?: boolean;
 }) {
+  const interactive = !disabled && onChange && !saving;
   return (
     <div className="flex items-center justify-between py-1">
       <div>
         <p className="text-[13px] font-medium text-zinc-900">{label}</p>
         <p className="text-xs text-zinc-500">{description}</p>
       </div>
-      <div
-        className={`flex h-6 w-11 items-center rounded-full border-2 border-transparent p-0.5 ${
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        disabled={disabled || saving}
+        onClick={interactive ? onChange : undefined}
+        className={`flex h-6 w-11 items-center rounded-full border-2 border-transparent p-0.5 transition-colors ${
           enabled ? 'bg-blue-500' : 'bg-zinc-300'
-        } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+        } ${disabled || saving ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
       >
         <div
           className={`size-5 rounded-full bg-white shadow transition-transform ${
             enabled ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
-      </div>
+      </button>
     </div>
   );
 }
@@ -133,6 +149,8 @@ export function SettingsPage() {
   const [orgName, setOrgName] = useState('');
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [marketingOptedIn, setMarketingOptedIn] = useState(true);
+  const [prefsSaving, setPrefsSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +176,38 @@ export function SettingsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchPrefs() {
+      try {
+        const prefs = await getPreferences();
+        if (!cancelled) setMarketingOptedIn(prefs.marketingEmailsOptedIn);
+      } catch {
+        // Non-critical — default stays true
+      }
+    }
+    void fetchPrefs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleMarketingToggle() {
+    const newValue = !marketingOptedIn;
+    setPrefsSaving(true);
+    try {
+      const result = await updatePreferences({ marketingEmailsOptedIn: newValue });
+      setMarketingOptedIn(result.marketingEmailsOptedIn);
+      toast.success(
+        result.marketingEmailsOptedIn ? 'Marketing emails enabled' : 'Marketing emails disabled',
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update preference');
+    } finally {
+      setPrefsSaving(false);
+    }
+  }
 
   const social = isSocialConnection(me?.connectionType);
   const provider = getProvider(me?.connectionType);
@@ -321,21 +371,24 @@ export function SettingsPage() {
           title="Notifications"
           description="Manage your notification preferences"
         >
-          <div className="flex flex-col gap-3 opacity-50">
-            <ToggleRow
-              label="Email notifications"
-              description="Get notified about your uploads and when approaching storage limits"
-              enabled={false}
-              disabled
-            />
+          <div className="flex flex-col gap-3">
+            <div className="opacity-50">
+              <ToggleRow
+                label="Email notifications"
+                description="Get notified about your uploads and when approaching storage limits"
+                enabled={false}
+                disabled
+              />
+              <p className="mt-1 text-xs text-zinc-400 italic">Coming soon</p>
+            </div>
             <div className="h-px bg-[#e1e4ea]" />
             <ToggleRow
               label="Marketing emails"
               description="Receive updates about new features"
-              enabled={false}
-              disabled
+              enabled={marketingOptedIn}
+              onChange={handleMarketingToggle}
+              saving={prefsSaving}
             />
-            <p className="text-xs text-zinc-400 italic">Coming soon</p>
           </div>
         </SectionCard>
 

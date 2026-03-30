@@ -138,6 +138,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "HubSpotAccessToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ListAccessKeys": {
       "name": string
       "type": "sst.aws.Function"

@@ -118,6 +118,21 @@ export function resendVerificationEmail(): Promise<{ message: string }> {
   return apiRequest<{ message: string }>('/me/resend-verification', { method: 'POST' });
 }
 
+// ── Preferences API ─────────────────────────────────────────────────────
+
+import type { PreferencesResponse, UpdatePreferencesRequest } from '@filone/shared';
+
+export function getPreferences(): Promise<PreferencesResponse> {
+  return apiRequest<PreferencesResponse>('/me/preferences');
+}
+
+export function updatePreferences(data: UpdatePreferencesRequest): Promise<PreferencesResponse> {
+  return apiRequest<PreferencesResponse>('/me/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Usage API ────────────────────────────────────────────────────────────
 
 import type { UsageResponse, ActivityResponse } from '@filone/shared';

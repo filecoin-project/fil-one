@@ -49,6 +49,7 @@ export default $config({
     const stripePriceId = new sst.Secret('StripePriceId');
     const auroraBackofficeToken = new sst.Secret('AuroraBackofficeToken');
     const grafanaLokiAuth = new sst.Secret('GrafanaLokiAuth');
+    const hubSpotAccessToken = new sst.Secret('HubSpotAccessToken');
     const sendGridApiKey =
       $app.stage === 'staging' || $app.stage === 'production'
         ? new sst.Secret('SendGridApiKey')
@@ -485,6 +486,13 @@ export default $config({
       extraLink: mgmtRuntimeResources,
     });
     addRoute({ method: 'POST', routePath: '/api/me/change-password', handler: 'change-password' });
+    addRoute({ method: 'GET', routePath: '/api/me/preferences', handler: 'get-preferences' });
+    addRoute({
+      method: 'PATCH',
+      routePath: '/api/me/preferences',
+      handler: 'update-preferences',
+      extraLink: [hubSpotAccessToken],
+    });
     addRoute({
       method: 'POST',
       routePath: '/api/me/resend-verification',
