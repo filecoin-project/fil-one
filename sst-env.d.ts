@@ -58,6 +58,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "AuthLogin": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "AuthLogout": {
       "name": string
       "type": "sst.aws.Function"
@@ -167,6 +171,10 @@ declare module "sst" {
       "type": "sst.aws.Function"
     }
     "StripePriceId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "StripePublishableKey": {
       "type": "sst.sst.Secret"
       "value": string
     }
