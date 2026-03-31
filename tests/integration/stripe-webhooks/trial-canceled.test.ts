@@ -5,7 +5,8 @@ import {
   deleteBillingRecord,
   getStripePriceId,
   getStripeClient,
-  pollForBillingStatus,
+  pollForBillingStatusChange,
+  getBillingRecord,
 } from './helpers.js';
 
 describe('Trial Canceled (customer.subscription.deleted)', () => {
@@ -40,7 +41,13 @@ describe('Trial Canceled (customer.subscription.deleted)', () => {
 
     await stripe.subscriptions.cancel(subId);
 
-    const record = await pollForBillingStatus(userId, 'grace_period', 'trialing');
+    await pollForBillingStatusChange({
+      userId,
+      expectedStatus: 'grace_period',
+      fromStatus: 'trialing',
+    });
+
+    const record = await getBillingRecord(userId);
     expect(record).toMatchObject({
       pk: { S: `CUSTOMER#${userId}` },
       sk: { S: 'SUBSCRIPTION' },

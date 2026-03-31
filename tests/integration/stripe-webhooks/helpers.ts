@@ -13,7 +13,6 @@ export {
 } from '../helpers.js';
 
 import { getStripeClient, pollUntil, getBillingRecord } from '../helpers.js';
-import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { Resource } from 'sst';
 
 // =============================================================================
@@ -98,13 +97,18 @@ export async function createAndFailInvoice(customerId: string): Promise<string> 
 // Waiting
 // =============================================================================
 
-export async function pollForBillingStatus(
-  userId: string,
-  expectedStatus: string,
-  fromStatus: string,
+export async function pollForBillingStatusChange({
+  userId,
+  expectedStatus,
+  fromStatus,
   timeoutMs = 30_000,
-): Promise<Record<string, AttributeValue>> {
-  return pollUntil(async () => {
+}: {
+  userId: string;
+  expectedStatus: string;
+  fromStatus: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  await pollUntil(async () => {
     const record = await getBillingRecord(userId);
     if (!record) return null;
     const status = record.subscriptionStatus?.S;
@@ -116,21 +120,31 @@ export async function pollForBillingStatus(
   }, timeoutMs);
 }
 
-export async function pollForPaymentMethod(
-  userId: string,
-  expectedPmId: string,
+export async function pollForPaymentMethod({
+  userId,
+  paymentMethodId,
   timeoutMs = 30_000,
-): Promise<Record<string, AttributeValue>> {
-  return pollUntil(async () => {
+}: {
+  userId: string;
+  paymentMethodId: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  await pollUntil(async () => {
     const record = await getBillingRecord(userId);
     if (!record) return null;
     const pmId = record.paymentMethodId?.S;
-    if (pmId === expectedPmId) return record;
+    if (pmId === paymentMethodId) return record;
     return null;
   }, timeoutMs);
 }
 
-export async function pollTestClockReady(clockId: string, timeoutSeconds = 120): Promise<void> {
+export async function pollTestClockReady({
+  clockId,
+  timeoutSeconds = 120,
+}: {
+  clockId: string;
+  timeoutSeconds?: number;
+}): Promise<void> {
   await pollUntil(
     async () => {
       const clockState = await getStripeClient().testHelpers.testClocks.retrieve(clockId);

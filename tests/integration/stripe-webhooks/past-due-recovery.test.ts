@@ -6,14 +6,14 @@ import {
   createAndPayInvoice,
   deleteBillingRecord,
   getStripeClient,
-  pollForBillingStatus,
+  pollForBillingStatusChange,
   pollForPaymentMethod,
+  getBillingRecord,
 } from './helpers.js';
 
 describe('Past Due Recovery (invoice.payment_succeeded with canceledAt)', () => {
   let userId: string;
   let cusId: string;
-  let paymentMethodId: string;
 
   beforeAll(async () => {
     userId = `test-pdr-${crypto.randomUUID()}`;
@@ -25,7 +25,8 @@ describe('Past Due Recovery (invoice.payment_succeeded with canceledAt)', () => 
       canceledAt: { S: canceledAt },
     });
 
-    paymentMethodId = await attachValidCard(cusId);
+    const paymentMethodId = await attachValidCard(cusId);
+    await pollForPaymentMethod({ userId, paymentMethodId });
   });
 
   afterAll(async () => {
@@ -34,9 +35,13 @@ describe('Past Due Recovery (invoice.payment_succeeded with canceledAt)', () => 
   });
 
   it('should restore status to active and clear all failure/cancel fields', async () => {
-    await pollForPaymentMethod(userId, paymentMethodId);
     await createAndPayInvoice(cusId);
-    const record = await pollForBillingStatus(userId, 'active', 'past_due');
+    await pollForBillingStatusChange({
+      userId,
+      expectedStatus: 'active',
+      fromStatus: 'past_due',
+    });
+    const record = await getBillingRecord(userId);
     expect(record).toStrictEqual({
       pk: { S: `CUSTOMER#${userId}` },
       sk: { S: 'SUBSCRIPTION' },

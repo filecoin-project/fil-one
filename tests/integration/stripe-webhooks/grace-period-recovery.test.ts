@@ -6,7 +6,8 @@ import {
   createAndPayInvoice,
   deleteBillingRecord,
   getStripeClient,
-  pollForBillingStatus,
+  pollForBillingStatusChange,
+  getBillingRecord,
 } from './helpers.js';
 
 describe('Grace Period Recovery (invoice.payment_succeeded)', () => {
@@ -33,7 +34,12 @@ describe('Grace Period Recovery (invoice.payment_succeeded)', () => {
 
   it('should restore status to active and clear grace period fields', async () => {
     await createAndPayInvoice(cusId);
-    const record = await pollForBillingStatus(userId, 'active', 'grace_period');
+    await pollForBillingStatusChange({
+      userId,
+      expectedStatus: 'active',
+      fromStatus: 'grace_period',
+    });
+    const record = await getBillingRecord(userId);
     expect(record).toStrictEqual({
       pk: { S: `CUSTOMER#${userId}` },
       sk: { S: 'SUBSCRIPTION' },
