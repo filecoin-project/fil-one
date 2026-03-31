@@ -124,9 +124,17 @@ jobs:
           fi
           echo "url=$URL_TRIMMED" >> "$GITHUB_OUTPUT"
 
+      - name: Check sst-env.d.ts files are up to date
+        run: |
+          if ! git diff --exit-code '**/sst-env.d.ts'; then
+            echo "::error::sst-env.d.ts files are out of date. Please run 'sst deploy' locally and commit the updated sst-env.d.ts files."
+            exit 1
+          fi
+
   comment:
     name: Add Preview Environment Comment on PR
-    if: github.event_name == 'pull_request' && needs.deploy-preview.outputs.url != ''
+    # always(): run even when deploy-preview fails (e.g. sst-env.d.ts out of date)
+    if: always() && github.event_name == 'pull_request' && needs.deploy-preview.outputs.url != ''
     needs: [deploy-preview]
     runs-on: ubuntu-latest
     permissions:
