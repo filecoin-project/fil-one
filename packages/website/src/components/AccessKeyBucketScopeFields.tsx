@@ -12,6 +12,8 @@ type AccessKeyBucketScopeFieldsProps = {
   onBucketScopeChange: (scope: AccessKeyBucketScope) => void;
   selectedBuckets: string[];
   onSelectedBucketsChange: (buckets: string[]) => void;
+  /** Always show this bucket in the list even when unchecked (e.g. the bucket being created). */
+  pinnedBucket?: string;
 };
 
 export function AccessKeyBucketScopeFields({
@@ -19,6 +21,7 @@ export function AccessKeyBucketScopeFields({
   onBucketScopeChange,
   selectedBuckets,
   onSelectedBucketsChange,
+  pinnedBucket,
 }: AccessKeyBucketScopeFieldsProps) {
   const [buckets, setBuckets] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,26 +100,36 @@ export function AccessKeyBucketScopeFields({
 
           {error && <p className="px-4 py-3 text-sm text-red-600">{error}</p>}
 
-          {!loading && !error && buckets.length === 0 && (
-            <p className="px-4 py-3 text-sm text-zinc-500">No buckets found.</p>
-          )}
+          {!loading &&
+            !error &&
+            buckets.length === 0 &&
+            selectedBuckets.length === 0 &&
+            !pinnedBucket && <p className="px-4 py-3 text-sm text-zinc-500">No buckets found.</p>}
 
-          {!loading && !error && buckets.length > 0 && (
-            <div className="flex flex-col">
-              {buckets.map((name) => (
-                <label
-                  key={name}
-                  className="flex cursor-pointer items-center gap-3 border-b border-zinc-100 px-4 py-2.5 last:border-b-0 hover:bg-zinc-50"
-                >
-                  <Checkbox
-                    checked={selectedBuckets.includes(name)}
-                    onChange={() => toggleBucket(name)}
-                  />
-                  <span className="text-sm font-medium text-zinc-900">{name}</span>
-                </label>
-              ))}
-            </div>
-          )}
+          {!loading &&
+            !error &&
+            (buckets.length > 0 || selectedBuckets.length > 0 || pinnedBucket) && (
+              <div className="flex flex-col">
+                {[
+                  ...new Set([
+                    ...(pinnedBucket ? [pinnedBucket] : []),
+                    ...selectedBuckets,
+                    ...buckets,
+                  ]),
+                ].map((name) => (
+                  <label
+                    key={name}
+                    className="flex cursor-pointer items-center gap-3 border-b border-zinc-100 px-4 py-2.5 last:border-b-0 hover:bg-zinc-50"
+                  >
+                    <Checkbox
+                      checked={selectedBuckets.includes(name)}
+                      onChange={() => toggleBucket(name)}
+                    />
+                    <span className="text-sm font-medium text-zinc-900">{name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
         </div>
       )}
     </div>
