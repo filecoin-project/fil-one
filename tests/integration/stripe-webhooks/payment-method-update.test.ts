@@ -3,10 +3,10 @@ import {
   createTestCustomer,
   attachValidCard,
   seedBillingRecord,
-  sleep,
   getBillingRecord,
   deleteBillingRecord,
   getStripeClient,
+  pollForPaymentMethod,
 } from './helpers.js';
 
 describe('Payment Method Update (customer.updated)', () => {
@@ -17,12 +17,8 @@ describe('Payment Method Update (customer.updated)', () => {
   beforeAll(async () => {
     userId = `test-pmu-${crypto.randomUUID()}`;
     cusId = await createTestCustomer(userId);
+    await seedBillingRecord(userId, cusId, 'active');
     firstPmId = await attachValidCard(cusId);
-    await seedBillingRecord(userId, cusId, 'active', {
-      paymentMethodId: { S: firstPmId },
-      paymentMethodLast4: { S: '4242' },
-      paymentMethodBrand: { S: 'visa' },
-    });
   });
 
   afterAll(async () => {
@@ -33,8 +29,9 @@ describe('Payment Method Update (customer.updated)', () => {
   it('should sync new payment method last4 after customer portal card update', async () => {
     const stripe = getStripeClient();
 
-    // Wait for initial webhook processing
-    await sleep(15 * 1000);
+    // Wait for initial customer.updated webhook (from attachValidCard in beforeAll)
+    // to finish processing — the webhook adds paymentMethodExpYear which wasn't in the seed.
+    await pollForPaymentMethod(userId, firstPmId);
 
     // Attach a second card (Mastercard) and set as default
     const newPm = await stripe.paymentMethods.attach('pm_card_mastercard', {
@@ -44,8 +41,8 @@ describe('Payment Method Update (customer.updated)', () => {
       invoice_settings: { default_payment_method: newPm.id },
     });
 
-    // Wait for webhook delivery and processing
-    await sleep(15 * 1000);
+    // Wait for customer.updated webhook to process the new payment method
+    await pollForPaymentMethod(userId, newPm.id);
 
     const record = await getBillingRecord(userId);
     expect(record).toBeTruthy();

@@ -4,10 +4,9 @@ import {
   attachValidCard,
   seedBillingRecord,
   createAndPayInvoice,
-  sleep,
-  getBillingRecord,
   deleteBillingRecord,
   getStripeClient,
+  pollForBillingStatus,
 } from './helpers.js';
 
 describe('Grace Period Recovery (invoice.payment_succeeded)', () => {
@@ -34,9 +33,7 @@ describe('Grace Period Recovery (invoice.payment_succeeded)', () => {
 
   it('should restore status to active and clear grace period fields', async () => {
     await createAndPayInvoice(cusId);
-    // 30s sleep to allow for aurora API calls and retries
-    await sleep(30 * 1000);
-    const record = await getBillingRecord(userId);
+    const record = await pollForBillingStatus(userId, 'active', 'grace_period');
     expect(record).toStrictEqual({
       pk: { S: `CUSTOMER#${userId}` },
       sk: { S: 'SUBSCRIPTION' },

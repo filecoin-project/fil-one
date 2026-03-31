@@ -2,11 +2,10 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import {
   createTestCustomer,
   seedBillingRecord,
-  sleep,
-  getBillingRecord,
   deleteBillingRecord,
   getStripePriceId,
   getStripeClient,
+  pollForBillingStatus,
 } from './helpers.js';
 
 describe('Trial Canceled (customer.subscription.deleted)', () => {
@@ -41,10 +40,7 @@ describe('Trial Canceled (customer.subscription.deleted)', () => {
 
     await stripe.subscriptions.cancel(subId);
 
-    // 30s sleep to allow for aurora API calls and retries
-    await sleep(30 * 1000);
-
-    const record = await getBillingRecord(userId);
+    const record = await pollForBillingStatus(userId, 'grace_period', 'trialing');
     expect(record).toMatchObject({
       pk: { S: `CUSTOMER#${userId}` },
       sk: { S: 'SUBSCRIPTION' },
