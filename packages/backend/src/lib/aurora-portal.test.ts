@@ -23,7 +23,7 @@ vi.mock('@filone/aurora-portal-client', () => ({
   deleteS3AccessKey: (options: Record<string, unknown>) => mockDeleteAccessKey(options),
 }));
 
-vi.mock('./aurora-api-metrics.ts', () => ({
+vi.mock('./aurora-api-metrics.js', () => ({
   instrumentClient: vi.fn(),
 }));
 

@@ -17,7 +17,7 @@ vi.mock('./auth-secrets.js', () => ({
   }),
 }));
 
-vi.mock('./aurora-api-metrics.ts', () => ({
+vi.mock('./aurora-api-metrics.js', () => ({
   instrumentClient: vi.fn(),
 }));
 
