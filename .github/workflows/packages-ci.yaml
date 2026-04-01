@@ -8,6 +8,8 @@ on:
 jobs:
   check-packages:
     runs-on: ubuntu-latest
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@v5
@@ -53,6 +55,7 @@ jobs:
     env:
       STAGE: pr-${{ github.event.pull_request.number }}
       AWS_REGION: us-east-2
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     outputs:
       url: ${{ steps.deploy.outputs.url }}
       sst-env-dirty: ${{ steps.sst-env-check.outputs.dirty }}
@@ -261,6 +264,7 @@ jobs:
       contents: read
     env:
       DEPLOY_STAGE: ${{ github.ref == 'refs/heads/production' && 'production' || 'staging' }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@v5
@@ -283,6 +287,9 @@ jobs:
           aws-region: us-east-2
 
       - run: pnpm build
+        env:
+          SENTRY_DEPLOY_ENV: ${{ env.DEPLOY_STAGE }}
+          SENTRY_RELEASE_DIST: ${{ github.run_number }}
 
       - run: pnpm exec sst deploy --stage "$DEPLOY_STAGE"
 
