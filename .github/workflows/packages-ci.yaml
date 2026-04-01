@@ -133,7 +133,6 @@ jobs:
           fi
 
   check-sst-env:
-    name: Check sst-env.d.ts files are up to date
     needs: [deploy-preview]
     if: needs.deploy-preview.outputs.sst-env-dirty == 'true'
     runs-on: ubuntu-latest
