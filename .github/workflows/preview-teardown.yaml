@@ -6,7 +6,7 @@ on:
 
 jobs:
   teardown:
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event.pull_request.base.ref != 'production' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     concurrency:
       group: preview-pr-${{ github.event.pull_request.number }}
