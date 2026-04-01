@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { sentryVitePlugin } from '@sentry/vite-plugin';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,7 +14,26 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = env.DEV_PROXY_TARGET; // e.g. https://staging.fil.one
 
   return {
-    plugins: [react(), tailwindcss(), basicSsl()],
+    build: {
+      // A separate sourcemap file will be created.
+      // The corresponding sourcemap comments in the bundled files are suppressed.
+      sourcemap: 'hidden',
+    },
+    plugins: [
+      react(),
+      tailwindcss(),
+      basicSsl(),
+      sentryVitePlugin({
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        org: 'filecoin-foundation-qk',
+        project: 'filone-web',
+        telemetry: false,
+        sourcemaps: {
+          // Delete source maps after they are uploaded to Sentry.
+          filesToDeleteAfterUpload: ['./dist/**/*.map'],
+        },
+      }),
+    ],
     server: {
       ...(proxyTarget && {
         proxy: {
