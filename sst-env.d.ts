@@ -146,6 +146,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "GracePeriodEnforcer": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "GrafanaLokiAuth": {
       "type": "sst.sst.Secret"
       "value": string
@@ -181,10 +185,6 @@ declare module "sst" {
     "ResendVerification": {
       "name": string
       "type": "sst.aws.Function"
-    }
-    "SendGridApiKey": {
-      "type": "sst.sst.Secret"
-      "value": string
     }
     "SetupIntegrations": {
       "name": string
