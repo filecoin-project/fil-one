@@ -155,6 +155,9 @@ export default $config({
     );
 
     // ── CloudFront security headers (CSP applied to the HTML document) ──
+    const sentryCspEndpoint =
+      'https://o4507369657991168.ingest.us.sentry.io/api/4511144562655232/security/?sentry_key=a67c49004e3562393b7c63deedcbb951';
+
     const responseHeadersPolicy = new aws.cloudfront.ResponseHeadersPolicy(
       'WebsiteSecurityHeaders',
       {
@@ -162,7 +165,7 @@ export default $config({
         securityHeadersConfig: {
           contentSecurityPolicy: {
             // i1.wp.com: WordPress Photon CDN — Auth0 proxies some avatar images through it
-            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https://lh3.googleusercontent.com https://s.gravatar.com https://cdn.auth0.com https://i1.wp.com; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com https://o4507369657991168.ingest.us.sentry.io ${auroraS3GatewayUrl}; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
+            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https://lh3.googleusercontent.com https://s.gravatar.com https://cdn.auth0.com https://i1.wp.com; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com https://o4507369657991168.ingest.us.sentry.io ${auroraS3GatewayUrl}; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; report-uri ${sentryCspEndpoint}; report-to csp-endpoint`,
             override: true,
           },
           frameOptions: {
@@ -181,6 +184,25 @@ export default $config({
             includeSubdomains: true,
             override: true,
           },
+        },
+        customHeadersConfig: {
+          items: [
+            {
+              header: 'Report-To',
+              value: JSON.stringify({
+                group: 'csp-endpoint',
+                max_age: 10886400,
+                endpoints: [{ url: sentryCspEndpoint }],
+                include_subdomains: true,
+              }),
+              override: true,
+            },
+            {
+              header: 'Reporting-Endpoints',
+              value: `csp-endpoint="${sentryCspEndpoint}"`,
+              override: true,
+            },
+          ],
         },
         // Future: Plausible
         //   script-src: add https://plausible.io (or self-hosted domain)
