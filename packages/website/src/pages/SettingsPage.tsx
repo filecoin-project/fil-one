@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { UserIcon, BellIcon, ShieldCheckIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
@@ -138,8 +138,6 @@ export function SettingsPage() {
   const [email, setEmail] = useState('');
   const [orgName, setOrgName] = useState('');
   const [initialized, setInitialized] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
 
   // Initialize form fields once when data first arrives
   useEffect(() => {
@@ -159,22 +157,9 @@ export function SettingsPage() {
   const orgNameChanged = orgName !== (me?.orgName ?? '');
   const hasChanges = nameChanged || emailChanged || orgNameChanged;
 
-  async function handleSaveProfile() {
-    const payload: Record<string, string> = {};
-    if (nameChanged) payload.name = name;
-    if (emailChanged) payload.email = email;
-    if (orgNameChanged) payload.orgName = orgName;
-
-    const validated = UpdateProfileSchema.safeParse(payload);
-    if (!validated.success) {
-      toast.error(validated.error.issues[0].message);
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const result = await updateProfile(validated.data);
-
+  const saveProfileMutation = useMutation({
+    mutationFn: updateProfile,
+    onSuccess: (result) => {
       // Update local form state to reflect saved values
       if (result.name !== undefined) setName(result.name);
       if (result.email !== undefined) setEmail(result.email);
@@ -191,28 +176,42 @@ export function SettingsPage() {
         };
       });
 
-      if (result.email && result.email !== me?.email) {
+      if (result.email) {
         toast.success('Profile updated. Check your inbox to verify your new email.');
       } else {
         toast.success('Profile updated');
       }
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to update profile');
-    } finally {
-      setSaving(false);
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: () => changePassword(),
+    onSuccess: () => toast.success('Password reset email sent'),
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to send password reset email');
+    },
+  });
+
+  function handleSaveProfile() {
+    const payload: Record<string, string> = {};
+    if (nameChanged) payload.name = name;
+    if (emailChanged) payload.email = email;
+    if (orgNameChanged) payload.orgName = orgName;
+
+    const validated = UpdateProfileSchema.safeParse(payload);
+    if (!validated.success) {
+      toast.error(validated.error.issues[0].message);
+      return;
     }
+
+    saveProfileMutation.mutate(validated.data);
   }
 
-  async function handleChangePassword() {
-    setChangingPassword(true);
-    try {
-      await changePassword();
-      toast.success('Password reset email sent');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send password reset email');
-    } finally {
-      setChangingPassword(false);
-    }
+  function handleChangePassword() {
+    changePasswordMutation.mutate();
   }
 
   if (isPending) {
@@ -290,8 +289,12 @@ export function SettingsPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button variant="filled" onClick={handleSaveProfile} disabled={saving || !hasChanges}>
-                {saving ? 'Saving...' : 'Save changes'}
+              <Button
+                variant="filled"
+                onClick={handleSaveProfile}
+                disabled={saveProfileMutation.isPending || !hasChanges}
+              >
+                {saveProfileMutation.isPending ? 'Saving...' : 'Save changes'}
               </Button>
               {hasChanges && (
                 <p className="text-[11px] text-zinc-500">
@@ -366,9 +369,9 @@ export function SettingsPage() {
                     variant="ghost"
                     size="compact"
                     onClick={handleChangePassword}
-                    disabled={changingPassword}
+                    disabled={changePasswordMutation.isPending}
                   >
-                    {changingPassword ? 'Sending...' : 'Change'}
+                    {changePasswordMutation.isPending ? 'Sending...' : 'Change'}
                   </Button>
                 }
               />

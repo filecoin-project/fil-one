@@ -12,7 +12,7 @@ import {
   CubeIcon,
   HardDrivesIcon,
 } from '@phosphor-icons/react/dist/ssr';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
@@ -178,15 +178,9 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
     void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
   }
 
-  async function handleDeleteKey(id: string) {
-    setConfirmDeleteKey(id);
-  }
-
-  async function confirmDeleteKeyAction() {
-    if (!confirmDeleteKey) return;
-    const id = confirmDeleteKey;
-    try {
-      await apiRequest(`/access-keys/${id}`, { method: 'DELETE' });
+  const deleteKeyMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/access-keys/${id}`, { method: 'DELETE' }),
+    onSuccess: (_, id) => {
       queryClient.setQueryData<ListAccessKeysResponse>(
         queryKeys.bucketAccessKeys(bucketName),
         (old) => (old ? { keys: old.keys.filter((k) => k.id !== id) } : old),
@@ -194,8 +188,22 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
       void queryClient.invalidateQueries({ queryKey: queryKeys.accessKeys });
       void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
       toast.success('Access key deleted');
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to delete key');
+    },
+  });
+
+  async function handleDeleteKey(id: string) {
+    setConfirmDeleteKey(id);
+  }
+
+  async function confirmDeleteKeyAction() {
+    if (!confirmDeleteKey) return;
+    try {
+      await deleteKeyMutation.mutateAsync(confirmDeleteKey);
+    } catch {
+      // error handled by mutation.onError
     }
   }
 

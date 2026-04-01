@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Link } from '@tanstack/react-router';
 import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
@@ -27,11 +27,10 @@ export function BucketsPage() {
   });
   const buckets = data?.buckets ?? [];
 
-  async function handleDeleteBucket(bucketName: string) {
-    try {
-      await apiRequest(`/buckets/${encodeURIComponent(bucketName)}`, {
-        method: 'DELETE',
-      });
+  const deleteBucketMutation = useMutation({
+    mutationFn: (bucketName: string) =>
+      apiRequest(`/buckets/${encodeURIComponent(bucketName)}`, { method: 'DELETE' }),
+    onSuccess: (_, bucketName) => {
       // Optimistically remove from cache, then confirm with a background refetch
       queryClient.setQueryData<ListBucketsResponse>(queryKeys.buckets, (old) =>
         old ? { buckets: old.buckets.filter((b) => b.name !== bucketName) } : old,
@@ -39,10 +38,11 @@ export function BucketsPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.buckets });
       void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
       toast.success(`Bucket "${bucketName}" deleted`);
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to delete bucket');
-    }
-  }
+    },
+  });
 
   if (isPending) {
     return (
@@ -144,8 +144,12 @@ export function BucketsPage() {
                     <button
                       type="button"
                       aria-label={`Delete bucket ${bucket.name}`}
-                      onClick={() => handleDeleteBucket(bucket.name)}
-                      className="text-zinc-400 hover:text-red-500"
+                      onClick={() => deleteBucketMutation.mutate(bucket.name)}
+                      disabled={
+                        deleteBucketMutation.isPending &&
+                        deleteBucketMutation.variables === bucket.name
+                      }
+                      className="text-zinc-400 hover:text-red-500 disabled:opacity-50"
                     >
                       <TrashIcon size={16} aria-hidden="true" />
                     </button>

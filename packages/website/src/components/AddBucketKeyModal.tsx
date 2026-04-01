@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { AccessKeyPermission, CreateAccessKeyResponse } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
@@ -48,8 +48,6 @@ export function AddBucketKeyModal({
   ]);
   const [expiration, setExpiration] = useState<ExpirationOption>('never');
   const [customDate, setCustomDate] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-
   const [credentials, setCredentials] = useState<{
     accessKeyId: string;
     secretAccessKey: string;
@@ -60,7 +58,6 @@ export function AddBucketKeyModal({
     setPermissions(['read', 'write', 'list', 'delete']);
     setExpiration('never');
     setCustomDate(null);
-    setCreating(false);
     setCredentials(null);
   }
 
@@ -69,20 +66,19 @@ export function AddBucketKeyModal({
     onClose();
   }
 
-  async function handleCreate() {
-    if (!keyName.trim() || permissions.length === 0) return;
-    setCreating(true);
-    try {
-      const response = await apiRequest<CreateAccessKeyResponse>('/access-keys', {
+  const createKeyMutation = useMutation({
+    mutationFn: (body: {
+      keyName: string;
+      permissions: AccessKeyPermission[];
+      bucketScope: 'specific';
+      buckets: string[];
+      expiresAt?: string | null;
+    }) =>
+      apiRequest<CreateAccessKeyResponse>('/access-keys', {
         method: 'POST',
-        body: JSON.stringify({
-          keyName: keyName.trim(),
-          permissions,
-          bucketScope: 'specific',
-          buckets: [bucketName],
-          expiresAt: expiresAtFromForm(expiration, customDate),
-        }),
-      });
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (response) => {
       setCredentials({
         accessKeyId: response.accessKeyId,
         secretAccessKey: response.secretAccessKey,
@@ -90,12 +86,22 @@ export function AddBucketKeyModal({
       void queryClient.invalidateQueries({ queryKey: queryKeys.accessKeys });
       void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
       onKeyAdded();
-    } catch (err) {
+    },
+    onError: (err) => {
       console.error('Failed to create access key:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to create access key');
-    } finally {
-      setCreating(false);
-    }
+    },
+  });
+
+  function handleCreate() {
+    if (!keyName.trim() || permissions.length === 0) return;
+    createKeyMutation.mutate({
+      keyName: keyName.trim(),
+      permissions,
+      bucketScope: 'specific',
+      buckets: [bucketName],
+      expiresAt: expiresAtFromForm(expiration, customDate),
+    });
   }
 
   if (credentials) {
@@ -109,7 +115,8 @@ export function AddBucketKeyModal({
     );
   }
 
-  const canSubmit = keyName.trim().length > 0 && permissions.length > 0 && !creating;
+  const canSubmit =
+    keyName.trim().length > 0 && permissions.length > 0 && !createKeyMutation.isPending;
 
   return (
     <Modal open={open} onClose={handleClose} size="md">
@@ -149,7 +156,7 @@ export function AddBucketKeyModal({
             Cancel
           </Button>
           <Button variant="filled" disabled={!canSubmit} onClick={handleCreate}>
-            {creating ? 'Creating...' : 'Create & add key'}
+            {createKeyMutation.isPending ? 'Creating...' : 'Create & add key'}
           </Button>
         </div>
       </ModalFooter>

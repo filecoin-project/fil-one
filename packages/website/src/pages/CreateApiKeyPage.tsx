@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type {
@@ -36,13 +36,37 @@ export function CreateApiKeyPage() {
   const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
   const [expiration, setExpiration] = useState<ExpirationOption>('never');
   const [customDate, setCustomDate] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [credentials, setCredentials] = useState<{
     accessKeyId: string;
     secretAccessKey: string;
   } | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const createKeyMutation = useMutation({
+    mutationFn: (body: {
+      keyName: string;
+      permissions: AccessKeyPermission[];
+      bucketScope: AccessKeyBucketScope;
+      buckets?: string[];
+      expiresAt?: string | null;
+    }) =>
+      apiRequest<CreateAccessKeyResponse>('/access-keys', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (response) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.accessKeys });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
+      setCredentials({
+        accessKeyId: response.accessKeyId,
+        secretAccessKey: response.secretAccessKey,
+      });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to create access key');
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const body = {
       keyName: keyName.trim(),
@@ -56,23 +80,7 @@ export function CreateApiKeyPage() {
       toast.error(parsed.error.issues[0].message);
       return;
     }
-    setCreating(true);
-    try {
-      const response = await apiRequest<CreateAccessKeyResponse>('/access-keys', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.accessKeys });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
-      setCredentials({
-        accessKeyId: response.accessKeyId,
-        secretAccessKey: response.secretAccessKey,
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create access key');
-    } finally {
-      setCreating(false);
-    }
+    createKeyMutation.mutate(parsed.data);
   }
 
   function handleCredentialsDone() {
@@ -81,7 +89,10 @@ export function CreateApiKeyPage() {
 
   const bucketsValid = bucketScope === 'all' || selectedBuckets.length > 0;
   const canSubmit =
-    keyName.trim().length > 0 && permissions.length > 0 && bucketsValid && !creating;
+    keyName.trim().length > 0 &&
+    permissions.length > 0 &&
+    bucketsValid &&
+    !createKeyMutation.isPending;
 
   return (
     <>
@@ -168,7 +179,7 @@ export function CreateApiKeyPage() {
             </div>
 
             <Button type="submit" variant="filled" disabled={!canSubmit}>
-              {creating ? 'Creating...' : 'Create API key'}
+              {createKeyMutation.isPending ? 'Creating...' : 'Create API key'}
             </Button>
           </form>
 

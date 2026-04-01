@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
@@ -360,23 +360,31 @@ export function ApiKeysPage() {
 
   const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
 
-  async function handleDelete(id: string) {
-    setConfirmDeleteKey(id);
-  }
-
-  async function confirmDeleteKeyAction() {
-    if (!confirmDeleteKey) return;
-    const id = confirmDeleteKey;
-    try {
-      await apiRequest(`/access-keys/${id}`, { method: 'DELETE' });
+  const deleteKeyMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/access-keys/${id}`, { method: 'DELETE' }),
+    onSuccess: (_, id) => {
       queryClient.setQueryData<ListAccessKeysResponse>(queryKeys.accessKeys, (old) =>
         old ? { keys: old.keys.filter((k) => k.id !== id) } : old,
       );
       void queryClient.invalidateQueries({ queryKey: queryKeys.accessKeys });
       void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
       toast.success('Access key deleted');
-    } catch (err) {
+    },
+    onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to delete key');
+    },
+  });
+
+  async function handleDelete(id: string) {
+    setConfirmDeleteKey(id);
+  }
+
+  async function confirmDeleteKeyAction() {
+    if (!confirmDeleteKey) return;
+    try {
+      await deleteKeyMutation.mutateAsync(confirmDeleteKey);
+    } catch {
+      // error handled by mutation.onError
     }
   }
 
