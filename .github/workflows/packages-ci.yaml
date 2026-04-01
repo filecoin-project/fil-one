@@ -270,6 +270,9 @@ jobs:
           aws-region: us-east-2
 
       - run: pnpm build
+        env:
+          SENTRY_DEPLOY_ENV: ${{ env.DEPLOY_STAGE }}
+          SENTRY_RELEASE_DIST: ${{ github.run_number }}
 
       - run: pnpm exec sst deploy --stage "$DEPLOY_STAGE"
 

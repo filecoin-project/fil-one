@@ -28,6 +28,13 @@ export default defineConfig(({ mode }) => {
         org: 'filecoin-foundation-qk',
         project: 'filone-web',
         telemetry: false,
+        release: {
+          // release.name is auto-detected from the git HEAD commit SHA.
+          dist: process.env.SENTRY_RELEASE_DIST || undefined,
+          deploy: process.env.SENTRY_DEPLOY_ENV
+            ? { env: process.env.SENTRY_DEPLOY_ENV }
+            : undefined,
+        },
         sourcemaps: {
           // Delete source maps after they are uploaded to Sentry.
           filesToDeleteAfterUpload: ['./dist/**/*.map'],
