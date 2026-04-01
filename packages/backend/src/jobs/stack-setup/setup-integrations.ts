@@ -95,57 +95,51 @@ async function setupStripeWebhook(
   siteUrl: string,
   stage: string,
 ): Promise<{ webhookSecret?: string; webhookEndpointId?: string }> {
-  const webhookUrl = `${siteUrl}/api/stripe/webhook`;
-  const storedSecret = await getStoredWebhookSecret(stage);
-
-  const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
-  const existing = endpoints.data.find((ep) => ep.url === webhookUrl);
-
-  if (existing && storedSecret) {
-    await stripe.webhookEndpoints.update(existing.id, {
-      enabled_events: WEBHOOK_EVENTS,
-      metadata: { app: 'filone', stage },
-    });
-    return { webhookSecret: storedSecret, webhookEndpointId: existing.id };
-  }
-
-  if (existing) {
-    await stripe.webhookEndpoints.del(existing.id);
-  }
-
-  // Clean up disabled endpoints to stay under Stripe's 16-endpoint test limit.
-  // Endpoints are disabled by Stripe after repeated delivery failures (e.g. when
-  // a preview environment has been torn down but the endpoint wasn't deleted).
-  // Only clean up from non-production stages — production should never delete
-  // other endpoints.
-  if (stage !== 'production') {
-    const disabled = endpoints.data.filter(
-      (ep) => isOrphanedEphemeralEndpoint(ep) && ep.id !== existing?.id,
-    );
-    await Promise.all(disabled.map((ep) => stripe.webhookEndpoints.del(ep.id)));
-  }
-
-  let webhookSecret: string | undefined;
-  let webhookEndpointId: string | undefined;
   try {
+    const webhookUrl = `${siteUrl}/api/stripe/webhook`;
+    const storedSecret = await getStoredWebhookSecret(stage);
+
+    const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
+    const existing = endpoints.data.find((ep) => ep.url === webhookUrl);
+
+    if (existing && storedSecret) {
+      await stripe.webhookEndpoints.update(existing.id, {
+        enabled_events: WEBHOOK_EVENTS,
+        metadata: { app: 'filone', stage },
+      });
+      return { webhookSecret: storedSecret, webhookEndpointId: existing.id };
+    }
+
+    if (existing) {
+      await stripe.webhookEndpoints.del(existing.id);
+    }
+
+    // Clean up disabled endpoints to stay under Stripe's 16-endpoint test limit.
+    // Endpoints are disabled by Stripe after repeated delivery failures (e.g. when
+    // a preview environment has been torn down but the endpoint wasn't deleted).
+    // Only clean up from non-production stages — production should never delete
+    // other endpoints.
+    if (stage !== 'production') {
+      const disabled = endpoints.data.filter(
+        (ep) => isOrphanedEphemeralEndpoint(ep) && ep.id !== existing?.id,
+      );
+      await Promise.all(disabled.map((ep) => stripe.webhookEndpoints.del(ep.id)));
+    }
+
     const newEndpoint = await stripe.webhookEndpoints.create({
       url: webhookUrl,
       enabled_events: WEBHOOK_EVENTS,
       metadata: { app: 'filone', stage },
     });
 
-    webhookEndpointId = newEndpoint.id;
-    webhookSecret = newEndpoint.secret!;
+    await storeWebhookSecret(stage, newEndpoint.secret!);
+    return { webhookSecret: newEndpoint.secret!, webhookEndpointId: newEndpoint.id };
   } catch (err) {
-    console.error('Failed to create Stripe webhook endpoint:', err);
+    console.error('Stripe webhook setup failed:', err);
     if (!stage.startsWith('pr-')) throw err;
+    await storeWebhookSecret(stage, 'PENDING_CLI_SETUP');
+    return {};
   }
-
-  if (webhookSecret) {
-    await storeWebhookSecret(stage, webhookSecret);
-  }
-
-  return { webhookSecret, webhookEndpointId };
 }
 
 function isOrphanedEphemeralEndpoint(ep: Stripe.WebhookEndpoint): boolean {
@@ -400,7 +394,9 @@ export async function handler(event: SetupEvent): Promise<void> {
     const [stripeResult] = await Promise.all([
       setupStripeWebhook(stripe, siteUrl, Stage),
       setupAuth0Callbacks(process.env.AUTH0_DOMAIN!, siteUrl, isStagingOrProd),
-      setupAuth0EmailProvider(process.env.AUTH0_DOMAIN!, Stage === 'production'),
+      isStagingOrProd
+        ? setupAuth0EmailProvider(process.env.AUTH0_DOMAIN!, isProduction)
+        : Promise.resolve(),
     ]);
 
     await sendCfnResponse(event, {
