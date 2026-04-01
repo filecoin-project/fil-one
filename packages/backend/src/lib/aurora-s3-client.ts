@@ -12,9 +12,10 @@ import {
 import type { S3Object } from '@filone/shared';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import QuickLRU from 'quick-lru';
 
 const ssm = new SSMClient({});
-const ssmCache = new Map<string, string>();
+const ssmCache = new QuickLRU<string, string>({ maxSize: 500 });
 export const _resetSsmCacheForTesting = () => ssmCache.clear();
 
 export interface AuroraS3Credentials {

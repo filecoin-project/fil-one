@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import QuickLRU from 'quick-lru';
 import {
   createClient,
   createBucket,
@@ -12,7 +13,7 @@ import type { AccessKeyPermission } from '@filone/shared';
 import { instrumentClient } from './aurora-api-metrics.js';
 
 const ssm = new SSMClient({});
-const ssmCache = new Map<string, string>();
+const ssmCache = new QuickLRU<string, string>({ maxSize: 500 });
 export const _resetSsmCacheForTesting = () => ssmCache.clear();
 
 export class BucketAlreadyExistsError extends Error {

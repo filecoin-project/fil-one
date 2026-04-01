@@ -117,9 +117,13 @@ The following functions are **excluded** from PC because cold starts are tolerab
 | `ResendVerification` | `POST /api/me/resend-verification`         | Email delivery is already slow            |
 | `ListInvoices`       | `GET /api/billing/invoices`                | Settings page; rarely visited             |
 
-### SSM caching: module-scope Map in Aurora client libraries
+### SSM caching: module-scope LRU cache in Aurora client libraries
 
-Both `aurora-portal.ts` and `aurora-s3-client.ts` were modified to cache SSM results in a module-scope `Map<string, string>`, keyed by `${stage}/${tenantId}`. On the first invocation within a Lambda instance, the SSM call executes as before. On subsequent calls within the same instance, the cached value is returned synchronously. A `_resetSsmCacheForTesting` export allows unit tests to clear cache state between test cases.
+Both `aurora-portal.ts` and `aurora-s3-client.ts` cache SSM results in a module-scope `QuickLRU<string, string>` (from [`quick-lru`](https://www.npmjs.com/package/quick-lru)), keyed by `${stage}/${tenantId}`. On the first invocation within a Lambda instance, the SSM call executes as before. On subsequent calls within the same instance, the cached value is returned synchronously. A `_resetSsmCacheForTesting` export allows unit tests to clear cache state between test cases.
+
+**Why LRU instead of an unbounded `Map`:** With PC = 1, a warm Lambda instance can live for hours and accumulate one cache entry per unique tenant it serves. An unbounded `Map` grows monotonically for the instance's lifetime with no eviction path. `QuickLRU` provides a principled ceiling: once `maxSize` is reached, the least-recently-seen tenant's entry is evicted and re-fetched from SSM on next access — a cache miss, not a failure.
+
+**Why `maxSize: 500`:** The cache value is a small string (~40–150 bytes). At 500 entries the footprint is ~100 KB — negligible against the 512 MB allocation. 500 is well above the number of unique tenants any single Lambda instance will realistically accumulate before recycling at current scale, so eviction is effectively never triggered in practice. It exists as a safety bound if scale grows significantly.
 
 ### Memory allocation: 1024 MB for execution-bound functions
 
