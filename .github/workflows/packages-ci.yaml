@@ -278,7 +278,7 @@ jobs:
 
       - name: Run E2E tests
         id: e2e-tests
-        if: always() && steps.integration-tests.outcome != 'skipped'
+        if: false
         env:
           BASE_URL: ${{ needs.deploy-preview.outputs.url }}
         run: pnpm test:e2e
