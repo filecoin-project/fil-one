@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import type { BucketsBucketCreateRequest } from '@filone/aurora-portal-client';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -40,7 +41,6 @@ import {
   getAuroraPortalApiKey,
   _resetSsmCacheForTesting,
 } from './aurora-portal.js';
-import { BucketsBucketCreateRequest } from '@filone/aurora-portal-client';
 
 // ---------------------------------------------------------------------------
 // Helpers
