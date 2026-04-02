@@ -55,7 +55,7 @@ jobs:
       AWS_REGION: us-east-2
     outputs:
       url: ${{ steps.deploy.outputs.url }}
-      webhook_needs_cli: ${{ steps.check-webhook.outputs.needs_cli }}
+      webhook-status: ${{ steps.webhook-check.outputs.status }}
 
     steps:
       - uses: actions/checkout@v5
@@ -125,24 +125,36 @@ jobs:
           fi
           echo "url=$URL_TRIMMED" >> "$GITHUB_OUTPUT"
 
-      - name: Check Stripe webhook status
-        id: check-webhook
+      - name: Install Stripe CLI
+        if: success()
         run: |
-          SECRET=$(aws ssm get-parameter \
-            --name "/filone/${STAGE}/stripe-webhook-secret" \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text 2>/dev/null || echo "MISSING")
-          if [ "$SECRET" = "PENDING_CLI_SETUP" ] || [ "$SECRET" = "MISSING" ]; then
-            echo "needs_cli=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::Stripe webhook registration failed -- will use stripe listen fallback"
+          curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/stripe.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/stripe.gpg] https://packages.stripe.dev/stripe-cli-debian-local stable main" \
+            | sudo tee /etc/apt/sources.list.d/stripe.list
+          sudo apt-get update && sudo apt-get install -y stripe
+
+      - name: Check Stripe webhook registration
+        if: success()
+        id: webhook-check
+        continue-on-error: true
+        env:
+          STRIPE_API_KEY: ${{ secrets.CI_STRIPE_SECRET_KEY }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          WEBHOOK_URL="${PREVIEW_URL}/api/stripe/webhook"
+          MATCH=$(stripe webhook_endpoints list --limit 100 --api-key "$STRIPE_API_KEY" 2>/dev/null \
+            | jq -r --arg url "$WEBHOOK_URL" '.data[] | select(.url == $url) | .id' \
+            | head -1)
+          if [ -n "$MATCH" ]; then
+            echo "status=✅ Registered (\`$MATCH\`)" >> "$GITHUB_OUTPUT"
           else
-            echo "needs_cli=false" >> "$GITHUB_OUTPUT"
+            echo "status=⚠️ Not found — integration tests will use \`stripe listen\`" >> "$GITHUB_OUTPUT"
           fi
 
   comment:
     name: Add Preview Environment Comment on PR
-    if: github.event_name == 'pull_request' && needs.deploy-preview.outputs.url != ''
+    if: always() && github.event_name == 'pull_request' && needs.deploy-preview.result != 'skipped'
     needs: [deploy-preview]
     runs-on: ubuntu-latest
     permissions:
@@ -155,7 +167,8 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body-includes: '🚀 Preview Environment'
 
-      - name: Create or update comment
+      - name: Create or update comment (success)
+        if: needs.deploy-preview.result == 'success'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -169,6 +182,39 @@ jobs:
             | **Latest commit** | `${{ github.event.pull_request.head.sha }}` |
             | **Status** | ✅ Deploy successful |
             | **Preview URL** | [${{ needs.deploy-preview.outputs.url }}](${{ needs.deploy-preview.outputs.url }}) |
+            | **Stripe Webhook** | ${{ needs.deploy-preview.outputs.webhook-status || '⚠️ Check skipped' }} |
+
+      - name: Create or update comment (failure)
+        if: needs.deploy-preview.result == 'failure'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            ## 🚀 Preview Environment
+
+            | | |
+            |---|---|
+            | **Latest commit** | `${{ github.event.pull_request.head.sha }}` |
+            | **Status** | ❌ Deploy failed |
+            | **Workflow logs** | [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+      - name: Create or update comment (cancelled)
+        if: needs.deploy-preview.result == 'cancelled'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            ## 🚀 Preview Environment
+
+            | | |
+            |---|---|
+            | **Latest commit** | `${{ github.event.pull_request.head.sha }}` |
+            | **Status** | ⚠️ Deploy cancelled |
+            | **Workflow logs** | [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
 
   e2e-tests:
     if: github.event_name == 'pull_request'
@@ -245,7 +291,6 @@ jobs:
           aws-region: us-east-2
 
       - name: Install Stripe CLI
-        if: needs.deploy-preview.outputs.webhook_needs_cli == 'true'
         run: |
           curl -s https://packages.stripe.dev/api/security/keypair/stripe-cli-gpg/public \
             | gpg --dearmor | sudo tee /usr/share/keyrings/stripe.gpg > /dev/null
@@ -256,7 +301,6 @@ jobs:
       # Events list must match WEBHOOK_EVENTS in setup-integrations.ts
       - name: Start Stripe CLI webhook forwarding
         id: stripe-listen
-        if: needs.deploy-preview.outputs.webhook_needs_cli == 'true'
         env:
           STRIPE_API_KEY: ${{ secrets.CI_STRIPE_SECRET_KEY }}
           WEBHOOK_URL: ${{ needs.deploy-preview.outputs.url }}/api/stripe/webhook
