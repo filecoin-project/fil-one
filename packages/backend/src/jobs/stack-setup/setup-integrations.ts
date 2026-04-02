@@ -132,8 +132,10 @@ async function setupStripeWebhook(
       metadata: { app: 'filone', stage },
     });
 
-    await storeWebhookSecret(stage, newEndpoint.secret!);
-    return { webhookSecret: newEndpoint.secret!, webhookEndpointId: newEndpoint.id };
+    const secret = newEndpoint.secret!;
+    await storeWebhookSecret(stage, secret);
+
+    return { webhookSecret: secret, webhookEndpointId: newEndpoint.id };
   } catch (err) {
     console.error('Stripe webhook setup failed:', err);
     if (!stage.startsWith('pr-')) throw err;

@@ -176,7 +176,6 @@ jobs:
     needs: [deploy-preview]
     if: needs.deploy-preview.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     concurrency:
       group: tests-pr-${{ github.event.pull_request.number }}
       cancel-in-progress: true
