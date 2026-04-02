@@ -40,6 +40,7 @@ import {
   getAuroraPortalApiKey,
   _resetSsmCacheForTesting,
 } from './aurora-portal.js';
+import { BucketsBucketCreateRequest } from '@filone/aurora-portal-client';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -97,7 +98,10 @@ describe('createAuroraBucket', () => {
     expect(mockPostBucket).toHaveBeenCalledWith({
       client: 'mock-portal-client',
       path: { tenantId: 'tenant-1' },
-      body: { name: 'my-bucket' },
+      body: {
+        name: 'my-bucket',
+        encrypted: true,
+      } satisfies BucketsBucketCreateRequest,
       throwOnError: false,
     });
   });
