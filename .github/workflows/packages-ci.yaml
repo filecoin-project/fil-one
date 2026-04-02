@@ -346,6 +346,18 @@ jobs:
             exit 1
           fi
 
+          # Save the original SSM value before overwriting (to file, not step output)
+          ORIGINAL_SECRET=$(aws ssm get-parameter \
+            --name "/filone/${SST_STAGE}/stripe-webhook-secret" \
+            --with-decryption \
+            --query "Parameter.Value" \
+            --output text 2>/dev/null) || ORIGINAL_SECRET=""
+          if [[ "$ORIGINAL_SECRET" == whsec_* ]]; then
+            echo "::add-mask::$ORIGINAL_SECRET"
+            printf '%s' "$ORIGINAL_SECRET" > /tmp/.stripe-webhook-original
+            echo "has-original=true" >> "$GITHUB_OUTPUT"
+          fi
+
           # Update SSM with the stripe listen secret
           aws ssm put-parameter \
             --name "/filone/${SST_STAGE}/stripe-webhook-secret" \
@@ -360,6 +372,17 @@ jobs:
       - name: Stop Stripe CLI forwarding
         if: always() && steps.stripe-listen.outputs.pid != ''
         run: kill ${{ steps.stripe-listen.outputs.pid }} 2>/dev/null || true
+
+      - name: Restore original Stripe webhook secret in SSM
+        if: always() && steps.stripe-listen.outputs.has-original == 'true'
+        run: |
+          ORIGINAL_SECRET=$(cat /tmp/.stripe-webhook-original)
+          aws ssm put-parameter \
+            --name "/filone/${SST_STAGE}/stripe-webhook-secret" \
+            --value "$ORIGINAL_SECRET" \
+            --type SecureString \
+            --overwrite > /dev/null
+          echo "SSM restored with original webhook signing secret"
 
   deploy:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
