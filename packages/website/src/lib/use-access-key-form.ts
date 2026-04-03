@@ -11,6 +11,7 @@ import { expiresAtFromForm } from './time.js';
 import type { ExpirationOption } from '../components/AccessKeyExpirationFields.js';
 import { useToast } from '../components/Toast/index.js';
 import { useMutation } from '@tanstack/react-query';
+import { queryClient, queryKeys } from './query-client.js';
 
 export type UseAccessKeyFormOptions = {
   defaultBucket?: string;
@@ -50,7 +51,7 @@ export function useAccessKeyForm({ defaultBucket, onSuccess }: UseAccessKeyFormO
     mutationFn: (body: {
       keyName: string;
       permissions: AccessKeyPermission[];
-      bucketScope: 'specific';
+      bucketScope: AccessKeyBucketScope;
       buckets: string[];
       expiresAt?: string | null;
     }) => {
@@ -62,6 +63,8 @@ export function useAccessKeyForm({ defaultBucket, onSuccess }: UseAccessKeyFormO
       return createAccessKey(body);
     },
     onSuccess: (response) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.accessKeys });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
       setCreating(false);
       onSuccess(response);
     },
@@ -78,7 +81,7 @@ export function useAccessKeyForm({ defaultBucket, onSuccess }: UseAccessKeyFormO
     createKeyMutation.mutate({
       keyName: keyName.trim(),
       permissions,
-      bucketScope: 'specific',
+      bucketScope,
       buckets: [defaultBucket ?? ''],
       expiresAt: expiresAtFromForm(expiration, customDate),
     });
