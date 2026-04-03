@@ -5,7 +5,7 @@ import type {
   AccessKeyPermission,
   CreateAccessKeyResponse,
 } from '@filone/shared';
-import { CreateAccessKeySchema } from '@filone/shared';
+import { CreateAccessKeySchema, KEY_NAME_MAX_LENGTH } from '@filone/shared';
 import { createAccessKey } from './api.js';
 import { expiresAtFromForm } from './time.js';
 import type { ExpirationOption } from '../components/AccessKeyExpirationFields.js';
@@ -35,7 +35,11 @@ export function useAccessKeyForm({ defaultBucket, onSuccess }: UseAccessKeyFormO
 
   const bucketsValid = bucketScope === 'all' || selectedBuckets.length > 0;
   const canSubmit =
-    keyName.trim().length > 0 && permissions.length > 0 && bucketsValid && !creating;
+    keyName.trim().length > 0 &&
+    keyName.trim().length <= KEY_NAME_MAX_LENGTH &&
+    permissions.length > 0 &&
+    bucketsValid &&
+    !creating;
 
   function reset() {
     setKeyName('');
