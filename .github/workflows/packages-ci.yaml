@@ -241,7 +241,7 @@ jobs:
             --api-key "$STRIPE_API_KEY" \
             --forward-to "$WEBHOOK_URL" \
             --events customer.updated,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,invoice.payment_succeeded,invoice.payment_failed \
-            2>&1 | tee "$LOGFILE" &
+            > "$LOGFILE" 2>&1 &
           echo "pid=$!" >> "$GITHUB_OUTPUT"
 
           # Wait for signing secret
@@ -251,9 +251,14 @@ jobs:
             sleep 1
           done
 
+          # Mask the secret so GitHub Actions redacts it from all subsequent log lines
+          if [ -n "$SECRET" ]; then
+            echo "::add-mask::$SECRET"
+          fi
+
           if [ -z "$SECRET" ]; then
             echo "::error::Failed to extract stripe listen signing secret"
-            cat "$LOGFILE"
+            sed 's/whsec_[A-Za-z0-9]*/whsec_***REDACTED***/g' "$LOGFILE"
             exit 1
           fi
 
