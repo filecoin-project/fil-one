@@ -130,6 +130,49 @@ describe('create-bucket baseHandler', () => {
     expect(result.statusCode).toBe(409);
   });
 
+  it('passes versioning, lock, and retention to createAuroraBucket', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockCreateAuroraBucket.mockResolvedValue(undefined);
+
+    const event = buildEvent({
+      body: JSON.stringify({
+        name: 'my-bucket',
+        region: S3_REGION,
+        versioning: true,
+        lock: true,
+        retention: { enabled: true, mode: 'governance', duration: 30, durationType: 'd' },
+      }),
+      userInfo: USER_INFO,
+    });
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(201);
+    expect(mockCreateAuroraBucket).toHaveBeenCalledWith({
+      tenantId: 'aurora-t-1',
+      bucketName: 'my-bucket',
+      versioning: true,
+      lock: true,
+      retention: { enabled: true, mode: 'governance', duration: 30, durationType: 'd' },
+    });
+  });
+
+  it('passes undefined for object settings when not provided', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
+    mockCreateAuroraBucket.mockResolvedValue(undefined);
+
+    const event = buildEvent({ body: validBody(), userInfo: USER_INFO });
+    const result = await baseHandler(event);
+
+    expect(result.statusCode).toBe(201);
+    expect(mockCreateAuroraBucket).toHaveBeenCalledWith({
+      tenantId: 'aurora-t-1',
+      bucketName: 'my-bucket',
+      versioning: undefined,
+      lock: undefined,
+      retention: undefined,
+    });
+  });
+
   it('returns 400 when region is unsupported', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
 

@@ -10,12 +10,13 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 
 import { S3_REGION, CreateBucketSchema, CreateAccessKeySchema } from '@filone/shared';
+import type { CreateBucketResponse, RetentionMode, RetentionDurationType } from '@filone/shared';
 import { apiRequest, createAccessKey } from '../lib/api.js';
-import type { CreateBucketResponse } from '@filone/shared';
 import { queryKeys } from '../lib/query-client.js';
 
 import { AccessKeyFormFields } from '../components/AccessKeyFormFields';
 import { Input } from '../components/Input';
+import { ObjectSettingsFields } from '../components/ObjectSettingsFields';
 import { SaveCredentialsModal } from '../components/SaveCredentialsModal';
 import { useToast } from '../components/Toast';
 import { useAccessKeyForm } from '../lib/use-access-key-form.js';
@@ -32,6 +33,14 @@ export function CreateBucketPage() {
   // Bucket fields
   const [name, setName] = useState('');
   const [region, setRegion] = useState(S3_REGION);
+
+  // Object settings
+  const [versioning, setVersioning] = useState(false);
+  const [lock, setLock] = useState(false);
+  const [retentionEnabled, setRetentionEnabled] = useState(false);
+  const [retentionMode, setRetentionMode] = useState<RetentionMode>('governance');
+  const [retentionDuration, setRetentionDuration] = useState(15);
+  const [retentionDurationType, setRetentionDurationType] = useState<RetentionDurationType>('d');
 
   // Key section visibility
   const [permissionsOpen, setPermissionsOpen] = useState(false);
@@ -94,7 +103,22 @@ export function CreateBucketPage() {
     try {
       const { bucket } = await apiRequest<CreateBucketResponse>('/buckets', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), region }),
+        body: JSON.stringify({
+          name: name.trim(),
+          region,
+          versioning,
+          lock,
+          ...(retentionEnabled
+            ? {
+                retention: {
+                  enabled: true,
+                  mode: retentionMode,
+                  duration: retentionDuration,
+                  durationType: retentionDurationType,
+                },
+              }
+            : {}),
+        }),
       });
       bucketName = bucket.name;
       void queryClient.invalidateQueries({ queryKey: queryKeys.buckets });
@@ -225,6 +249,22 @@ export function CreateBucketPage() {
               <p className="text-[11px] text-zinc-500">More regions coming soon.</p>
             </div>
 
+            {/* Object settings */}
+            <ObjectSettingsFields
+              versioning={versioning}
+              onVersioningChange={setVersioning}
+              lock={lock}
+              onLockChange={setLock}
+              retentionEnabled={retentionEnabled}
+              onRetentionEnabledChange={setRetentionEnabled}
+              retentionMode={retentionMode}
+              onRetentionModeChange={setRetentionMode}
+              retentionDuration={retentionDuration}
+              onRetentionDurationChange={setRetentionDuration}
+              retentionDurationType={retentionDurationType}
+              onRetentionDurationTypeChange={setRetentionDurationType}
+            />
+
             {/* API key section */}
             <div className="flex flex-col gap-3">
               <label className="text-xs font-medium text-zinc-900">API key</label>
@@ -281,22 +321,6 @@ export function CreateBucketPage() {
           </p>
 
           <div className="mt-4 flex flex-col gap-0.5">
-            {/* Object Lock */}
-            <div className="py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold text-zinc-900">Object Lock</span>
-                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-600">
-                  Always on
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-                All objects are immutable once written — protected against overwrites, deletion, and
-                ransomware. Compliance mode, 30-day retention.
-              </p>
-            </div>
-
-            <hr className="border-zinc-200/60" />
-
             {/* Encryption */}
             <div className="py-3">
               <div className="flex items-center gap-2">

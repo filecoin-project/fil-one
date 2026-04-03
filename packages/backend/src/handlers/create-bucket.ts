@@ -33,7 +33,7 @@ export async function baseHandler(
       .build();
   }
 
-  const { name, region } = request;
+  const { name, region, versioning, lock, retention } = request;
   if (!name || !region) {
     return new ResponseBuilder()
       .status(400)
@@ -81,7 +81,13 @@ export async function baseHandler(
   }
 
   try {
-    await createAuroraBucket({ tenantId: auroraTenantId, bucketName: name });
+    await createAuroraBucket({
+      tenantId: auroraTenantId,
+      bucketName: name,
+      versioning,
+      lock,
+      retention,
+    });
   } catch (err) {
     if (err instanceof BucketAlreadyExistsError) {
       return new ResponseBuilder()
