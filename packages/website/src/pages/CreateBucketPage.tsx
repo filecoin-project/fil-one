@@ -183,9 +183,9 @@ export function CreateBucketPage() {
   const canSubmit = name.trim().length > 0 && !nameError && !creating && accessKeyFormValid;
 
   return (
-    <div className="p-6">
+    <div className="mx-auto flex max-w-[860px] flex-col gap-6 py-12">
       {/* Back + header */}
-      <div className="mb-6 flex items-center gap-4">
+      <div className="flex items-center gap-4">
         <button
           type="button"
           onClick={() => navigate({ to: '/buckets' })}
