@@ -281,22 +281,6 @@ export function CreateBucketPage() {
           </p>
 
           <div className="mt-4 flex flex-col gap-0.5">
-            {/* Object Lock */}
-            <div className="py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold text-zinc-900">Object Lock</span>
-                <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-600">
-                  Always on
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-                All objects are immutable once written — protected against overwrites, deletion, and
-                ransomware. Compliance mode, 30-day retention.
-              </p>
-            </div>
-
-            <hr className="border-zinc-200/60" />
-
             {/* Encryption */}
             <div className="py-3">
               <div className="flex items-center gap-2">
