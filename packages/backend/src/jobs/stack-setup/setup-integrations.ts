@@ -406,12 +406,10 @@ export async function handler(event: SetupEvent): Promise<void> {
       StackId: event.StackId,
       RequestId: event.RequestId,
       LogicalResourceId: event.LogicalResourceId,
-      Data: stripeResult
-        ? {
-            webhookSecret: stripeResult?.webhookSecret ?? '',
-            webhookEndpointId: stripeResult?.webhookEndpointId ?? '',
-          }
-        : { webhookSecret: '', webhookEndpointId: '' },
+      Data: {
+        webhookSecret: stripeResult.webhookSecret ?? '',
+        webhookEndpointId: stripeResult.webhookEndpointId ?? '',
+      },
     });
   } catch (err: unknown) {
     console.error('Setup/teardown failed:', err);
