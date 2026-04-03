@@ -4,6 +4,7 @@ import { CalendarIcon, ChatCircleIcon, EnvelopeIcon } from '@phosphor-icons/reac
 
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import { TextArea } from '../components/TextArea';
 import { useToast } from '../components/Toast';
 import { submitSupportForm } from '../lib/hubspot.js';
 
@@ -42,6 +43,7 @@ export function SupportPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (formCategories.length === 0) {
       toast.error('Please select at least one category.');
       return;
@@ -198,13 +200,12 @@ export function SupportPage() {
             {/* Message */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-zinc-700">Message</label>
-              <textarea
+              <TextArea
                 value={formMessage}
-                onChange={(e) => setFormMessage(e.target.value)}
+                onChange={setFormMessage}
                 placeholder="How can we help?"
                 required
                 rows={4}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
 
