@@ -9,12 +9,7 @@ import {
   CheckIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
-import {
-  S3_REGION,
-  CreateBucketSchema,
-  CreateAccessKeySchema,
-  KEY_NAME_MAX_LENGTH,
-} from '@filone/shared';
+import { S3_REGION, CreateBucketSchema, CreateAccessKeySchema } from '@filone/shared';
 import { apiRequest, createAccessKey } from '../lib/api.js';
 import type { CreateBucketResponse } from '@filone/shared';
 import { queryKeys } from '../lib/query-client.js';
@@ -151,11 +146,14 @@ export function CreateBucketPage() {
     void navigate({ to: '/buckets/$bucketName', params: { bucketName: name.trim() } });
   }
 
+  const accessKeyNameValid = wantsApiKey
+    ? CreateAccessKeySchema.shape.keyName.safeParse(form.keyName.trim()).success
+    : true;
+
   const accessKeyFormValid =
     !wantsApiKey ||
-    (form.permissions.length > 0 &&
-      form.keyName.trim().length > 0 &&
-      form.keyName.trim().length <= KEY_NAME_MAX_LENGTH &&
+    (accessKeyNameValid &&
+      form.permissions.length > 0 &&
       (form.bucketScope !== 'specific' || form.selectedBuckets.length > 0));
 
   const canSubmit = name.trim().length > 0 && !nameError && !creating && accessKeyFormValid;
