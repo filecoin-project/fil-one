@@ -312,16 +312,17 @@ Use **test mode** first. Switch to live mode for production.
 
 Events registered: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.payment_succeeded`, `invoice.payment_failed`
 
-### 4. Secrets
-
-Stripe credentials are managed as SST secrets (`StripeSecretKey`, `StripePriceId`). See the "Set SST secrets" step above.
-
-The frontend needs the **publishable key** in its env:
+Run this command to delete all webhooks created by PR preview deployments (including hooks from active pull requests):
 
 ```bash
-# packages/website/.env.local
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxxxx
+stripe webhook_endpoints list --limit 100 | \
+  jq -r '.data[] | select(.metadata.stage // "" | startswith("pr-")) | .id' | \
+  xargs -I{} stripe webhook_endpoints delete {} --confirm
 ```
+
+### 4. Secrets
+
+Stripe credentials are managed as SST secrets (`StripeSecretKey`, `StripePriceId`, `StripePublishableKey`). See the "Set SST secrets" step above.
 
 ## SendGrid (Transactional Email)
 

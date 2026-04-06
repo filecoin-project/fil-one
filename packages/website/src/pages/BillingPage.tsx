@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   CheckIcon,
@@ -17,18 +18,14 @@ import { useToast } from '../components/Toast';
 import { formatBytes } from '@filone/shared';
 
 import { SubscriptionStatus, TB_BYTES, getUsageLimits } from '@filone/shared';
-import type {
-  BillingInfo,
-  UsageResponse,
-  CreateSetupIntentResponse,
-  ListInvoicesResponse,
-} from '@filone/shared';
+import type { CreateSetupIntentResponse } from '@filone/shared';
 
-import { apiRequest, getUsage, getInvoices } from '../lib/api.js';
+import { apiRequest, getUsage, getBilling, getInvoices } from '../lib/api.js';
 import { daysUntil, formatDate } from '../lib/time.js';
 import { ChoosePlanDialog } from '../components/billing/ChoosePlanDialog.js';
 import { AddPaymentDialog } from '../components/billing/AddPaymentDialog.js';
 import { ContactSalesDialog } from '../components/billing/ContactSalesDialog.js';
+import { queryKeys } from '../lib/query-client.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,67 +55,57 @@ function SkeletonCard({ height = 'h-36' }: { height?: string }) {
 
 export function BillingPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const [billing, setBilling] = useState<BillingInfo | null>(null);
-  const [usage, setUsage] = useState<UsageResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: billing,
+    isPending: billingPending,
+    isError: isBillingError,
+    error: billingError,
+  } = useQuery({
+    queryKey: queryKeys.billing,
+    queryFn: getBilling,
+  });
 
-  const [invoices, setInvoices] = useState<ListInvoicesResponse | null>(null);
-  const [invoicesLoading, setInvoicesLoading] = useState(false);
-  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const { data: usage, isPending: usagePending } = useQuery({
+    queryKey: queryKeys.usage,
+    queryFn: getUsage,
+  });
+
+  const {
+    data: invoices,
+    isPending: invoicesPending,
+    isError: isInvoicesError,
+  } = useQuery({
+    queryKey: queryKeys.invoices,
+    queryFn: getInvoices,
+    enabled: !!billing && billing.subscription.status !== SubscriptionStatus.Trialing,
+  });
+
+  const loading = billingPending || usagePending;
+  const error = isBillingError
+    ? (billingError?.message ?? 'Failed to load billing information')
+    : null;
+  const invoicesLoading =
+    invoicesPending && !!billing && billing.subscription.status !== SubscriptionStatus.Trialing;
+  const invoicesError = isInvoicesError ? 'Unable to load invoices. Please try again later.' : null;
 
   // Modal states
   const [planOpen, setPlanOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [clientSecret, setClientSecret] = useState('');
+  const [stripePublishableKey, setStripePublishableKey] = useState('');
   const [contactSalesOpen, setContactSalesOpen] = useState(false);
 
-  const fetchBilling = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [billingData, usageData] = await Promise.all([
-        apiRequest<BillingInfo>('/billing'),
-        getUsage(),
-      ]);
-      setBilling(billingData);
-      setUsage(usageData);
-      setError(null);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchBilling();
-  }, [fetchBilling]);
-
-  // Handle portal return
+  // Handle portal return — invalidate billing + usage so data refreshes
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('portal_return') === 'true') {
-      // Clear the URL param and refresh billing data
       window.history.replaceState({}, '', window.location.pathname);
-      void fetchBilling();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.billing });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
     }
-  }, [fetchBilling]);
-
-  // Fetch invoices once billing loads (skip for trial users)
-  useEffect(() => {
-    if (!billing || billing.subscription.status === SubscriptionStatus.Trialing) return;
-    setInvoicesLoading(true);
-    getInvoices()
-      .then((data) => {
-        setInvoices(data);
-        setInvoicesError(null);
-      })
-      .catch(() => {
-        setInvoicesError('Unable to load invoices. Please try again later.');
-      })
-      .finally(() => setInvoicesLoading(false));
-  }, [billing]);
+  }, [queryClient]);
 
   const isTrialing = billing?.subscription.status === SubscriptionStatus.Trialing;
   const isActive = billing?.subscription.status === SubscriptionStatus.Active;
@@ -158,11 +145,10 @@ export function BillingPage() {
   async function handleSelectPayAsYouGo() {
     setPlanOpen(false);
     try {
-      const { clientSecret: cs } = await apiRequest<CreateSetupIntentResponse>(
-        '/billing/setup-intent',
-        { method: 'POST' },
-      );
+      const { clientSecret: cs, stripePublishableKey: pk } =
+        await apiRequest<CreateSetupIntentResponse>('/billing/setup-intent', { method: 'POST' });
       setClientSecret(cs);
+      setStripePublishableKey(pk);
       setPaymentOpen(true);
     } catch (err) {
       toast.error((err as Error).message || 'Failed to set up payment. Please try again.');
@@ -178,7 +164,8 @@ export function BillingPage() {
     setPaymentOpen(false);
     setClientSecret('');
     toast.success('Subscription activated!');
-    void fetchBilling();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.billing });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.usage });
     window.dispatchEvent(new CustomEvent('billing:updated'));
   }
 
@@ -660,6 +647,7 @@ export function BillingPage() {
       <AddPaymentDialog
         open={paymentOpen}
         clientSecret={clientSecret}
+        stripePublishableKey={stripePublishableKey}
         onClose={() => setPaymentOpen(false)}
         onBack={handlePaymentBack}
         onSuccess={handlePaymentSuccess}

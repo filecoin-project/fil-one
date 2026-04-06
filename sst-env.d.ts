@@ -130,6 +130,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "GracePeriodEnforcer": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "GrafanaLokiAuth": {
       "type": "sst.sst.Secret"
       "value": string
@@ -171,6 +175,10 @@ declare module "sst" {
       "type": "sst.aws.Function"
     }
     "StripePriceId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "StripePublishableKey": {
       "type": "sst.sst.Secret"
       "value": string
     }
