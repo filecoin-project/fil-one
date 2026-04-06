@@ -1,5 +1,5 @@
 import type { Preview } from '@storybook/react-vite';
-import '../src/styles.css';
+// import '../src/styles.css';
 import { ToastProvider } from '../src/components/Toast';
 
 const preview: Preview = {
