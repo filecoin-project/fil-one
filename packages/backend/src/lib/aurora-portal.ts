@@ -57,7 +57,7 @@ export interface CreateAuroraBucketOptions {
   versioning?: boolean;
   lock?: boolean;
   retention?: {
-    enabled: boolean;
+    enabled: true;
     mode: 'governance' | 'compliance';
     duration: number;
     durationType: 'd' | 'y';

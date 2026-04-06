@@ -1,5 +1,6 @@
 import type { RetentionDurationType, RetentionMode } from '@filone/shared';
 import { RETENTION_MAX_DAYS } from '@filone/shared';
+import { clsx } from 'clsx';
 
 import { Switch } from './Switch';
 
@@ -84,7 +85,10 @@ export function ObjectSettingsFields({
         {/* Object Lock */}
         <div className="border-t border-zinc-200/60">
           <div
-            className={`flex items-center justify-between px-3.5 py-3 ${!versioning ? 'opacity-40' : ''}`}
+            className={clsx(
+              'flex items-center justify-between px-3.5 py-3',
+              !versioning && 'opacity-40',
+            )}
           >
             <div className="flex flex-col gap-0.5">
               <span className="text-[13px] font-medium text-zinc-900">Object Lock</span>
@@ -100,7 +104,7 @@ export function ObjectSettingsFields({
         {/* Retention */}
         <div className="border-t border-zinc-200/60">
           <div className="flex flex-col px-3.5 py-3">
-            <div className={`flex items-center justify-between ${!lock ? 'opacity-40' : ''}`}>
+            <div className={clsx('flex items-center justify-between', !lock && 'opacity-40')}>
               <div className="flex flex-col gap-0.5">
                 <span className="text-[13px] font-medium text-zinc-900">Retention</span>
                 <span className="text-[11px] leading-relaxed text-zinc-500">
@@ -127,11 +131,12 @@ export function ObjectSettingsFields({
                     {RETENTION_MODE_OPTIONS.map((option) => (
                       <label
                         key={option.value}
-                        className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 ${
+                        className={clsx(
+                          'flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5',
                           retentionMode === option.value
                             ? 'border-brand-600/40 bg-brand-50/50'
-                            : 'border-zinc-200 bg-zinc-50'
-                        }`}
+                            : 'border-zinc-200 bg-zinc-50',
+                        )}
                       >
                         <input
                           type="radio"

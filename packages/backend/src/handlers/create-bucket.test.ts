@@ -81,6 +81,9 @@ describe('create-bucket baseHandler', () => {
     expect(mockCreateAuroraBucket).toHaveBeenCalledWith({
       tenantId: 'aurora-t-1',
       bucketName: 'my-bucket',
+      versioning: false,
+      lock: false,
+      retention: undefined,
     });
   });
 
@@ -156,7 +159,7 @@ describe('create-bucket baseHandler', () => {
     });
   });
 
-  it('passes undefined for object settings when not provided', async () => {
+  it('passes false defaults for object settings when not provided', async () => {
     ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant('aurora-t-1'));
     mockCreateAuroraBucket.mockResolvedValue(undefined);
 
@@ -167,8 +170,8 @@ describe('create-bucket baseHandler', () => {
     expect(mockCreateAuroraBucket).toHaveBeenCalledWith({
       tenantId: 'aurora-t-1',
       bucketName: 'my-bucket',
-      versioning: undefined,
-      lock: undefined,
+      versioning: false,
+      lock: false,
       retention: undefined,
     });
   });
