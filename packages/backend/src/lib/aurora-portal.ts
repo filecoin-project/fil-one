@@ -9,7 +9,7 @@ import {
   getS3AccessKey,
   listS3AccessKeys,
 } from '@filone/aurora-portal-client';
-import type { AccessKeyPermission } from '@filone/shared';
+import type { AccessKeyPermission, RetentionDurationType, RetentionMode } from '@filone/shared';
 import { instrumentClient } from './aurora-api-metrics.js';
 
 const ssm = new SSMClient({});
@@ -58,9 +58,9 @@ export interface CreateAuroraBucketOptions {
   lock?: boolean;
   retention?: {
     enabled: boolean;
-    mode: 'governance' | 'compliance';
+    mode: RetentionMode;
     duration: number;
-    durationType: 'd' | 'y';
+    durationType: RetentionDurationType;
   };
 }
 

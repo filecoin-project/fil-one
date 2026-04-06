@@ -93,8 +93,36 @@ export function CreateBucketPage() {
   const wantsApiKey = permissionsOpen && form.keyName.trim().length > 0;
 
   async function handleSubmit() {
-    if (!validateName(name)) return;
     if (wantsApiKey && form.permissions.length === 0) return;
+
+    const bucketBody = {
+      name: name.trim(),
+      region,
+      versioning,
+      lock,
+      ...(retentionEnabled
+        ? {
+            retention: {
+              enabled: true as const,
+              mode: retentionMode,
+              duration: retentionDuration,
+              durationType: retentionDurationType,
+            },
+          }
+        : {}),
+    };
+
+    const parsed = CreateBucketSchema.safeParse(bucketBody);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0].message;
+      // Show name errors inline; everything else as a toast
+      if (parsed.error.issues[0].path[0] === 'name') {
+        setNameError(msg);
+      } else {
+        toast.error(msg);
+      }
+      return;
+    }
 
     setCreating(true);
 
@@ -103,22 +131,7 @@ export function CreateBucketPage() {
     try {
       const { bucket } = await apiRequest<CreateBucketResponse>('/buckets', {
         method: 'POST',
-        body: JSON.stringify({
-          name: name.trim(),
-          region,
-          versioning,
-          lock,
-          ...(retentionEnabled
-            ? {
-                retention: {
-                  enabled: true,
-                  mode: retentionMode,
-                  duration: retentionDuration,
-                  durationType: retentionDurationType,
-                },
-              }
-            : {}),
-        }),
+        body: JSON.stringify(parsed.data),
       });
       bucketName = bucket.name;
       void queryClient.invalidateQueries({ queryKey: queryKeys.buckets });
