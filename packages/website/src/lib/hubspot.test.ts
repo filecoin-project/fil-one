@@ -52,8 +52,8 @@ describe('submitSupportForm', () => {
           { objectTypeId: '0-1', name: 'lastname', value: 'Doe' },
           { objectTypeId: '0-1', name: 'company', value: 'Acme Inc' },
           { objectTypeId: '0-1', name: 'email', value: 'jane@acme.com' },
-          { objectTypeId: '0-1', name: 'hs_ticket_category', value: 'PRODUCT_ISSUE' },
-          { objectTypeId: '0-1', name: 'content', value: 'Help needed' },
+          { objectTypeId: '0-5', name: 'hs_ticket_category', value: 'PRODUCT_ISSUE' },
+          { objectTypeId: '0-5', name: 'content', value: 'Help needed' },
         ],
         context: {
           pageUri: 'https://app.fil.one/support',
