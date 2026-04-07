@@ -180,7 +180,7 @@ jobs:
           echo "::error::sst-env.d.ts files are out of date. Please run 'sst deploy' locally and commit the updated sst-env.d.ts files."
           exit 1
 
-  integration-tests:
+  tests:
     needs: [deploy-preview]
     if: needs.deploy-preview.result == 'success'
     runs-on: ubuntu-latest
@@ -195,6 +195,7 @@ jobs:
       AWS_REGION: us-east-2
     outputs:
       integration-result: ${{ steps.integration-tests.outcome }}
+      e2e-result: ${{ steps.e2e-tests.outcome }}
 
     steps:
       - uses: actions/checkout@v5
@@ -286,6 +287,12 @@ jobs:
           BASE_URL: ${{ needs.deploy-preview.outputs.url }}
         run: pnpm test:integration
 
+      - name: Run Playwright tests
+        id: e2e-tests
+        run: pnpm test:e2e
+        env:
+          BASE_URL: ${{ needs.deploy-preview.outputs.url }}
+
       - name: Stop Stripe CLI forwarding
         if: always() && steps.stripe-listen.outputs.pid != ''
         run: kill ${{ steps.stripe-listen.outputs.pid }} 2>/dev/null || true
@@ -304,7 +311,7 @@ jobs:
   comment:
     name: Add Preview Environment Comment on PR
     if: always() && github.event_name == 'pull_request' && needs.deploy-preview.result != 'skipped'
-    needs: [deploy-preview, integration-tests]
+    needs: [deploy-preview, tests]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -337,7 +344,8 @@ jobs:
 
             | Suite | Status |
             |-------|--------|
-            | **Integration Tests** | ${{ needs.integration-tests.outputs.integration-result == 'success' && '✅ Passed' || (needs.integration-tests.outputs.integration-result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |
+            | **Integration Tests** | ${{ needs.tests.outputs.integration-result == 'success' && '✅ Passed' || (needs.tests.outputs.integration-result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |
+            | **E2E Tests** | ${{ needs.tests.outputs.e2e-result == 'success' && '✅ Passed' || (needs.tests.outputs.e2e-result == 'skipped' && '⏭️ Skipped' || '❌ Failed') }} |
 
             **Workflow** | [View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
