@@ -39,21 +39,44 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")
+          PR_JSON=$(gh pr view "${{ github.event.issue.number }}" --repo "${{ github.repository }}" --json state,headRefOid,baseRefName,headRepository)
           STATE=$(echo "$PR_JSON" | jq -r '.state')
-          if [ "$STATE" != "open" ]; then
+          if [ "$STATE" != "OPEN" ]; then
             echo "::error::PR is not open (state: $STATE)"
             exit 1
           fi
-          echo "head-sha=$(echo "$PR_JSON" | jq -r '.head.sha')" >> "$GITHUB_OUTPUT"
-          echo "base-ref=$(echo "$PR_JSON" | jq -r '.base.ref')" >> "$GITHUB_OUTPUT"
-          echo "head-repo=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')" >> "$GITHUB_OUTPUT"
+          echo "head-sha=$(echo "$PR_JSON" | jq -r '.headRefOid')" >> "$GITHUB_OUTPUT"
+          echo "base-ref=$(echo "$PR_JSON" | jq -r '.baseRefName')" >> "$GITHUB_OUTPUT"
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.headRepository.owner.login + "/" + .headRepository.name')
+          echo "head-repo=$HEAD_REPO" >> "$GITHUB_OUTPUT"
 
-  deploy-preview:
+  pre-deploy:
     needs: [guard]
     if: >-
       needs.guard.outputs.base-ref != 'production' &&
       needs.guard.outputs.head-repo == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    outputs:
+      comment-id: ${{ steps.comment.outputs.comment-id }}
+    steps:
+      - name: Post deployment started comment
+        id: comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            ## 🚀 Preview Environment
+
+            | | |
+            |---|---|
+            | **Latest commit** | `${{ needs.guard.outputs.head-sha }}` |
+            | **Status** | ⏳ Deployment in progress... |
+            | **Logs** | [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+  deploy-preview:
+    needs: [guard, pre-deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
@@ -157,25 +180,17 @@ jobs:
           exit 1
 
   comment:
-    name: Add Preview Environment Comment on PR
-    if: needs.deploy-preview.outputs.url != ''
-    needs: [deploy-preview]
+    name: Update Preview Environment Comment
+    if: always() && needs.pre-deploy.outputs.comment-id
+    needs: [pre-deploy, deploy-preview, e2e-tests, integration-tests]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-      - name: Find existing comment
-        uses: peter-evans/find-comment@v3
-        id: find_comment
-        with:
-          issue-number: ${{ needs.deploy-preview.outputs.pr-number }}
-          body-includes: '🚀 Preview Environment'
-
-      - name: Create or update comment
+      - name: Update comment with result
         uses: peter-evans/create-or-update-comment@v4
         with:
-          issue-number: ${{ needs.deploy-preview.outputs.pr-number }}
-          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          comment-id: ${{ needs.pre-deploy.outputs.comment-id }}
           edit-mode: replace
           body: |
             ## 🚀 Preview Environment
@@ -183,8 +198,11 @@ jobs:
             | | |
             |---|---|
             | **Latest commit** | `${{ needs.deploy-preview.outputs.head-sha }}` |
-            | **Status** | ✅ Deploy successful |
-            | **Preview URL** | [${{ needs.deploy-preview.outputs.url }}](${{ needs.deploy-preview.outputs.url }}) |
+            | **Status** | ${{ needs.deploy-preview.result == 'success' && '✅ Deploy successful' || '❌ Deploy failed' }} |
+            | **Preview URL** | ${{ needs.deploy-preview.result == 'success' && format('[{0}]({0})', needs.deploy-preview.outputs.url) || 'N/A' }} |
+            | **E2E Tests** | ${{ needs.e2e-tests.result == 'success' && '✅ Passed' || needs.e2e-tests.result == 'failure' && '❌ Failed' || '⏭️ Skipped' }} |
+            | **Integration Tests** | ${{ needs.integration-tests.result == 'success' && '✅ Passed' || needs.integration-tests.result == 'failure' && '❌ Failed' || '⏭️ Skipped' }} |
+            | **Logs** | [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
 
   e2e-tests:
     needs: [deploy-preview]
@@ -265,7 +283,7 @@ jobs:
         run: pnpm test:integration
 
   dispatch-telemetry:
-    needs: [guard, deploy-preview, comment, e2e-tests, integration-tests]
+    needs: [guard, pre-deploy, deploy-preview, comment, e2e-tests, integration-tests]
     if: always()
     runs-on: ubuntu-latest
     permissions:
