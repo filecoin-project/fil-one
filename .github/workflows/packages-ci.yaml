@@ -53,10 +53,13 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
-          body-includes: Preview deployments are available
+          body-includes: Preview deployment
 
-      - name: Post or update comment
-        if: steps.find.outputs.comment-id == ''
+      - name: Post deploy hint
+        if: >-
+          steps.find.outputs.comment-id == '' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.base.ref != 'production'
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -64,6 +67,19 @@ jobs:
             **Preview deployments are available** for this PR.
 
             Comment `/deploy` to deploy a preview environment.
+
+      - name: Post deploy unavailable hint
+        if: >-
+          steps.find.outputs.comment-id == '' &&
+          (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.base.ref == 'production')
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            **Preview deployments are not available** for this PR.
+
+            ${{ github.event.pull_request.head.repo.full_name != github.repository && 'Preview deployments cannot be created from forks.' || 'Preview deployments cannot be created for PRs targeting production.' }}
 
   deploy:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
