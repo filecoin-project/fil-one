@@ -62,20 +62,20 @@ jobs:
           payload: |
             {
               "channel": "filone-alerts",
-              "text": "E2E tests against staging failed. Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "text": "E2E test run failed (${{ env.BASE_URL }}). Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "blocks": [
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": ":warning: *E2E tests against staging failed* · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Details>"
+                    "text": ":warning: *E2E test run failed* · <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Details>"
                   }
                 },
                 {
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "URL tested: `${{ env.BASE_URL }}`"
+                    "text": "Deployment tested: `${{ env.BASE_URL }}`"
                   }
                 }
               ]
