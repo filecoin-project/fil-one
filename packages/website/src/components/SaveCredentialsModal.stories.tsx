@@ -26,8 +26,8 @@ export const Default: Story = {
           onClose={() => setOpen(false)}
           onDone={() => setOpen(false)}
           credentials={{
-            accessKeyId: 'AKIA1234567890EXAMPLE',
-            secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            accessKeyId: 'ACCESS_KEY_ID_EXAMPLE',
+            secretAccessKey: 'SECRET_ACCESS_KEY_EXAMPLE',
           }}
         />
       </>
