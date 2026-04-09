@@ -13,22 +13,22 @@ type Story = StoryObj<typeof CopyableField>;
 export const Default: Story = {
   args: {
     label: 'Access Key',
-    value: 'AKIA1234567890EXAMPLE',
+    value: 'demo-access-key-12345',
   },
 };
 
 export const LongValue: Story = {
   args: {
     label: 'Secret Key',
-    value: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    value: 'demo-secret-key-placeholder-67890',
   },
 };
 
 export const AllVariants: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-3">
-      <CopyableField label="Access Key" value="AKIA1234567890EXAMPLE" />
-      <CopyableField label="Secret Key" value="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" />
+      <CopyableField label="Access Key" value="demo-access-key-12345" />
+      <CopyableField label="Secret Key" value="demo-secret-key-placeholder-67890" />
       <CopyableField label="Endpoint" value="https://s3.filone.io" />
     </div>
   ),
