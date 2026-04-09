@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils.js';
-import { ProgressBar } from '../ProgressBar/index.js';
+import { ProgressBar } from '../ProgressBar.js';
 
 export type StatCardProps = {
   label: string;
