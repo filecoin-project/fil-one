@@ -40,6 +40,29 @@ jobs:
       - name: Test
         run: pnpm test
 
+  check-storybook:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test Stories
+        run: pnpm test:storybook
+
   deploy-hint:
     if: github.event_name == 'pull_request'
     needs: [check-packages]
@@ -154,7 +177,7 @@ jobs:
             }
 
   dispatch-telemetry:
-    needs: [check-packages, deploy]
+    needs: [check-packages, check-storybook, deploy]
     if: >-
       always() && (
         github.event_name == 'push' ||
