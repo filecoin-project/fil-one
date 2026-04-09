@@ -33,16 +33,21 @@ const meta: Meta<typeof AccessKeyFormFields> = {
 export default meta;
 type Story = StoryObj<typeof AccessKeyFormFields>;
 
-function AccessKeyFormFieldsWrapper({ pinnedBucket }: { pinnedBucket?: string }) {
-  const [queryClient] = useState(createSeededQueryClient);
-
+function AccessKeyFormFieldsStoryContent({ pinnedBucket }: { pinnedBucket?: string }) {
   const form = useAccessKeyForm({
     defaultBucket: pinnedBucket,
     onSuccess: () => {},
   });
+
+  return <AccessKeyFormFields form={form} pinnedBucket={pinnedBucket} />;
+}
+
+function AccessKeyFormFieldsWrapper({ pinnedBucket }: { pinnedBucket?: string }) {
+  const [queryClient] = useState(createSeededQueryClient);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AccessKeyFormFields form={form} pinnedBucket={pinnedBucket} />
+      <AccessKeyFormFieldsStoryContent pinnedBucket={pinnedBucket} />
     </QueryClientProvider>
   );
 }
