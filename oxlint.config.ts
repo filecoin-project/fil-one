@@ -42,7 +42,7 @@ export default defineConfig({
       },
     },
     {
-      files: ['**/*.test.ts', '**/*.test.tsx'],
+      files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
       rules: {
         'max-lines': 'off',
         'max-lines-per-function': 'off',
