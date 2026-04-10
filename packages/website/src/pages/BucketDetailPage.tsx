@@ -36,6 +36,8 @@ import { apiRequest } from '../lib/api.js';
 import { formatDate, formatDateTime } from '../lib/time.js';
 import { useObjectActions } from '../lib/use-object-actions.js';
 import { queryKeys } from '../lib/query-client.js';
+import { batchPresign } from '../lib/use-presign.js';
+import { parseListObjectsResponse, executePresignedUrl } from '../lib/aurora-s3.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,7 +136,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
   });
   const bucket = bucketData?.bucket ?? null;
 
-  // Objects
+  // Objects (via presigned URL)
   const {
     data: objectsData,
     isPending: objectsLoading,
@@ -142,8 +144,11 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
     error: objectsError,
   } = useQuery({
     queryKey: queryKeys.objects(bucketName),
-    queryFn: () =>
-      apiRequest<ListObjectsResponse>(`/buckets/${encodeURIComponent(bucketName)}/objects`),
+    queryFn: async (): Promise<ListObjectsResponse> => {
+      const { items } = await batchPresign([{ op: 'listObjects', bucket: bucketName }]);
+      const response = await executePresignedUrl(items[0].url, items[0].method);
+      return parseListObjectsResponse(await response.text());
+    },
   });
   const objects = objectsData?.objects ?? [];
 

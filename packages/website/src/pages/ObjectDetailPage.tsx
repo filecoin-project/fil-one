@@ -20,10 +20,15 @@ import { formatBytes, getS3Endpoint, S3_REGION } from '@filone/shared';
 
 import type { ObjectMetadataResponse } from '@filone/shared';
 import { FILONE_STAGE } from '../env';
-import { apiRequest } from '../lib/api.js';
 import { formatDateTime } from '../lib/time.js';
 import { useObjectActions } from '../lib/use-object-actions.js';
 import { queryKeys } from '../lib/query-client.js';
+import { batchPresign } from '../lib/use-presign.js';
+import {
+  parseHeadObjectResponse,
+  parseGetObjectRetentionResponse,
+  executePresignedUrl,
+} from '../lib/aurora-s3.js';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -44,10 +49,40 @@ export function ObjectDetailPage({ bucketName, objectKey }: ObjectDetailPageProp
     error,
   } = useQuery({
     queryKey: queryKeys.objectMetadata(bucketName, objectKey),
-    queryFn: () =>
-      apiRequest<ObjectMetadataResponse>(
-        `/buckets/${encodeURIComponent(bucketName)}/objects/metadata?key=${encodeURIComponent(objectKey)}`,
-      ),
+    queryFn: async (): Promise<ObjectMetadataResponse> => {
+      const { items } = await batchPresign([
+        { op: 'headObject', bucket: bucketName, key: objectKey, includeFilMeta: true },
+        { op: 'getObjectRetention', bucket: bucketName, key: objectKey },
+      ]);
+
+      const [headResponse, retentionResult] = await Promise.allSettled([
+        executePresignedUrl(items[0].url, items[0].method),
+        fetch(items[1].url, { method: items[1].method }),
+      ]);
+
+      if (headResponse.status === 'rejected') {
+        throw headResponse.reason;
+      }
+
+      const head = parseHeadObjectResponse(headResponse.value, objectKey);
+
+      let retention = undefined;
+      if (retentionResult.status === 'fulfilled' && retentionResult.value.ok) {
+        const xml = await retentionResult.value.text();
+        retention = parseGetObjectRetentionResponse(xml) ?? undefined;
+      }
+
+      return {
+        key: head.key,
+        sizeBytes: head.sizeBytes,
+        lastModified: head.lastModified,
+        ...(head.etag && { etag: head.etag }),
+        ...(head.contentType && { contentType: head.contentType }),
+        metadata: head.metadata,
+        ...(head.filCid && { filCid: head.filCid }),
+        ...(retention && { retention }),
+      };
+    },
   });
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
