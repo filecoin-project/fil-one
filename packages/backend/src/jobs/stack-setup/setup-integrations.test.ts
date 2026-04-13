@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   SSMClient,
@@ -914,6 +914,10 @@ describe('setup-integrations', () => {
   // ── AUTH0_MGMT_DOMAIN ───────────────────────────────────────────────
 
   describe('AUTH0_MGMT_DOMAIN resolution', () => {
+    afterEach(() => {
+      delete process.env.AUTH0_MGMT_DOMAIN;
+    });
+
     it('sends Auth0 management API calls to AUTH0_MGMT_DOMAIN instead of AUTH0_DOMAIN', async () => {
       process.env.AUTH0_MGMT_DOMAIN = 'canonical.us.auth0.com';
 
@@ -934,13 +938,9 @@ describe('setup-integrations', () => {
         expect(String(url)).toContain('canonical.us.auth0.com');
         expect(String(url)).not.toContain('test.us.auth0.com');
       }
-
-      delete process.env.AUTH0_MGMT_DOMAIN;
     });
 
     it('falls back to AUTH0_DOMAIN when AUTH0_MGMT_DOMAIN is not set', async () => {
-      delete process.env.AUTH0_MGMT_DOMAIN;
-
       ssmMock.on(GetParameterCommand).rejects({ name: 'ParameterNotFound' });
       ssmMock.on(PutParameterCommand).resolves({});
       mockStripeWebhookEndpoints.list.mockResolvedValue({ data: [] });
