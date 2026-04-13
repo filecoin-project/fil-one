@@ -54,9 +54,10 @@ tags = ["sendgrid", "api-key"]
 description = "Global allowlist"
 
 paths = [
+  # Auto-generated API clients — not under our control
+  '''packages/aurora-backoffice-client/src/generated''',
+  '''packages/aurora-portal-client/src/generated''',
   # External dependencies — not under our control
-  '''packages/aurora-backoffice-client/''',
-  '''packages/aurora-portal-client/''',
   '''contracts/lib/''',
   '''node_modules/''',
   '''.sst/''',
