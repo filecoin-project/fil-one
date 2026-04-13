@@ -25,6 +25,7 @@ UNKNOWN bajtos (not a PR stage — may be a dev stage)
 ```
 
 Sources:
+
 - Regional resources: Resource Groups Tagging API (`sst:stage` tag)
 - IAM roles: direct scan of roles matching known SST name prefixes (`filone-*`, `hyperspace-*`, `pr-*`, etc.) and their `sst:stage` tags
 
@@ -78,17 +79,17 @@ aws iam list-roles --query 'length(Roles)' --output text
 
 ### Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REGION` | `us-east-2` | AWS region for regional resources |
-| `REPO` | auto-detected from git remote | GitHub `owner/repo` for PR state lookups |
+| Variable | Default                       | Description                              |
+| -------- | ----------------------------- | ---------------------------------------- |
+| `REGION` | `us-east-2`                   | AWS region for regional resources        |
+| `REPO`   | auto-detected from git remote | GitHub `owner/repo` for PR state lookups |
 
 ## Other Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `tail-logs.sh` | Tail CloudWatch logs for a Lambda function |
+| Script                      | Purpose                                      |
+| --------------------------- | -------------------------------------------- |
+| `tail-logs.sh`              | Tail CloudWatch logs for a Lambda function   |
 | `tail-tenant-setup-logs.sh` | Tail logs for the Aurora tenant setup Lambda |
-| `reset-db.ts` | Reset the Aurora database for a stage |
-| `aurora-s3-env.ts` | Print Aurora S3 environment variables |
-| `aurora-demo.ts` | Demo script for Aurora S3 operations |
+| `reset-db.ts`               | Reset the Aurora database for a stage        |
+| `aurora-s3-env.ts`          | Print Aurora S3 environment variables        |
+| `aurora-demo.ts`            | Demo script for Aurora S3 operations         |
