@@ -3,12 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '../src/styles.css';
 import { ToastProvider } from '../src/components/Toast';
 
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
+
 const preview: Preview = {
   decorators: [
     (Story) => {
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
-      });
       return (
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
