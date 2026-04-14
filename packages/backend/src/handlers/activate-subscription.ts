@@ -20,7 +20,6 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 const dynamo = getDynamoClient();
 
-// eslint-disable-next-line max-lines-per-function
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { userId, orgId } = getUserInfo(event);
   const tableName = Resource.BillingTable.name;
@@ -84,31 +83,67 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   }
 
   // 3. Create or update subscription
-  let subscription;
+  const subscription = await createOrUpdateSubscription(
+    stripe,
+    record,
+    paymentMethodId,
+    secrets,
+    userId,
+  );
+
+  // 4. Persist billing record and unlock Aurora tenant
+  await saveBillingRecord(tableName, userId, subscription, paymentMethodId);
+  await unlockAuroraTenant(orgId);
+
+  const response: ActivateSubscriptionResponse = {
+    subscription: {
+      planId: PlanId.PayAsYouGo,
+      status:
+        subscription.status === 'active' ? SubscriptionStatus.Active : SubscriptionStatus.Trialing,
+      currentPeriodEnd: new Date(
+        subscription.items.data[0].current_period_end * 1000,
+      ).toISOString(),
+    },
+  };
+
+  return new ResponseBuilder().status(200).body(response).build();
+}
+
+async function createOrUpdateSubscription(
+  stripe: ReturnType<typeof getStripeClient>,
+  record: Record<string, unknown>,
+  paymentMethodId: string,
+  secrets: ReturnType<typeof getBillingSecrets>,
+  userId: string,
+) {
   if (record.subscriptionId) {
     // Step 1: Attach payment method first
     await stripe.subscriptions.update(record.subscriptionId as string, {
       default_payment_method: paymentMethodId,
     });
     // Step 2: End trial — payment method already attached, so cancel behavior won't fire
-    subscription = await stripe.subscriptions.update(record.subscriptionId as string, {
+    return stripe.subscriptions.update(record.subscriptionId as string, {
       trial_end: 'now',
       expand: ['latest_invoice.payment_intent', 'default_payment_method'],
     });
-  } else {
-    console.warn('[activate-subscription] No existing subscription found for user, creating new', {
-      userId,
-    });
-    // No subscription yet (legacy path) — create new
-    subscription = await stripe.subscriptions.create({
-      customer: stripeCustomerId,
-      items: [{ price: secrets.STRIPE_PRICE_ID }],
-      default_payment_method: paymentMethodId,
-      expand: ['latest_invoice.payment_intent', 'default_payment_method'],
-    });
   }
+  console.warn('[activate-subscription] No existing subscription found for user, creating new', {
+    userId,
+  });
+  return stripe.subscriptions.create({
+    customer: record.stripeCustomerId as string,
+    items: [{ price: secrets.STRIPE_PRICE_ID }],
+    default_payment_method: paymentMethodId,
+    expand: ['latest_invoice.payment_intent', 'default_payment_method'],
+  });
+}
 
-  // 4. Get payment method details
+async function saveBillingRecord(
+  tableName: string,
+  userId: string,
+  subscription: Awaited<ReturnType<typeof createOrUpdateSubscription>>,
+  paymentMethodId: string,
+) {
   const pm = subscription.default_payment_method;
   let paymentMethodLast4 = '';
   let paymentMethodBrand = '';
@@ -122,7 +157,6 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     paymentMethodExpYear = pm.card.exp_year;
   }
 
-  // 5. Update billing table
   await dynamo.send(
     new UpdateItemCommand({
       TableName: tableName,
@@ -147,8 +181,9 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       },
     }),
   );
+}
 
-  // Unlock Aurora tenant now that user has upgraded to paid
+async function unlockAuroraTenant(orgId: string) {
   const { Item: orgProfile } = await dynamo.send(
     new GetItemCommand({
       TableName: Resource.UserInfoTable.name,
@@ -174,19 +209,6 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     });
     throw error;
   }
-
-  const response: ActivateSubscriptionResponse = {
-    subscription: {
-      planId: PlanId.PayAsYouGo,
-      status:
-        subscription.status === 'active' ? SubscriptionStatus.Active : SubscriptionStatus.Trialing,
-      currentPeriodEnd: new Date(
-        subscription.items.data[0].current_period_end * 1000,
-      ).toISOString(),
-    },
-  };
-
-  return new ResponseBuilder().status(200).body(response).build();
 }
 
 export const handler = middy(baseHandler)
