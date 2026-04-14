@@ -62,7 +62,7 @@ updates:
       timezone: America/New_York
     open-pull-requests-limit: 5
     cooldown:
-      default-days: 3 
+      default-days: 3
     labels:
       - dependencies
       - ci
