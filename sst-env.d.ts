@@ -38,6 +38,14 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "Auth0LogStream": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "Auth0LogStreamToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Auth0MgmtClientId": {
       "type": "sst.sst.Secret"
       "value": string
