@@ -9,7 +9,6 @@ describe('EmptyStateCard', () => {
       <EmptyStateCard
         icon={DatabaseIcon}
         title="No items"
-        titleTag="h2"
         description="Nothing to show"
       />,
     );
@@ -19,7 +18,7 @@ describe('EmptyStateCard', () => {
 
   it('renders children', () => {
     render(
-      <EmptyStateCard icon={DatabaseIcon} title="Empty" titleTag="h2" description="desc">
+      <EmptyStateCard icon={DatabaseIcon} title="Empty" description="desc">
         <button>Action</button>
       </EmptyStateCard>,
     );
