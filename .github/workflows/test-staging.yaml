@@ -3,6 +3,10 @@ name: 'Tests [staging]'
 on:
   workflow_call:
 
+concurrency:
+  group: staging-tests
+  cancel-in-progress: false
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
