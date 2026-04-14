@@ -73,6 +73,7 @@ export function SupportPage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-semibold text-zinc-900 mb-6">Talk to an Expert</h1>
+      <p className="text-sm text-zinc-600 mb-6">We typically respond within 1 business day.</p>
 
       <div className="max-w-xl">
         <div className="rounded-lg border border-zinc-200 bg-white p-6">
