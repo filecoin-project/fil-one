@@ -10,6 +10,8 @@ updates:
       time: '09:00'
       timezone: America/New_York
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 3
     labels:
       - dependencies
     groups:
@@ -49,19 +51,18 @@ updates:
       middy:
         patterns:
           - '@middy/*'
-    ignore:
-      # Auto-generated clients — regenerated from Swagger specs, not manually updated
-      - dependency-name: '@hey-api/*'
 
   # ── GitHub Actions ──
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-      day: monday
+      day: wednesday
       time: '09:00'
       timezone: America/New_York
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3 
     labels:
       - dependencies
       - ci
@@ -76,6 +77,8 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
     labels:
       - dependencies
       - submodule
