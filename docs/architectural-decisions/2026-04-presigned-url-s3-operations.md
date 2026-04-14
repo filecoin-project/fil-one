@@ -37,7 +37,7 @@ Without true short-lived credentials, this approach sends the tenant's long-live
 
 A single `POST /api/presign` Lambda accepts an array of S3 operation descriptors and returns presigned URLs for each. The frontend executes the presigned URLs directly against Aurora S3 and parses the responses. Credentials never leave the backend.
 
-Each presigned URL is scoped to exactly one operation, one bucket/key, and expires in 5 minutes. A leaked URL grants access to a single read or delete — not the entire tenant's S3 namespace. Batching (up to 10 operations per request) reduces round-trips for pages that need multiple S3 calls (e.g., object detail fetches HeadObject and GetObjectRetention in parallel).
+Each presigned URL is scoped to exactly one operation, one bucket/key, and expires in 5 minutes. A leaked URL grants access to a single read or delete — not the entire tenant's S3 namespace. Batching (up to 10 operations per request) reduces round-trips for pages that need multiple S3 calls (e.g., object detail batches HeadObject and, when the bucket has Object Lock enabled, GetObjectRetention in a single presign request).
 
 The main cost is that the frontend must parse S3 XML responses (ListObjects, GetObjectRetention) and HTTP headers (HeadObject). This is handled by a small frontend utility using the browser-native `DOMParser`.
 
@@ -61,7 +61,7 @@ Use **batch presigned URLs** via a single `POST /api/presign` endpoint.
 | Operation    | Reason                                                                                   |
 | ------------ | ---------------------------------------------------------------------------------------- |
 | ListBuckets  | Aurora Portal REST API (API key auth, not S3 Sig V4)                                     |
-| GetBucket    | Aurora Portal REST API (returns rich metadata: versioning, encryption, retention config) |
+| GetBucket    | Aurora Portal REST API (returns rich metadata including `objectLockEnabled`, used by the frontend to conditionally include GetObjectRetention in presign batches) |
 | CreateBucket | Aurora Portal API mutation                                                               |
 | DeleteBucket | Aurora Portal API; must verify bucket is empty server-side                               |
 

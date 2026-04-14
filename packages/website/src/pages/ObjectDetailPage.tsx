@@ -18,11 +18,11 @@ import { CopyableField } from '../components/CopyableField';
 import { Spinner } from '../components/Spinner';
 import { formatBytes, getS3Endpoint, S3_REGION } from '@filone/shared';
 
-import type { ObjectMetadataResponse } from '@filone/shared';
+import type { ObjectMetadataResponse, GetBucketResponse } from '@filone/shared';
 import { FILONE_STAGE } from '../env';
 import { formatDateTime } from '../lib/time.js';
 import { useObjectActions } from '../lib/use-object-actions.js';
-import { queryKeys } from '../lib/query-client.js';
+import { queryKeys, queryClient } from '../lib/query-client.js';
 import { batchPresign } from '../lib/use-presign.js';
 import {
   parseHeadObjectResponse,
@@ -50,26 +50,29 @@ export function ObjectDetailPage({ bucketName, objectKey }: ObjectDetailPageProp
   } = useQuery({
     queryKey: queryKeys.objectMetadata(bucketName, objectKey),
     queryFn: async (): Promise<ObjectMetadataResponse> => {
-      const { items } = await batchPresign([
-        { op: 'headObject', bucket: bucketName, key: objectKey, includeFilMeta: true },
-        { op: 'getObjectRetention', bucket: bucketName, key: objectKey },
-      ]);
+      const cachedBucket = queryClient.getQueryData<GetBucketResponse>(
+        queryKeys.bucket(bucketName),
+      );
+      const hasObjectLock = cachedBucket?.bucket.objectLockEnabled ?? false;
 
-      const [headResponse, retentionResult] = await Promise.allSettled([
-        executePresignedUrl(items[0].url, items[0].method),
-        fetch(items[1].url, { method: items[1].method }),
-      ]);
+      const ops = [
+        { op: 'headObject' as const, bucket: bucketName, key: objectKey, includeFilMeta: true },
+        ...(hasObjectLock
+          ? [{ op: 'getObjectRetention' as const, bucket: bucketName, key: objectKey }]
+          : []),
+      ];
+      const { items } = await batchPresign(ops);
 
-      if (headResponse.status === 'rejected') {
-        throw headResponse.reason;
-      }
-
-      const head = parseHeadObjectResponse(headResponse.value, objectKey);
+      const headResponse = await executePresignedUrl(items[0].url, items[0].method);
+      const head = parseHeadObjectResponse(headResponse, objectKey);
 
       let retention = undefined;
-      if (retentionResult.status === 'fulfilled' && retentionResult.value.ok) {
-        const xml = await retentionResult.value.text();
-        retention = parseGetObjectRetentionResponse(xml) ?? undefined;
+      if (hasObjectLock && items[1]) {
+        const retentionResult = await fetch(items[1].url, { method: items[1].method });
+        if (retentionResult.ok) {
+          const xml = await retentionResult.text();
+          retention = parseGetObjectRetentionResponse(xml) ?? undefined;
+        }
       }
 
       return {
