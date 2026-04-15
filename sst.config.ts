@@ -131,6 +131,7 @@ export default $config({
     }
 
     const api = new sst.aws.ApiGatewayV2('Api', {
+      accessLog: { retention: '1 week' },
       cors: {
         allowOrigins: allowedOrigins,
         allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -385,6 +386,15 @@ export default $config({
     ];
 
     const { firehose, cwToFirehoseRole } = setupFirehoseLogPipeline(grafanaLokiAuth);
+
+    // Forward API Gateway access logs to Grafana Loki via the same Firehose
+    new aws.cloudwatch.LogSubscriptionFilter('ApiAccessLogFwd', {
+      logGroup: api.nodes.logGroup.name,
+      filterPattern: '',
+      destinationArn: firehose.arn,
+      roleArn: cwToFirehoseRole.arn,
+    });
+
     const createFn = (fnName: string, args: Omit<sst.aws.FunctionArgs, 'name'>) =>
       createFunction(fnName, args, { firehose, cwToFirehoseRole });
 
