@@ -56,10 +56,8 @@ export default $config({
       $app.stage === 'staging' || $app.stage === 'production'
         ? new sst.Secret('SendGridApiKey')
         : undefined;
-    // TODO: restore staging gate after personal testing (remove joemuoio)
     const auth0LogStreamToken =
-      // $app.stage === 'staging' || $app.stage === 'production'
-      $app.stage === 'joemuoio' || $app.stage === 'production'
+      $app.stage === 'staging' || $app.stage === 'production'
         ? new sst.Secret('Auth0LogStreamToken')
         : undefined;
     const AWS_CACHING_DISABLED_POLICY = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad';
