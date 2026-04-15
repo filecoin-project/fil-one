@@ -17,6 +17,8 @@ test('paid user logs out and session cookies are cleared', async ({ browser }) =
   await page.getByRole('button', { name: 'User menu' }).click();
   await page.getByRole('button', { name: 'Log out' }).click();
 
+  // Wait for the full /logout -> Auth0 /v2/logout -> returnTo chain to settle.
+  await page.waitForURL(/^https:\/\/fil\.one\/?$/, { timeout: 30_000 });
   await expect(page).toHaveURL(/^https:\/\/fil\.one\/?$/);
 
   const cookies = await context.cookies();

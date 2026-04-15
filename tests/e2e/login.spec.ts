@@ -15,5 +15,5 @@ test('paid user signs in via Auth0 and lands on dashboard', async ({ page }) => 
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText('Dashboard')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
 });

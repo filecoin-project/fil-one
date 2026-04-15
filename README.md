@@ -151,8 +151,6 @@ pnpm exec playwright install --with-deps
 | `E2E_UNPAID_EMAIL` / `E2E_UNPAID_PASSWORD` / `E2E_UNPAID_USER_ID` | Unpaid test user                                      |
 | `E2E_TRIAL_EMAIL` / `E2E_TRIAL_PASSWORD` / `E2E_TRIAL_USER_ID`    | Trial test user                                       |
 
-The `_USER_ID` value for each role is the Auth0 `sub` claim — same value used as `pk: CUSTOMER#{userId}` in the `BillingTable`. Find it via the Auth0 dashboard or by inspecting the user's BillingTable record after they sign up.
-
 In CI, all nine credential vars come from GitHub repository secrets (see [.github/workflows/e2e-staging.yaml](.github/workflows/e2e-staging.yaml) and [.github/workflows/test-staging.yaml](.github/workflows/test-staging.yaml)). Both workflows also configure AWS via OIDC (using `vars.AWS_ROLE_ARN`) so the billing-state reset can write to the staging `BillingTable`.
 
 #### Running locally

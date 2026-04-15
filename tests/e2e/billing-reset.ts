@@ -1,15 +1,25 @@
 import { Resource } from 'sst';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  UpdateItemCommand,
+  ConditionalCheckFailedException,
+} from '@aws-sdk/client-dynamodb';
 import type { Role } from './roles.ts';
 
-// Resets BillingTable records for E2E test users to known states before each
-// run. Trial periods can elapse and `past_due` subscriptions can advance to
-// `canceled`, so we re-seed deterministic state instead of relying on
-// long-lived test-user state in staging.
+// Patches BillingTable records for E2E test users back to known role-specific
+// state before each run. Trial periods can elapse and `past_due` subscriptions
+// can advance to `canceled`, so we re-seed deterministic state instead of
+// relying on long-lived test-user state in staging.
 //
-// Direct DynamoDB writes mirror the pattern used by integration tests
-// (tests/integration/helpers.ts: seedBillingRecord). Source of truth for
-// subscriptionStatus values is packages/shared/src/api/billing.ts.
+// We use UpdateItemCommand (SET expression) rather than PutItemCommand so we
+// only touch the test-state attributes (subscriptionStatus, currentPeriodEnd,
+// trialEndsAt, lastPaymentFailedAt, updatedAt). Invariant fields the test user
+// was pre-seeded with — orgId, stripeCustomerId (real `cus_…`), subscriptionId,
+// trialStartedAt, currentPeriodStart — are preserved untouched. Background jobs
+// (grace-period-enforcer, usage-reporting-orchestrator, stripe-webhook) skip
+// records missing orgId, so clobbering it would break unrelated staging
+// behavior. Source of truth for subscriptionStatus values is
+// packages/shared/src/api/billing.ts.
 
 const AWS_REGION = process.env.AWS_REGION ?? 'us-east-2';
 
@@ -55,16 +65,42 @@ function getDynamoClient(): DynamoDBClient {
 
 export async function resetBillingState(role: Role, userId: string): Promise<void> {
   const { status, extra } = DESIRED_STATE[role];
-  const item: Record<string, { S: string }> = {
-    pk: { S: `CUSTOMER#${userId}` },
-    sk: { S: 'SUBSCRIPTION' },
-    stripeCustomerId: { S: `cus_e2e_${role}` },
-    subscriptionStatus: { S: status },
-    updatedAt: { S: new Date().toISOString() },
-    ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, { S: v }])),
+  const fields: Record<string, string> = {
+    subscriptionStatus: status,
+    ...extra,
+    updatedAt: new Date().toISOString(),
   };
 
-  await getDynamoClient().send(
-    new PutItemCommand({ TableName: getBillingTableName(), Item: item }),
-  );
+  const names: Record<string, string> = {};
+  const values: Record<string, { S: string }> = {};
+  const sets: string[] = [];
+  Object.entries(fields).forEach(([k, v], i) => {
+    names[`#k${i}`] = k;
+    values[`:v${i}`] = { S: v };
+    sets.push(`#k${i} = :v${i}`);
+  });
+
+  try {
+    await getDynamoClient().send(
+      new UpdateItemCommand({
+        TableName: getBillingTableName(),
+        Key: {
+          pk: { S: `CUSTOMER#${userId}` },
+          sk: { S: 'SUBSCRIPTION' },
+        },
+        UpdateExpression: `SET ${sets.join(', ')}`,
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+        ConditionExpression: 'attribute_exists(pk)',
+      }),
+    );
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) {
+      throw new Error(
+        `E2E test user ${userId} (role=${role}) has no BillingTable record. ` +
+          `Pre-seed it (orgId, stripeCustomerId, subscriptionId) before running E2E tests.`,
+      );
+    }
+    throw err;
+  }
 }

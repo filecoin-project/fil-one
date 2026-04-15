@@ -1,4 +1,6 @@
 import { test as setup, expect } from '@playwright/test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { STORAGE_STATE, type Role } from './roles.ts';
 import { resetBillingState } from './billing-reset.ts';
 
@@ -42,8 +44,9 @@ for (const role of roles) {
 
     await expect(page).toHaveURL(/\/dashboard$/);
 
-    await page.context().storageState({
-      path: STORAGE_STATE[role.name],
-    });
+    const storagePath = STORAGE_STATE[role.name];
+    await fs.mkdir(path.dirname(storagePath), { recursive: true });
+    await page.context().storageState({ path: storagePath });
+    await page.context().storageState({ path: STORAGE_STATE[role.name] });
   });
 }
