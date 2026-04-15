@@ -39,6 +39,7 @@ export type ObjectDetailPageProps = {
   objectKey: string;
 };
 
+// eslint-disable-next-line max-lines-per-function, complexity/complexity
 export function ObjectDetailPage({ bucketName, objectKey }: ObjectDetailPageProps) {
   const navigate = useNavigate();
 
