@@ -32,7 +32,6 @@ test.describe('trial user', () => {
   test('trial user sees trial-days-remaining badge', async ({ page }) => {
     await page.goto('/dashboard');
     await expect(page.getByText('Dashboard')).toBeVisible();
-    // await expect(page.getByRole('navigation').getByRole('link', { name: 'Upgrade' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Upgrade', exact: true })).toBeVisible();
     await expect(page.getByText('Free trial').first()).toBeVisible();
   });
