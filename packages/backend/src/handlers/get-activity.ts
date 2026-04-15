@@ -76,9 +76,9 @@ async function fetchBucketActivities(
   const stage = process.env.FILONE_STAGE!;
   if (!auroraTenantId || !isOrgSetupComplete(setupStatus)) return [];
 
-  const credentials = await getAuroraS3Credentials(stage, auroraTenantId);
   const gatewayUrl = getS3Endpoint(S3_REGION, stage);
   try {
+    const credentials = await getAuroraS3Credentials(stage, auroraTenantId);
     const { buckets } = await listBuckets(gatewayUrl, credentials);
     return buckets.map((bucket) => ({
       id: `bucket-${bucket.name}`,
