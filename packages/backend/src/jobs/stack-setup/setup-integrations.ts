@@ -184,7 +184,7 @@ async function getAuth0ManagementToken(domain: string): Promise<string> {
 
   if (!resp.ok) {
     const body = await resp.text();
-    throw new Error(`Auth0 token request failed (${resp.status})`);
+    throw new Error(`Auth0 get client failed (${resp.status}): ${body}`);
   }
 
   const data = (await resp.json()) as { access_token: string };
