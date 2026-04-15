@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { getAuth0Domain } from '@filone/shared';
+import { getAuth0Domain, getStageFromHostname } from '@filone/shared';
 
-const stage = process.env.STAGE;
-if (!stage) {
-  throw new Error('STAGE env var must be set (e.g., staging, production, pr-42)');
+const baseURL = process.env.BASE_URL;
+if (!baseURL) {
+  throw new Error('BASE_URL env var must be set (e.g., https://staging.fil.one)');
 }
 
-const expectedAuth0Domain = getAuth0Domain(stage);
+const expectedAuth0Domain = getAuth0Domain(getStageFromHostname(new URL(baseURL).hostname));
 
 test('login route redirects to Auth0 authorize for the deployment stage', async ({ page }) => {
   await page.goto('/login');

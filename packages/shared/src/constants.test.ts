@@ -7,6 +7,7 @@ import {
   getUsageLimits,
   getS3Endpoint,
   getAuth0Domain,
+  getStageFromHostname,
   S3Region,
   Stage,
 } from './constants.js';
@@ -87,6 +88,26 @@ describe('getAuth0Domain', () => {
   for (const stage of nonProductionStages) {
     it(`returns the shared dev tenant domain for stage "${stage}"`, () => {
       expect(getAuth0Domain(stage)).toBe('dev-oar2nhqh58xf5pwf.us.auth0.com');
+    });
+  }
+});
+
+describe('getStageFromHostname', () => {
+  it('returns Production for "app.fil.one"', () => {
+    expect(getStageFromHostname('app.fil.one')).toBe(Stage.Production);
+  });
+
+  const nonProductionHostnames = [
+    'staging.fil.one',
+    'pr-42.fil.one',
+    'localhost',
+    'd123abc.cloudfront.net',
+    '',
+  ];
+
+  for (const hostname of nonProductionHostnames) {
+    it(`returns Staging for "${hostname}"`, () => {
+      expect(getStageFromHostname(hostname)).toBe(Stage.Staging);
     });
   }
 });

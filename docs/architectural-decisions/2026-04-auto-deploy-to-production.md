@@ -30,7 +30,7 @@ A new smoke test suite lives under `tests/e2e/smoke/` and runs in Playwright as 
 The smoke suite verifies deploy-wiring concerns that unit and integration tests miss: DNS, CloudFront, Lambda wiring, and the Auth0 configuration of the deployed stage. It covers:
 
 - **HTTP shell**: `GET /` returns the SPA `index.html` with the `<title>Fil One</title>` marker (via Playwright's `request` fixture — no browser, keeps the assertion fast and deterministic).
-- **Auth wiring**: navigating to `/login` lands on the Auth0 tenant configured for the current stage. The expected tenant domain is derived from `getAuth0Domain(STAGE)` in `@filone/shared`, which is the same helper `sst.config.ts` uses — so the smoke suite and the deployment cannot drift.
+- **Auth wiring**: navigating to `/login` lands on the Auth0 tenant configured for the current stage. The expected tenant is derived from `BASE_URL` alone — `getStageFromHostname()` maps the hostname back to a stage and `getAuth0Domain()` maps that stage to the tenant, both in `@filone/shared` and both also used by `sst.config.ts` (and by the website's own `FILONE_STAGE` inference). The smoke suite and the deployment therefore cannot drift on the Auth0 binding, and the suite needs no `STAGE` env var alongside `BASE_URL`.
 
 In CI, the smoke specs run as part of the cross-browser `e2e` job (no separate `smoke` job). For local iteration or preview/dev validation, `pnpm test:e2e:smoke` runs just the smoke specs against Chromium.
 

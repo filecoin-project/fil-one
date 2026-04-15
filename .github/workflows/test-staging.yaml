@@ -33,7 +33,6 @@ jobs:
         run: pnpm test:e2e:full
         env:
           BASE_URL: https://staging.fil.one
-          STAGE: staging
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
