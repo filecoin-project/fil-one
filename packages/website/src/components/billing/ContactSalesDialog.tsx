@@ -96,8 +96,9 @@ export function ContactSalesDialog({ open, onClose }: ContactSalesDialogProps) {
         <div className="flex flex-col gap-4">
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-xs font-medium text-(--color-paragraph-text)">Name</label>
+              <label htmlFor="contact-name" className="text-xs font-medium text-(--color-paragraph-text)">Name</label>
               <Input
+                id="contact-name"
                 value={name}
                 onChange={(v) => {
                   setName(v);
@@ -109,8 +110,8 @@ export function ContactSalesDialog({ open, onClose }: ContactSalesDialogProps) {
               {nameError && <p className="text-xs text-red-500">Name is required</p>}
             </div>
             <div className="flex flex-1 flex-col gap-1.5">
-              <label className="text-xs font-medium text-(--color-paragraph-text)">Company</label>
-              <Input value={company} onChange={setCompany} placeholder="Acme Inc." />
+              <label htmlFor="contact-company" className="text-xs font-medium text-(--color-paragraph-text)">Company</label>
+              <Input id="contact-company" value={company} onChange={setCompany} placeholder="Acme Inc." />
             </div>
           </div>
 
@@ -119,11 +120,12 @@ export function ContactSalesDialog({ open, onClose }: ContactSalesDialogProps) {
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-(--color-paragraph-text)">
+            <label htmlFor="contact-message" className="flex items-center gap-1.5 text-xs font-medium text-(--color-paragraph-text)">
               Message
               <span className="font-normal text-(--color-paragraph-text-subtle)">(optional)</span>
             </label>
             <Textarea
+              id="contact-message"
               value={message}
               onChange={setMessage}
               rows={3}
