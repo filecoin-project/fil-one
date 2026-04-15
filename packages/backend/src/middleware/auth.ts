@@ -112,7 +112,7 @@ async function exchangeRefreshToken(refreshToken: string): Promise<NewTokens | n
       };
     }
     const body = await res.text().catch(() => '');
-    console.warn('[auth] Token refresh failed', { status: res.status });
+    console.warn('[auth] Token refresh failed', { status: res.status, body });
   } catch (err) {
     console.warn('[auth] Token refresh threw', { error: err });
   }
