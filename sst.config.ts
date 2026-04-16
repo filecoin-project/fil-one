@@ -555,6 +555,7 @@ export default $config({
       method: 'GET',
       routePath: '/api/buckets/{name}/analytics',
       handler: 'get-bucket-analytics',
+      permissions: [{ actions: ['ssm:GetParameter'], resources: [auroraApiKeySsmArn] }],
       extraEnv: auroraEnv,
     });
 
