@@ -10,8 +10,6 @@ import {
   WarningIcon,
   DownloadSimpleIcon,
   LightningIcon,
-  ShieldCheckIcon,
-  LockSimpleIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
 import { Heading } from '../components/Heading';
@@ -562,57 +560,38 @@ export function BillingPage() {
 
         {/* ── Right column (pricing sidebar) ─────────────────── */}
         <div className="w-[368px] flex-shrink-0">
-          <div className="rounded-lg border border-[#e1e4ea] bg-white shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] overflow-hidden p-px">
+          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-xs">
             {/* Header */}
-            <div
-              className="flex flex-col gap-[6px] px-4 pt-4 pb-[13px] border-b border-[rgba(225,228,234,0.5)]"
-              style={{
-                backgroundImage:
-                  'linear-gradient(166.48deg, rgba(0,128,255,0.05) 0%, rgba(0,128,255,0.1) 50%, rgba(0,128,255,0.05) 100%)',
-              }}
-            >
-              <p className="text-[11px] font-medium uppercase tracking-[0.55px] leading-[16.5px] text-[#677183]">
+            <div className="flex flex-col gap-1.5 border-b border-zinc-200 bg-zinc-50 px-4 pb-3 pt-4">
+              <p className="text-[11px] font-medium uppercase tracking-widest text-zinc-500">
                 Pay-as-you-go
               </p>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold leading-9 text-[#14181f]">$4.99</span>
-                <span className="text-[12px] leading-[18px] text-[#677183]">/ TB / month</span>
+                <span className="text-3xl font-bold leading-9 text-zinc-900">$4.99</span>
+                <span className="text-xs text-zinc-500">/ TB / month</span>
               </div>
             </div>
 
             {/* Features */}
             <div className="flex flex-col gap-4 p-4">
               <ul className="flex flex-col gap-[10px]">
-                <li className="flex items-center gap-[10px] text-[13px] text-[#677183]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f3f4f6] flex-shrink-0">
-                    <CheckIcon size={12} className="text-[#3a4252]" weight="bold" />
-                  </span>
-                  Pay only for what you use
-                </li>
-                <li className="flex items-center gap-[10px] text-[13px] text-[#14181f]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgba(16,183,127,0.1)] flex-shrink-0">
-                    <LightningIcon size={12} className="text-[#10b77f]" weight="fill" />
-                  </span>
-                  <strong className="font-medium">No egress fees</strong>
-                </li>
-                <li className="flex items-center gap-[10px] text-[13px] text-[#14181f]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgba(16,183,127,0.1)] flex-shrink-0">
-                    <LightningIcon size={12} className="text-[#10b77f]" weight="fill" />
-                  </span>
-                  <strong className="font-medium">No API request fees</strong>
-                </li>
-                <li className="flex items-center gap-[10px] text-[13px] text-[#677183]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f3f4f6] flex-shrink-0">
-                    <ShieldCheckIcon size={12} className="text-[#3a4252]" weight="fill" />
-                  </span>
-                  Data integrity guarantees
-                </li>
-                <li className="flex items-center gap-[10px] text-[13px] text-[#677183]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f3f4f6] flex-shrink-0">
-                    <LockSimpleIcon size={12} className="text-[#3a4252]" weight="fill" />
-                  </span>
-                  Enterprise-grade security
-                </li>
+                {[
+                  'Pay only for what you use',
+                  'No egress fees',
+                  'No API request fees',
+                  'Data integrity guarantees',
+                  'Enterprise-grade security',
+                ].map((feature) => (
+                  <li
+                    key={feature}
+                    className="flex items-center gap-[10px] text-[13px] text-zinc-700"
+                  >
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-100">
+                      <CheckIcon size={12} className="text-zinc-500" weight="bold" />
+                    </span>
+                    {feature}
+                  </li>
+                ))}
               </ul>
 
               {/* CTA for trial / grace / canceled users */}
