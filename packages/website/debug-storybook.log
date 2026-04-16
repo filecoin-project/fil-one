@@ -1,0 +1,18 @@
+[15:41:56.999] [INFO] storybook v10.3.4
+[15:41:57.421] [DEBUG] Getting package.json info for /Users/filiparibeiro/projects/fil-one-app/fil-one/packages/website/package.json...
+[15:41:57.997] [INFO] Starting...
+[15:41:58.054] [DEBUG] Starting preview..
+[15:41:58.112] [ERROR] Failed to build the preview
+[15:41:58.112] [ERROR] [38;2;241;97;97mError: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.[39m
+    at Object.<anonymous> (/Users/filiparibeiro/projects/fil-one-app/fil-one/node_modules/.pnpm/@tailwindcss+oxide@4.2.2/node_modules/@tailwindcss/oxide/index.js:559:11)
+    at Module._compile (node:internal/modules/cjs/loader:1565:14)
+    at Object..js (node:internal/modules/cjs/loader:1708:10)
+    at Module.load (node:internal/modules/cjs/loader:1318:32)
+    at Function._load (node:internal/modules/cjs/loader:1128:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+    at cjsLoader (node:internal/modules/esm/translators:263:5)
+    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:196:7)
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+[15:41:58.115] [WARN] Broken build, fix the error above.
+You may need to refresh the browser.
