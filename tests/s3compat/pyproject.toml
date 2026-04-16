@@ -10,3 +10,6 @@ dependencies = [
     "pytest-json-report>=1.5.0",
     "python-dotenv>=1.2.2",
 ]
+
+[tool.uv]
+package = false
