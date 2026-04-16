@@ -8,8 +8,8 @@ const meta: Meta<typeof Button> = {
   title: 'Components/Button',
   component: Button,
   argTypes: {
-    variant:      { control: 'select', options: ['primary', 'ghost', 'tertiary', 'destructive'] },
-    size:         { control: 'select', options: ['sm', 'md', 'lg'] },
+    variant: { control: 'select', options: ['primary', 'ghost', 'tertiary', 'destructive'] },
+    size: { control: 'select', options: ['sm', 'md', 'lg'] },
     iconPosition: { control: 'select', options: ['left', 'right'] },
   },
 };
@@ -22,16 +22,16 @@ export const Default: Story = {
 };
 
 const icons: Record<ButtonVariant, typeof PlusIcon> = {
-  primary:     PlusIcon,
-  ghost:       TrashIcon,
-  tertiary:    ArrowRightIcon,
+  primary: PlusIcon,
+  ghost: TrashIcon,
+  tertiary: ArrowRightIcon,
   destructive: TrashIcon,
 };
 
 const labels: Record<ButtonVariant, string> = {
-  primary:     'Create',
-  ghost:       'Cancel',
-  tertiary:    'Learn more',
+  primary: 'Create',
+  ghost: 'Cancel',
+  tertiary: 'Learn more',
   destructive: 'Delete',
 };
 
@@ -54,7 +54,13 @@ export const AllVariants: Story = {
           {/* Icon left */}
           <div className="flex items-center gap-3">
             {(['sm', 'md', 'lg'] as ButtonSize[]).map((size) => (
-              <Button key={size} variant={variant} size={size} icon={icons[variant]} iconPosition="left">
+              <Button
+                key={size}
+                variant={variant}
+                size={size}
+                icon={icons[variant]}
+                iconPosition="left"
+              >
                 {labels[variant]}
               </Button>
             ))}
@@ -63,7 +69,13 @@ export const AllVariants: Story = {
           {/* Icon right */}
           <div className="flex items-center gap-3">
             {(['sm', 'md', 'lg'] as ButtonSize[]).map((size) => (
-              <Button key={size} variant={variant} size={size} icon={icons[variant]} iconPosition="right">
+              <Button
+                key={size}
+                variant={variant}
+                size={size}
+                icon={icons[variant]}
+                iconPosition="right"
+              >
                 {labels[variant]}
               </Button>
             ))}

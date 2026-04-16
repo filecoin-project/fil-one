@@ -71,9 +71,7 @@ export function AccessKeyBucketScopeFields({
           )}
 
           {isError && (
-            <p className="text-sm text-red-600">
-              {error?.message ?? 'Failed to load buckets'}
-            </p>
+            <p className="text-sm text-red-600">{error?.message ?? 'Failed to load buckets'}</p>
           )}
 
           {!loading &&
@@ -93,10 +91,7 @@ export function AccessKeyBucketScopeFields({
                     ...buckets,
                   ]),
                 ].map((name) => (
-                  <label
-                    key={name}
-                    className="flex cursor-pointer items-center gap-2.5 py-1"
-                  >
+                  <label key={name} className="flex cursor-pointer items-center gap-2.5 py-1">
                     <Checkbox
                       aria-label={name}
                       checked={selectedBuckets.includes(name)}

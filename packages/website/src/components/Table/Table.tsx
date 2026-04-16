@@ -12,11 +12,7 @@ export function Table({ className, containerStyle, ...props }: TableProps) {
       style={containerStyle}
       tabIndex={0}
     >
-      <table
-        data-slot="table"
-        className={clsx('min-w-full', className)}
-        {...props}
-      />
+      <table data-slot="table" className={clsx('min-w-full', className)} {...props} />
     </div>
   );
 }
@@ -28,23 +24,11 @@ Table.Head = TableHead;
 Table.Cell = TableCell;
 
 function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
-  return (
-    <thead
-      data-slot="table-header"
-      className={clsx(className)}
-      {...props}
-    />
-  );
+  return <thead data-slot="table-header" className={clsx(className)} {...props} />;
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<'tbody'>) {
-  return (
-    <tbody
-      data-slot="table-body"
-      className={clsx(className)}
-      {...props}
-    />
-  );
+  return <tbody data-slot="table-body" className={clsx(className)} {...props} />;
 }
 
 function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {

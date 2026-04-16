@@ -40,7 +40,7 @@ export const WithError: Story = {
       description="A descriptive name helps identify this key in your list."
       error='Not allowed: "@", "#"'
     >
-      <Input id="key-name" value='Production@Key#1' invalid onChange={() => {}} />
+      <Input id="key-name" value="Production@Key#1" invalid onChange={() => {}} />
     </FormField>
   ),
 };
@@ -55,9 +55,17 @@ export const Interactive: Story = {
         label="Key name"
         htmlFor="key-name"
         description="A descriptive name helps identify this key in your list."
-        error={hasError ? `Not allowed: ${invalidChars.map((c) => `"${c}"`).join(', ')}` : undefined}
+        error={
+          hasError ? `Not allowed: ${invalidChars.map((c) => `"${c}"`).join(', ')}` : undefined
+        }
       >
-        <Input id="key-name" value={value} invalid={hasError} onChange={setValue} placeholder="e.g., Production API Key" />
+        <Input
+          id="key-name"
+          value={value}
+          invalid={hasError}
+          onChange={setValue}
+          placeholder="e.g., Production API Key"
+        />
       </FormField>
     );
   },

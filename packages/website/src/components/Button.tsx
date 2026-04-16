@@ -22,9 +22,9 @@ type ButtonInnerProps = Pick<ButtonProps, 'children' | 'icon' | 'iconPosition' |
 };
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:     'button--primary',
-  ghost:       'button--ghost',
-  tertiary:    'button--tertiary',
+  primary: 'button--primary',
+  ghost: 'button--ghost',
+  tertiary: 'button--tertiary',
   destructive: 'button--destructive',
 };
 
@@ -59,7 +59,7 @@ export function Button({
     'button',
     variantClasses[variant],
     sizeClasses[size],
-    icon && iconPosition === 'left'  && 'button--icon-left',
+    icon && iconPosition === 'left' && 'button--icon-left',
     icon && iconPosition === 'right' && 'button--icon-right',
     className,
   );
@@ -76,14 +76,25 @@ export function Button({
 
   return (
     <BaseLink className={classes} href={href}>
-      <ButtonInner isExternalLink={isExternalHref(href)} icon={icon} iconPosition={iconPosition} size={size}>
+      <ButtonInner
+        isExternalLink={isExternalHref(href)}
+        icon={icon}
+        iconPosition={iconPosition}
+        size={size}
+      >
         {children}
       </ButtonInner>
     </BaseLink>
   );
 }
 
-function ButtonInner({ icon: Icon, iconPosition = 'left', children, isExternalLink, size = 'md' }: ButtonInnerProps) {
+function ButtonInner({
+  icon: Icon,
+  iconPosition = 'left',
+  children,
+  isExternalLink,
+  size = 'md',
+}: ButtonInnerProps) {
   const iconSize = iconSizes[size];
   const iconEl = Icon && (
     <span className="button-custom-icon">

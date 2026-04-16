@@ -125,12 +125,16 @@ export const ContactForm: Story = {
               <div className="flex flex-col gap-1.5">
                 <label className="flex items-center gap-1.5 text-sm font-medium text-(--color-text-base)">
                   Company name
-                  <span className="text-sm font-normal text-(--color-paragraph-text-subtle)">(optional)</span>
+                  <span className="text-sm font-normal text-(--color-paragraph-text-subtle)">
+                    (optional)
+                  </span>
                 </label>
                 <Input value={company} onChange={setCompany} placeholder="Your company" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-(--color-text-base)">How can we help?</label>
+                <label className="text-sm font-medium text-(--color-text-base)">
+                  How can we help?
+                </label>
                 <Textarea
                   value={message}
                   onChange={setMessage}

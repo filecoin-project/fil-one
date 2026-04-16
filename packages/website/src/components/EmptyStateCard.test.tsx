@@ -5,13 +5,7 @@ import { DatabaseIcon } from '@phosphor-icons/react/dist/ssr';
 
 describe('EmptyStateCard', () => {
   it('renders title and description', () => {
-    render(
-      <EmptyStateCard
-        icon={DatabaseIcon}
-        title="No items"
-        description="Nothing to show"
-      />,
-    );
+    render(<EmptyStateCard icon={DatabaseIcon} title="No items" description="Nothing to show" />);
     expect(screen.getByText('No items')).toBeInTheDocument();
     expect(screen.getByText('Nothing to show')).toBeInTheDocument();
   });

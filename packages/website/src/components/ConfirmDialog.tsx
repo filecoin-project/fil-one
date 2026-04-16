@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DialogTitle } from '@headlessui/react';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/ssr';
 import { Modal, ModalBody, ModalFooter } from './Modal';
 import { Button } from './Button';
@@ -42,7 +43,9 @@ export function ConfirmDialog({
         <div className="flex flex-col items-center gap-3 px-2 pt-6 pb-0 text-center">
           <IconBox icon={WarningCircleIcon} color="red" size="lg" />
           <div className="flex flex-col gap-1">
-            <p className="text-base font-medium text-zinc-900">{title}</p>
+            <DialogTitle as="p" className="text-base font-medium text-zinc-900">
+              {title}
+            </DialogTitle>
             <p className="text-sm text-zinc-500">{description}</p>
           </div>
         </div>

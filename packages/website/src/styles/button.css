@@ -19,15 +19,27 @@
 
     /* Balanced padding when icon is present */
     &.button--icon-left {
-      &.button--sm  { @apply pl-2.5; }
-      &.button--md  { @apply pl-3; }
-      &.button--lg  { @apply pl-4; }
+      &.button--sm {
+        @apply pl-2.5;
+      }
+      &.button--md {
+        @apply pl-3;
+      }
+      &.button--lg {
+        @apply pl-4;
+      }
     }
 
     &.button--icon-right {
-      &.button--sm  { @apply pr-2.5; }
-      &.button--md  { @apply pr-3; }
-      &.button--lg  { @apply pr-4; }
+      &.button--sm {
+        @apply pr-2.5;
+      }
+      &.button--md {
+        @apply pr-3;
+      }
+      &.button--lg {
+        @apply pr-4;
+      }
     }
 
     &.button--primary {
@@ -109,6 +121,119 @@
         .button-custom-icon {
           @apply text-zinc-300;
         }
+      }
+    }
+  }
+}
+
+@layer components {
+  .split-button {
+    @apply inline-flex items-stretch rounded-md font-medium;
+
+    &.split-button--primary {
+      @apply bg-brand-600 text-white;
+
+      & .split-button__main:not(:disabled):hover,
+      & .split-button__caret:not(:disabled):hover {
+        @apply bg-brand-500;
+      }
+
+      & .split-button__main:not(:disabled):focus,
+      & .split-button__caret:not(:disabled):focus {
+        @apply bg-brand-500 outline-2 outline-offset-2 outline-brand-400;
+      }
+
+      & .split-button__divider {
+        @apply bg-white/20;
+      }
+    }
+
+    &.split-button--ghost {
+      @apply border border-zinc-200 bg-white text-zinc-700;
+
+      & .split-button__main:not(:disabled):hover,
+      & .split-button__caret:not(:disabled):hover {
+        @apply bg-zinc-50;
+      }
+
+      & .split-button__divider {
+        @apply bg-zinc-200;
+      }
+    }
+
+    &.split-button--disabled {
+      &.split-button--primary {
+        @apply bg-zinc-300 text-zinc-500;
+      }
+
+      &.split-button--ghost {
+        @apply text-zinc-400;
+      }
+    }
+
+    &.split-button--sm {
+      @apply text-xs;
+
+      & .split-button__main {
+        @apply px-3 py-1.5;
+      }
+      & .split-button__caret {
+        @apply px-1.5;
+      }
+    }
+
+    &.split-button--md {
+      @apply text-sm;
+
+      & .split-button__main {
+        @apply px-4 py-2;
+      }
+      & .split-button__caret {
+        @apply px-2.5;
+      }
+    }
+
+    &.split-button--lg {
+      @apply text-base;
+
+      & .split-button__main {
+        @apply px-5 py-2.5;
+      }
+      & .split-button__caret {
+        @apply px-3;
+      }
+    }
+
+    & .split-button__main {
+      @apply inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-l-md transition-colors;
+
+      &:disabled {
+        @apply cursor-not-allowed;
+      }
+    }
+
+    & .split-button__divider {
+      @apply w-px shrink-0 self-stretch;
+    }
+
+    & .split-button__caret {
+      @apply inline-flex w-full cursor-pointer items-center justify-center rounded-r-md bg-transparent outline-none transition-colors;
+
+      &:disabled {
+        @apply cursor-not-allowed;
+      }
+    }
+
+    & .split-button__menu {
+      @apply absolute right-0 top-full z-50 mt-1 min-w-[160px] overflow-hidden rounded-md border border-zinc-200 bg-white py-1 shadow-md;
+    }
+
+    & .split-button__item {
+      @apply flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-700 transition-colors;
+
+      &:hover,
+      &[data-focus] {
+        @apply bg-zinc-50 text-zinc-900;
       }
     }
   }

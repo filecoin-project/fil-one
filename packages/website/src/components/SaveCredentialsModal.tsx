@@ -1,20 +1,16 @@
 import { useState } from 'react';
 
-import {
-  WarningCircleIcon,
-  DownloadSimpleIcon,
-  EyeIcon,
-  EyeSlashIcon,
-} from '@phosphor-icons/react/dist/ssr';
+import { DownloadSimpleIcon, EyeIcon, EyeSlashIcon } from '@phosphor-icons/react/dist/ssr';
 
+import { Alert } from './Alert.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from './Modal/index.js';
 import { Button } from './Button.js';
 import { CopyButton } from './CopyButton.js';
 import { IconButton } from './IconButton.js';
+import { SplitButton } from './SplitButton.js';
 
 export type SaveCredentialsModalProps = {
   open: boolean;
-  onClose: () => void;
   onDone: () => void;
   credentials: {
     accessKeyId: string;
@@ -22,12 +18,7 @@ export type SaveCredentialsModalProps = {
   };
 };
 
-export function SaveCredentialsModal({
-  open,
-  onClose,
-  onDone,
-  credentials,
-}: SaveCredentialsModalProps) {
+export function SaveCredentialsModal({ open, onDone, credentials }: SaveCredentialsModalProps) {
   const [showSecret, setShowSecret] = useState(false);
 
   function downloadBlob(content: string, filename: string, type: string) {
@@ -57,15 +48,14 @@ export function SaveCredentialsModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} size="md">
-      <ModalHeader onClose={onClose}>Save your credentials</ModalHeader>
+    <Modal open={open} onClose={() => {}} size="md">
+      <ModalHeader>Save your credentials</ModalHeader>
       <ModalBody>
-        {/* Warning banner */}
-        <div className="mb-4 flex gap-2.5 rounded-lg border border-orange-500/20 bg-orange-500/10 p-3">
-          <WarningCircleIcon size={16} weight="fill" className="mt-0.5 shrink-0 text-orange-500" />
-          <p className="text-xs leading-[18px] text-(--color-text-base)">
-            Save your credentials in a safe place. Do not share your secret key with anyone.
-          </p>
+        <div className="mb-4">
+          <Alert
+            variant="amber"
+            description="Save your credentials in a safe place. Do not share your secret key with anyone."
+          />
         </div>
 
         {/* Credential fields */}
@@ -79,7 +69,7 @@ export function SaveCredentialsModal({
                   {credentials.accessKeyId}
                 </span>
               </div>
-              <CopyButton value={credentials.accessKeyId} />
+              <CopyButton size="md" value={credentials.accessKeyId} />
             </div>
           </div>
 
@@ -97,7 +87,7 @@ export function SaveCredentialsModal({
                 aria-label={showSecret ? 'Hide secret key' : 'Show secret key'}
                 onClick={() => setShowSecret((s) => !s)}
               />
-              <CopyButton value={credentials.secretAccessKey} />
+              <CopyButton size="md" value={credentials.secretAccessKey} />
             </div>
           </div>
         </div>
@@ -106,12 +96,12 @@ export function SaveCredentialsModal({
         <Button variant="ghost" onClick={onDone}>
           Done
         </Button>
-        <Button variant="primary" icon={DownloadSimpleIcon} onClick={handleDownloadCsv}>
-          Download .csv
-        </Button>
-        <Button variant="primary" icon={DownloadSimpleIcon} onClick={handleDownloadEnv}>
-          Download .env
-        </Button>
+        <SplitButton
+          label="Download .csv"
+          icon={DownloadSimpleIcon}
+          onMainClick={handleDownloadCsv}
+          items={[{ label: 'Download .env', icon: DownloadSimpleIcon, onClick: handleDownloadEnv }]}
+        />
       </ModalFooter>
     </Modal>
   );

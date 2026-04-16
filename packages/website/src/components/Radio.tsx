@@ -10,7 +10,12 @@ type RadioProps = {
 
 export function Radio({ name, value, checked, onChange, className }: RadioProps) {
   return (
-    <span className={clsx('relative inline-flex size-4 shrink-0 items-center justify-center', className)}>
+    <span
+      className={clsx(
+        'relative inline-flex size-4 shrink-0 items-center justify-center',
+        className,
+      )}
+    >
       <input
         type="radio"
         name={name}

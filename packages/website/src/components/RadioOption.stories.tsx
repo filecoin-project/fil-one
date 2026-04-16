@@ -41,7 +41,13 @@ export const InlineGroup: Story = {
     return (
       <div className="flex gap-2">
         {options.map((option) => (
-          <RadioOption key={option.value} name="inline" value={option.value} checked={value === option.value} onChange={() => setValue(option.value)}>
+          <RadioOption
+            key={option.value}
+            name="inline"
+            value={option.value}
+            checked={value === option.value}
+            onChange={() => setValue(option.value)}
+          >
             {option.label}
           </RadioOption>
         ))}

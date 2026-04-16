@@ -44,16 +44,17 @@ export function ChoosePlanDialog({
 }: ChoosePlanDialogProps) {
   return (
     <Modal open={open} onClose={onClose} size="lg">
-      <ModalHeader onClose={onClose} description="Simple, transparent pricing for teams of all sizes">
+      <ModalHeader
+        onClose={onClose}
+        description="Simple, transparent pricing for teams of all sizes"
+      >
         Choose your plan
       </ModalHeader>
       <ModalBody>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* Pay as you go */}
           <div className="flex flex-col rounded-xl border-2 border-brand-200 bg-brand-50 p-5">
-            <p className="text-xs uppercase text-zinc-500">
-              Pay-as-you-go
-            </p>
+            <p className="text-xs uppercase text-zinc-500">Pay-as-you-go</p>
             <div className="mt-2 flex items-baseline gap-1.5">
               <span className="text-2xl font-bold text-zinc-950">$4.99</span>
               <span className="text-sm text-zinc-500">TB/month</span>
@@ -84,9 +85,7 @@ export function ChoosePlanDialog({
 
           {/* Business */}
           <div className="flex flex-col rounded-xl border border-zinc-200 bg-white p-5">
-            <p className="text-xs uppercase text-zinc-500">
-              Business plan
-            </p>
+            <p className="text-xs uppercase text-zinc-500">Business plan</p>
             <div className="mt-2">
               <span className="text-2xl font-bold text-zinc-950">Custom pricing</span>
             </div>
@@ -102,11 +101,7 @@ export function ChoosePlanDialog({
             <div className="flex-1" />
 
             <div className="mt-4">
-              <Button
-                variant="ghost"
-                onClick={onContactSales}
-                className="w-full justify-center"
-              >
+              <Button variant="ghost" onClick={onContactSales} className="w-full justify-center">
                 Contact sales team
               </Button>
             </div>

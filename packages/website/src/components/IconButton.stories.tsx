@@ -1,5 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CopySimpleIcon, TrashIcon, PencilIcon, DotsThreeIcon } from '@phosphor-icons/react/dist/ssr';
+import {
+  CopySimpleIcon,
+  TrashIcon,
+  PencilIcon,
+  DotsThreeIcon,
+} from '@phosphor-icons/react/dist/ssr';
 
 import { IconButton } from './IconButton';
 

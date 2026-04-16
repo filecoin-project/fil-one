@@ -5,6 +5,12 @@ import { Radio } from './Radio';
 const meta: Meta<typeof Radio> = {
   title: 'Components/Radio',
   component: Radio,
+  render: (args) => (
+    <label className="inline-flex items-center gap-2 text-sm text-zinc-900">
+      <Radio {...args} />
+      Example option
+    </label>
+  ),
 };
 
 export default meta;

@@ -82,7 +82,9 @@ export function ModalHeader({ children, description, onClose }: ModalHeaderProps
   return (
     <div className={clsx('modal-header', description && 'modal-header--with-description')}>
       <div className="modal-header-content">
-        <DialogTitle as="span" className="modal-header-title">{children}</DialogTitle>
+        <DialogTitle as="span" className="modal-header-title">
+          {children}
+        </DialogTitle>
         {description && <p className="modal-header-description">{description}</p>}
       </div>
       {onClose && (
@@ -100,8 +102,6 @@ export function ModalBody({ children }: ModalBodyProps) {
 
 export function ModalFooter({ children, fullWidth }: ModalFooterProps) {
   return (
-    <div className={clsx('modal-footer', fullWidth && 'modal-footer--full-width')}>
-      {children}
-    </div>
+    <div className={clsx('modal-footer', fullWidth && 'modal-footer--full-width')}>{children}</div>
   );
 }

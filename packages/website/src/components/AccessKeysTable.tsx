@@ -12,9 +12,15 @@ import { CopyButton } from './CopyButton';
 import { formatDate } from '../lib/time.js';
 
 function StatusBadge({ status }: { status: AccessKey['status'] }) {
-  return status === 'active'
-    ? <Badge color="green" dot size="sm" weight="medium">Active</Badge>
-    : <Badge color="grey" size="sm" weight="medium">Inactive</Badge>;
+  return status === 'active' ? (
+    <Badge color="green" dot size="sm" weight="medium">
+      Active
+    </Badge>
+  ) : (
+    <Badge color="grey" size="sm" weight="medium">
+      Inactive
+    </Badge>
+  );
 }
 
 function ActionMenu({ onDelete }: { onDelete: () => void }) {
@@ -95,7 +101,8 @@ export type AccessKeysTableProps = {
   emptyDescription?: string;
 };
 
-const thClass = 'border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-xs font-normal text-zinc-600';
+const thClass =
+  'border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-left text-xs font-normal text-zinc-600';
 const tdClass = 'px-4 py-3';
 
 export function AccessKeysTable({
@@ -128,16 +135,14 @@ export function AccessKeysTable({
         <thead>
           <tr>
             <th className={thClass}>Name</th>
-            {showBuckets && (
-              <th className={`${thClass} hidden lg:table-cell`}>Buckets</th>
-            )}
-            {showPermissions && (
-              <th className={`${thClass} hidden md:table-cell`}>Permissions</th>
-            )}
+            {showBuckets && <th className={`${thClass} hidden lg:table-cell`}>Buckets</th>}
+            {showPermissions && <th className={`${thClass} hidden md:table-cell`}>Permissions</th>}
             <th className={`${thClass} hidden sm:table-cell`}>Status</th>
             <th className={`${thClass} hidden md:table-cell`}>Last Used</th>
             {onDelete && (
-              <th className={thClass}><span className="sr-only">Actions</span></th>
+              <th className={thClass}>
+                <span className="sr-only">Actions</span>
+              </th>
             )}
           </tr>
         </thead>
@@ -162,9 +167,15 @@ export function AccessKeysTable({
                 <td className={`${tdClass} hidden lg:table-cell`}>
                   <div className="flex flex-wrap gap-1">
                     {key.bucketScope === 'all' ? (
-                      <Badge color="grey" size="sm">All Buckets</Badge>
+                      <Badge color="grey" size="sm">
+                        All Buckets
+                      </Badge>
                     ) : (
-                      (key.buckets ?? []).map((b) => <Badge key={b} color="grey" size="sm">{b}</Badge>)
+                      (key.buckets ?? []).map((b) => (
+                        <Badge key={b} color="grey" size="sm">
+                          {b}
+                        </Badge>
+                      ))
                     )}
                   </div>
                 </td>
@@ -175,7 +186,9 @@ export function AccessKeysTable({
                 <td className={`${tdClass} hidden md:table-cell`}>
                   <div className="flex flex-wrap gap-1">
                     {(key.permissions ?? []).map((p) => (
-                      <Badge key={p} color="blue" size="sm" className="capitalize">{p}</Badge>
+                      <Badge key={p} color="blue" size="sm" className="capitalize">
+                        {p}
+                      </Badge>
                     ))}
                   </div>
                 </td>
