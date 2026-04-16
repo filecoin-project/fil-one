@@ -719,9 +719,9 @@ export default $config({
       ],
     });
 
-    new sst.aws.Cron('UsageReportingCron', {
-      // run the Lambda every day at 6:00 AM UTC.
-      schedule: 'cron(0 6 * * ? *)',
+    new sst.aws.CronV2('UsageReportingCron', {
+      // run the Lambda every 12 hours (00:00 and 12:00 UTC).
+      schedule: 'cron(0 0/12 * * ? *)',
       function: usageOrchestrator.arn,
     });
 
@@ -734,9 +734,9 @@ export default $config({
       memory: '256 MB',
     });
 
-    new sst.aws.Cron('GracePeriodEnforcerCron', {
-      // run the Lambda every day at 7:00 AM UTC (one hour after usage reporting).
-      schedule: 'cron(0 7 * * ? *)',
+    new sst.aws.CronV2('GracePeriodEnforcerCron', {
+      // run the Lambda every 12 hours, one hour after usage reporting (01:00 and 13:00 UTC).
+      schedule: 'cron(0 1/12 * * ? *)',
       function: gracePeriodEnforcer.arn,
     });
 
