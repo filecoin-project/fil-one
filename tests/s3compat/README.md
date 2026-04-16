@@ -172,14 +172,14 @@ actual test logic. The error cascades to every subsequent test.
 In the first Akave full-suite run (595 tests, 172 errors), the errors clustered
 into 6 contiguous runs:
 
-| Run | Trigger test                              | Cascade | Recovers? |
-| --- | ----------------------------------------- | ------: | --------- |
-| 1   | `test_bucket_list_delimiter_basic`        |       2 | Yes       |
-| 2   | `test_multi_object_delete_key_limit`      |      10 | Yes       |
-| 3   | `test_bucket_create_special_key_names`    |       1 | Yes       |
-| 4   | `test_multipart_copy_special_names`       |       1 | Yes       |
-| 5   | `test_bucket_policy_upload_part_copy`     |       3 | Yes       |
-| 6   | `test_object_lock_put_obj_retention_versionid` | **155** | **No** |
+| Run | Trigger test                                   | Cascade | Recovers? |
+| --- | ---------------------------------------------- | ------: | --------- |
+| 1   | `test_bucket_list_delimiter_basic`             |       2 | Yes       |
+| 2   | `test_multi_object_delete_key_limit`           |      10 | Yes       |
+| 3   | `test_bucket_create_special_key_names`         |       1 | Yes       |
+| 4   | `test_multipart_copy_special_names`            |       1 | Yes       |
+| 5   | `test_bucket_policy_upload_part_copy`          |       3 | Yes       |
+| 6   | `test_object_lock_put_obj_retention_versionid` | **155** | **No**    |
 
 Runs 1-5 are transient (17 tests combined) — the gateway's eventual consistency
 allows cleanup to succeed after a few tests pass. Run 6 is permanent:
