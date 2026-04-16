@@ -215,7 +215,19 @@ The `webidentity_test` mark additionally requires a running Keycloak instance â€
 
 ### 1. Create the config file
 
-The suite requires an INI config file. Copy and fill in this template, saving it as `ceph-s3-tests/aurora.conf`:
+The suite requires an INI config file. You can either auto-generate it from your `.env` or create it manually.
+
+**Option A: Auto-generate from `.env`**
+
+```bash
+uv run python generate_ceph_conf.py akave   # or aurora, fth, etc.
+```
+
+This creates `ceph-s3-tests/s3tests.conf` with all sections populated from your provider's `.env`.
+
+**Option B: Create manually**
+
+Copy and fill in this template, saving it as `ceph-s3-tests/aurora.conf`:
 
 ```ini
 [DEFAULT]
