@@ -329,7 +329,7 @@ def main():
         f"  Duration  : {meta['duration_s']}s",
         f"  Marks     : {args.marks or '(none)'}",
         f"  Target    : {args.test_file}",
-        f"  Raw JSON  : {json_out}",
+        f"  Raw JSON  : {os.path.relpath(json_out, reports_dir)}",
     ]
 
     text = _report.write_report(

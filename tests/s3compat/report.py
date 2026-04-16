@@ -7,6 +7,7 @@ Callers build a list of entry dicts with at minimum:
 and call write_report() to produce the unified output.
 """
 import json
+import os
 import statistics
 from pathlib import Path
 
@@ -87,11 +88,14 @@ def write_report(
         lines.append("")
 
     if success_log or error_log:
+        # Use paths relative to the report file's directory so reports are
+        # portable and don't leak local filesystem details.
+        report_parent = report_file.parent
         lines.append("Log files:")
         if success_log:
-            lines.append(f"  Success : {success_log}")
+            lines.append(f"  Success : {os.path.relpath(success_log, report_parent)}")
         if error_log:
-            lines.append(f"  Errors  : {error_log}")
+            lines.append(f"  Errors  : {os.path.relpath(error_log, report_parent)}")
         lines.append("")
 
     text = "\n".join(lines)
