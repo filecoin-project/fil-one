@@ -11,15 +11,14 @@ trigger downstream workflows (e.g., deployments on main).
 ## Creating the token
 
 1. Go to **GitHub > Settings > Developer settings > Personal access tokens >
-   Fine-grained tokens**.
-2. Create a new token scoped to the `filone` repository with these permissions:
-   - **Contents** — Read and write
-   - **Pull requests** — Read and write
-3. Store the token as a repository secret:
+   Tokens (classic)**.
+2. Create a new token with these scopes:
+   - **repo** — Full control of private repositories
+   - **read:org** — Read org and team membership (required by `gh auth login`)
+3. Store the token as a Dependabot secret:
    ```sh
    gh secret set DEPENDABOT_TOKEN --app dependabot
    ```
    Paste the token value when prompted.
 
-The token should belong to a user with write access to the repository. Fine-grained
-tokens have a maximum lifetime, so the token must be rotated before it expires.
+The token should belong to a user with write access to the repository.
