@@ -294,7 +294,7 @@ def main():
         f"  Data uploaded OK  : {total_mb:.1f} MB",
         f"  Avg throughput    : {throughput:.1f} MB/s",
         f"  Workers           : {args.workers}",
-        f"  State DB          : {db_file}",
+        f"  State DB          : {os.path.relpath(db_file, log.report_file.parent)}",
         "",
         f"To retry failures:  python load_test.py --provider {args.provider} --resume",
     ]
