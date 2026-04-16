@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { Heading } from '../components/Heading';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
@@ -66,7 +67,7 @@ export function BucketsPage() {
     <div className="p-6">
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900">Buckets</h1>
+        <Heading tag="h1">Buckets</Heading>
         <Button
           variant="primary"
           icon={PlusIcon}

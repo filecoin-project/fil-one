@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { UserIcon, BellIcon, ShieldCheckIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
+import { Heading } from '../components/Heading';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Spinner } from '../components/Spinner';
@@ -225,10 +226,9 @@ export function SettingsPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-1">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Settings</h1>
-        <p className="text-[13px] text-zinc-500">Manage your profile and preferences</p>
-      </div>
+      <Heading tag="h1" description="Manage your profile and preferences" className="mb-6">
+        Settings
+      </Heading>
 
       <div className="mt-6 flex max-w-[672px] flex-col gap-6">
         {/* Profile */}

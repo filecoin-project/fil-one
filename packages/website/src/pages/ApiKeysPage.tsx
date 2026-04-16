@@ -6,6 +6,7 @@ import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
+import { Heading } from '../components/Heading';
 import { CodeBlock } from '../components/CodeBlock';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Spinner } from '../components/Spinner';
@@ -409,10 +410,13 @@ export function ApiKeysPage() {
 
   return (
     <div className="p-8">
-      <h1 className="mb-1 text-2xl font-semibold text-zinc-900">API Keys</h1>
-      <p className="mb-6 text-sm text-zinc-500">
-        Manage credentials and connect via S3-compatible API
-      </p>
+      <Heading
+        tag="h1"
+        description="Manage credentials and connect via S3-compatible API"
+        className="mb-6"
+      >
+        API Keys
+      </Heading>
 
       <Tabs>
         <TabList>

@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import { useQuery } from '@tanstack/react-query';
 
+import { Heading } from '../components/Heading';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { CodeBlock } from '../components/CodeBlock';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -158,8 +159,8 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
           <ArrowLeftIcon size={16} aria-hidden="true" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{objectKey}</h1>
-          <p className="text-[13px] text-zinc-500">
+          <Heading tag="h1">{objectKey}</Heading>
+          <p className="text-sm text-zinc-500">
             <span className="underline">{metadata?.filCid ? 'Sealed on Filecoin' : 'Queued'}</span>
             <span> &bull; {bucketName}</span>
           </p>

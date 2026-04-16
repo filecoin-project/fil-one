@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 
 const UsageTrends = lazy(() => import('./UsageTrends'));
 
+import { Heading } from '../components/Heading';
 import { Button } from '../components/Button';
 import { Badge, type BadgeColor } from '../components/Badge';
 import { Card } from '../components/Card';
@@ -172,7 +173,7 @@ export function DashboardPage() {
     <div className="p-6">
       {/* 1. Page header */}
       <div className="mb-5 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-zinc-900">Dashboard</h1>
+        <Heading tag="h1">Dashboard</Heading>
         <Button variant="ghost" size="sm" icon={PlusIcon} href="/buckets">
           New bucket
         </Button>
