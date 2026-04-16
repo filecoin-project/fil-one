@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hyperspace/shared": "*",
+    "@hyperspace/shared": "workspace:*",
     "@tanstack/react-router": "^1.29.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
