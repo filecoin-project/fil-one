@@ -10,6 +10,7 @@ import {
   BookOpenIcon,
   ChatCircleIcon,
   SignOutIcon,
+  QuestionIcon,
 } from '@phosphor-icons/react/dist/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useMatchRoute } from '@tanstack/react-router';
@@ -201,12 +202,82 @@ function StatusBanners({
   );
 }
 
+type HelpMenuProps = {
+  collapsed: boolean;
+  helpMenuOpen: boolean;
+  helpMenuRef: React.RefObject<HTMLDivElement | null>;
+  helpButtonRef: React.RefObject<HTMLButtonElement | null>;
+  onToggle: () => void;
+};
+
+function HelpMenu({
+  collapsed,
+  helpMenuOpen,
+  helpMenuRef,
+  helpButtonRef,
+  onToggle,
+}: HelpMenuProps) {
+  return (
+    <div className="relative border-t border-zinc-200 p-2">
+      {collapsed ? (
+        <Tooltip content="Help" side="right">
+          <button
+            ref={helpButtonRef}
+            type="button"
+            onClick={onToggle}
+            aria-label="Help"
+            className="flex w-full items-center justify-center rounded-lg px-3 py-2 text-zinc-600 transition-colors hover:bg-zinc-100"
+          >
+            <QuestionIcon size={18} className="text-zinc-400" />
+          </button>
+        </Tooltip>
+      ) : (
+        <button
+          ref={helpButtonRef}
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100"
+        >
+          <QuestionIcon size={18} className="flex-shrink-0 text-zinc-400" />
+          Help
+        </button>
+      )}
+      {helpMenuOpen && (
+        <div
+          ref={helpMenuRef}
+          className="absolute bottom-full left-2 z-50 mb-1 w-52 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg"
+        >
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100"
+          >
+            <BookOpenIcon size={18} className="flex-shrink-0 text-zinc-400" />
+            Documentation
+          </a>
+          <Link
+            to="/support"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100"
+          >
+            <ChatCircleIcon size={18} className="flex-shrink-0 text-zinc-400" />
+            Talk to an expert
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // eslint-disable-next-line complexity/complexity
 export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
   const matchRoute = useMatchRoute();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const userButtonRef = useRef<HTMLButtonElement>(null);
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const helpMenuRef = useRef<HTMLDivElement>(null);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data: me } = useQuery({ queryKey: queryKeys.me, queryFn: () => getMe() });
   const { data: billing } = useQuery({ queryKey: queryKeys.billing, queryFn: getBilling });
@@ -245,7 +316,7 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
   const egressPct =
     limits.egressLimitBytes > 0 ? Math.min(100, (egressUsed / limits.egressLimitBytes) * 100) : 0;
 
-  function handleUserMenuClickOutside(e: React.MouseEvent) {
+  function handleClickOutside(e: React.MouseEvent) {
     if (
       userMenuRef.current &&
       !userMenuRef.current.contains(e.target as Node) &&
@@ -254,21 +325,48 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
     ) {
       setUserMenuOpen(false);
     }
+    if (
+      helpMenuRef.current &&
+      !helpMenuRef.current.contains(e.target as Node) &&
+      helpButtonRef.current &&
+      !helpButtonRef.current.contains(e.target as Node)
+    ) {
+      setHelpMenuOpen(false);
+    }
   }
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-    <div className="h-full" onClick={handleUserMenuClickOutside}>
-      <nav className="flex h-full flex-col border-r border-zinc-200 bg-white">
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div className="h-full" onClick={handleClickOutside}>
+      <nav className="relative flex h-full flex-col border-r border-zinc-200 bg-white">
+        {/* Expand toggle (collapsed) — centered on the sidebar's right border */}
+        {collapsed && (
+          <div className="absolute -right-3 top-7 z-10 -translate-y-1/2">
+            <Tooltip content="Expand sidebar" side="right">
+              <button
+                type="button"
+                onClick={onToggle}
+                aria-label="Expand sidebar"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm hover:text-zinc-600"
+              >
+                <CaretRightIcon size={14} />
+              </button>
+            </Tooltip>
+          </div>
+        )}
+
         {/* User profile + collapse toggle */}
-        <div
-          className={`relative flex h-14 flex-shrink-0 items-center px-2 ${collapsed ? 'justify-center' : 'gap-1'}`}
-        >
+        <div className="relative flex h-14 flex-shrink-0 items-center px-2">
           <button
             ref={userButtonRef}
             type="button"
             onClick={() => setUserMenuOpen((o) => !o)}
-            className={`flex min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-zinc-100 ${collapsed ? '' : 'flex-1'}`}
+            className={[
+              'flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-zinc-100',
+              collapsed ? 'w-full justify-center' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">
               {initial}
@@ -285,20 +383,29 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
             )}
           </button>
 
+          {/* Spacer + collapse toggle (expanded only) */}
+          {!collapsed && (
+            <>
+              <div className="flex-1" />
+              <Tooltip content="Collapse sidebar" side="right">
+                <button
+                  type="button"
+                  onClick={onToggle}
+                  aria-label="Collapse sidebar"
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+                >
+                  <CaretLeftIcon size={16} />
+                </button>
+              </Tooltip>
+            </>
+          )}
+
           {/* User dropdown */}
           {userMenuOpen && (
             <div
               ref={userMenuRef}
               className="absolute left-2 top-14 z-50 w-52 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg"
             >
-              <Link
-                to="/support"
-                onClick={() => setUserMenuOpen(false)}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100"
-              >
-                <ChatCircleIcon size={18} className="flex-shrink-0 text-zinc-400" />
-                Talk to an expert
-              </Link>
               <button
                 type="button"
                 onClick={logout}
@@ -308,38 +415,6 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
                 Log out
               </button>
             </div>
-          )}
-
-          {/* Collapse toggle (expanded) */}
-          {!collapsed && (
-            <Tooltip content="Collapse sidebar" side="right">
-              <button
-                type="button"
-                onClick={onToggle}
-                aria-label="Collapse sidebar"
-                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-              >
-                <CaretLeftIcon size={16} />
-              </button>
-            </Tooltip>
-          )}
-
-          {/* Expand toggle (collapsed) — floats outside sidebar */}
-          {collapsed && (
-            <Tooltip
-              content="Expand sidebar"
-              side="right"
-              className="absolute -right-3 top-1/2 -translate-y-1/2"
-            >
-              <button
-                type="button"
-                onClick={onToggle}
-                aria-label="Expand sidebar"
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-400 shadow-sm hover:text-zinc-600"
-              >
-                <CaretRightIcon size={14} />
-              </button>
-            </Tooltip>
           )}
         </div>
 
@@ -367,26 +442,14 @@ export function SidebarNav({ collapsed, onToggle }: SidebarNavProps) {
           isCanceled={isCanceled}
         />
 
-        {/* Bottom links */}
-        <div className="flex flex-col gap-0.5 border-t border-zinc-200 p-2">
-          <Tooltip content="Documentation" side="right">
-            <a
-              href={DOCS_URL}
-              aria-label="Documentation"
-              className={[
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-100',
-                collapsed ? 'justify-center' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <BookOpenIcon size={18} className="flex-shrink-0 text-zinc-400" />
-              {!collapsed && <span>Documentation</span>}
-            </a>
-          </Tooltip>
-        </div>
+        {/* Help button */}
+        <HelpMenu
+          collapsed={collapsed}
+          helpMenuOpen={helpMenuOpen}
+          helpMenuRef={helpMenuRef}
+          helpButtonRef={helpButtonRef}
+          onToggle={() => setHelpMenuOpen((o) => !o)}
+        />
       </nav>
     </div>
   );
