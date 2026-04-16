@@ -17,7 +17,7 @@ trigger downstream workflows (e.g., deployments on main).
    - **Pull requests** — Read and write
 3. Store the token as a repository secret:
    ```sh
-   gh secret set DEPENDABOT_TOKEN
+   gh secret set DEPENDABOT_TOKEN --app dependabot
    ```
    Paste the token value when prompted.
 
