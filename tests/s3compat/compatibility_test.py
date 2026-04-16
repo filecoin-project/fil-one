@@ -14,6 +14,7 @@ Usage:
   python compatibility_test.py --provider aurora --marks 'not fails_on_aws'
   python compatibility_test.py --provider aurora --test-file s3tests/functional/test_s3.py::test_bucket_list_empty
   python compatibility_test.py --provider aurora --marks 'versioning and not fails_on_aws'
+  python compatibility_test.py --provider aurora -k 'test_bucket_policy or test_versioning'
 
 Notes:
   - [s3 alt] tests (cross-user) require S3_ALT_* credentials in the provider's .env.
@@ -166,7 +167,7 @@ def _generate_conf(tmp_dir: Path, provider: str) -> Path:
 
 
 def _run_pytest(conf_path: Path, marks: str, test_target: str, json_out: Path,
-                 provider: str = "") -> int:
+                 provider: str = "", filter_expr: str = "") -> int:
     cmd = [
         sys.executable, "-m", "pytest",
         f"--json-report",
@@ -181,6 +182,8 @@ def _run_pytest(conf_path: Path, marks: str, test_target: str, json_out: Path,
 
     if marks:
         cmd += ["-m", marks]
+    if filter_expr:
+        cmd += ["-k", filter_expr]
     cmd.append(test_target)
 
     env = {**os.environ, "S3TEST_CONF": str(conf_path)}
@@ -289,6 +292,11 @@ def main():
         default="s3tests/functional/test_s3.py",
         help="Test file or nodeid (default: s3tests/functional/test_s3.py)",
     )
+    parser.add_argument(
+        "-k", "--filter",
+        default="",
+        help="Pytest -k expression to select tests by name (e.g. 'test_bucket_policy or test_versioning')",
+    )
     args = parser.parse_args()
 
     _check_prereqs()
@@ -307,7 +315,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         conf_path = _generate_conf(Path(tmp), args.provider)
         exit_code = _run_pytest(conf_path, args.marks, args.test_file, json_out,
-                               provider=args.provider)
+                               provider=args.provider, filter_expr=args.filter)
 
     if not json_out.exists():
         print(
@@ -328,6 +336,7 @@ def main():
         f"  Skipped   : {meta['skipped']}",
         f"  Duration  : {meta['duration_s']}s",
         f"  Marks     : {args.marks or '(none)'}",
+        f"  Filter    : {args.filter or '(none)'}",
         f"  Target    : {args.test_file}",
         f"  Raw JSON  : {os.path.relpath(json_out, reports_dir)}",
     ]
