@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Link as AppLink } from '../components/Link';
 
 const UsageTrends = lazy(() => import('./UsageTrends'));
 
@@ -15,6 +16,7 @@ import { Heading } from '../components/Heading';
 import { Button } from '../components/Button';
 import { Badge, type BadgeColor } from '../components/Badge';
 import { Card } from '../components/Card';
+import { IconBox } from '../components/IconBox';
 import { ProgressBar } from '../components/ProgressBar';
 import { formatBytes } from '@filone/shared';
 
@@ -70,7 +72,7 @@ function estimateMonthlyCost(usedBytes: number, pricePerTbCents: number): string
 
 function DashboardSkeleton() {
   return (
-    <div className="p-6 animate-pulse">
+    <div className="p-8 animate-pulse">
       <div className="mb-6 h-8 w-40 rounded bg-zinc-200" />
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="h-[157px] rounded-xl bg-zinc-100" />
@@ -170,7 +172,7 @@ export function DashboardPage() {
   const quickSetupTotal = quickSetupTasks.length;
 
   return (
-    <div className="p-6">
+    <div className="p-8">
       {/* 1. Page header */}
       <div className="mb-5 flex items-center justify-between">
         <Heading tag="h1">Dashboard</Heading>
@@ -214,7 +216,7 @@ export function DashboardPage() {
 
       {/* 3. Quick Setup */}
       {showQuickSetup && (
-        <Card shadow className="mb-5">
+        <Card className="mb-5">
           <div className="mb-4 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
               QUICK SETUP
@@ -232,13 +234,7 @@ export function DashboardPage() {
                   done ? 'border-green-200 bg-green-50' : 'border-zinc-200 hover:bg-zinc-50'
                 }`}
               >
-                <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                    done ? 'bg-green-100 text-green-600' : 'bg-brand-50 text-brand-600'
-                  }`}
-                >
-                  <Icon size={18} />
-                </span>
+                <IconBox icon={Icon} color={done ? 'green' : 'blue'} size="md" />
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-zinc-900">{title}</p>
                   <p className="text-[11px] text-zinc-500">{subtitle}</p>
@@ -283,19 +279,13 @@ export function DashboardPage() {
           </div>
           <div>
             {isTrialing ? (
-              <Link
-                to="/billing"
-                className="text-[12px] font-medium text-zinc-500 hover:text-zinc-900"
-              >
-                Upgrade <span aria-hidden="true">→</span>
-              </Link>
+              <AppLink href="/billing" className="text-[12px]">
+                Upgrade
+              </AppLink>
             ) : (
-              <Link
-                to="/billing"
-                className="text-[12px] font-medium text-zinc-500 hover:text-zinc-900"
-              >
-                Manage plan <span aria-hidden="true">→</span>
-              </Link>
+              <AppLink href="/billing" className="text-[12px]">
+                Manage plan
+              </AppLink>
             )}
           </div>
         </Card>
@@ -349,15 +339,15 @@ export function DashboardPage() {
       </div>
 
       {/* 5. Buckets · Objects · API Keys — single card with vertical dividers */}
-      <Card shadow padding="none" className="mb-5 grid grid-cols-3 divide-x divide-zinc-200">
+      <Card padding="none" className="mb-5 grid grid-cols-3 divide-x divide-zinc-200">
         <div className="px-5 py-4">
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               BUCKETS
             </span>
-            <Link to="/buckets" className="text-[11px] text-zinc-500 hover:text-zinc-900">
+            <AppLink href="/buckets" className="text-[11px]">
               View all
-            </Link>
+            </AppLink>
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-xl font-semibold text-zinc-900">{usage.buckets.count}</span>
@@ -378,9 +368,9 @@ export function DashboardPage() {
             <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               API KEYS
             </span>
-            <Link to="/api-keys" className="text-[11px] text-zinc-500 hover:text-zinc-900">
+            <AppLink href="/api-keys" className="text-[11px]">
               View all
-            </Link>
+            </AppLink>
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-xl font-semibold text-zinc-900">{usage.accessKeys.count}</span>
@@ -399,7 +389,7 @@ export function DashboardPage() {
       </Suspense>
 
       {/* 8. Recent Activity */}
-      <Card shadow padding="none" className="pb-5 pl-3 pr-5 pt-4">
+      <Card padding="none" className="pb-5 pl-3 pr-5 pt-4">
         <div className="mb-3">
           <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500">
             Recent Activity

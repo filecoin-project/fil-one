@@ -55,7 +55,7 @@ export function BucketsPage() {
 
   if (isError) {
     return (
-      <div className="p-6">
+      <div className="p-8">
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error?.message ?? 'Failed to load buckets'}
         </div>
@@ -64,10 +64,12 @@ export function BucketsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-8">
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
-        <Heading tag="h1">Buckets</Heading>
+        <Heading tag="h1" description="Organize and manage your storage containers">
+          Buckets
+        </Heading>
         <Button
           variant="primary"
           icon={PlusIcon}

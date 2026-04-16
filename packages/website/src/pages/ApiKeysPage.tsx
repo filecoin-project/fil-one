@@ -6,6 +6,7 @@ import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
+import { Link } from '../components/Link';
 import { Heading } from '../components/Heading';
 import { CodeBlock } from '../components/CodeBlock';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -185,14 +186,9 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
       <div>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-zinc-900">Quickstart (AWS CLI)</h3>
-          <a
-            href={DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-medium text-brand-600 hover:underline"
-          >
-            View docs ↗
-          </a>
+          <Link variant="accent" href={DOCS_URL} className="text-xs">
+            View docs
+          </Link>
         </div>
         <div className="flex flex-col gap-3">
           {[
