@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Link } from '@tanstack/react-router';
-import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
+import { PlusIcon, DatabaseIcon, TrashIcon, KeyIcon } from '@phosphor-icons/react/dist/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Heading } from '../components/Heading';
@@ -83,19 +83,26 @@ export function BucketsPage() {
 
       {/* Content: empty state or table */}
       {buckets.length === 0 ? (
-        <EmptyStateCard
-          icon={DatabaseIcon}
-          title="No buckets yet"
-          description="Create your first bucket to start storing objects"
-        >
-          <Button
-            variant="primary"
-            icon={PlusIcon}
-            onClick={() => navigate({ to: '/buckets/create' })}
+        <>
+          <EmptyStateCard
+            icon={DatabaseIcon}
+            title="No buckets yet"
+            description="Create your first bucket to start storing objects"
           >
-            Create bucket
-          </Button>
-        </EmptyStateCard>
+            <Button
+              variant="primary"
+              icon={PlusIcon}
+              onClick={() => navigate({ to: '/buckets/create' })}
+            >
+              Create bucket
+            </Button>
+          </EmptyStateCard>
+          <div className="mt-6 flex justify-center">
+            <Button variant="tertiary" icon={KeyIcon} href="/api-keys">
+              Manage API keys
+            </Button>
+          </div>
+        </>
       ) : (
         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
           <table className="w-full text-sm">

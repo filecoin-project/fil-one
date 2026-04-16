@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
+import { CopySimpleIcon, DatabaseIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
@@ -35,13 +35,10 @@ type AccessKeysTabProps = {
 function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
   return (
     <>
-      <div className="mt-4 mb-4 flex items-center justify-between">
+      <div className="mt-4 mb-4">
         <span className="text-sm text-zinc-600">
           {keys.length === 1 ? '1 key' : `${keys.length} keys`}
         </span>
-        <Button variant="primary" icon={PlusIcon} onClick={onCreateOpen}>
-          Create new key
-        </Button>
       </div>
 
       <AccessKeysTable
@@ -51,6 +48,13 @@ function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
         onDelete={onDelete}
         onCreateOpen={onCreateOpen}
       />
+      {keys.length === 0 && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="tertiary" icon={DatabaseIcon} href="/buckets">
+            Manage buckets
+          </Button>
+        </div>
+      )}
     </>
   );
 }
@@ -406,13 +410,19 @@ export function ApiKeysPage() {
 
   return (
     <div className="p-8">
-      <Heading
-        tag="h1"
-        description="Manage credentials and connect via S3-compatible API"
-        className="mb-6"
-      >
-        API Keys
-      </Heading>
+      <div className="mb-6 flex items-center justify-between">
+        <Heading tag="h1" description="Manage credentials and connect via S3-compatible API">
+          API Keys
+        </Heading>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={PlusIcon}
+          onClick={() => void navigate({ to: '/api-keys/create' })}
+        >
+          Create new key
+        </Button>
+      </div>
 
       <Tabs>
         <TabList>
