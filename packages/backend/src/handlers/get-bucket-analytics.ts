@@ -4,7 +4,9 @@ import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import type { BucketAnalyticsResponse, ErrorResponse } from '@filone/shared';
 import { Resource } from 'sst';
+import { createClient, getBucketInfo } from '@filone/aurora-portal-client';
 import { getDynamoClient } from '../lib/ddb-client.js';
+import { getAuroraPortalApiKey } from '../lib/aurora-portal.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -42,6 +44,32 @@ export async function baseHandler(
         message: 'Aurora tenant setup is not complete, please try again later',
       })
       .build();
+  }
+
+  // Verify bucket belongs to this tenant before fetching partner-level metrics
+  const baseUrl = process.env.AURORA_PORTAL_URL!;
+  const stage = process.env.FILONE_STAGE!;
+  const apiKey = await getAuroraPortalApiKey(stage, auroraTenantId);
+
+  const portalClient = createClient({
+    baseUrl,
+    headers: { 'X-Api-Key': apiKey },
+  });
+
+  const { error: bucketError, response: bucketResponse } = await getBucketInfo({
+    client: portalClient,
+    path: { tenantId: auroraTenantId, bucketName },
+    throwOnError: false,
+  });
+
+  if (bucketError) {
+    if (bucketResponse?.status === 404) {
+      return new ResponseBuilder().status(404).body({ message: 'Bucket not found' }).build();
+    }
+    throw new Error(
+      `Failed to verify bucket "${bucketName}" ownership for tenant ${auroraTenantId}`,
+      { cause: bucketError },
+    );
   }
 
   const now = new Date();

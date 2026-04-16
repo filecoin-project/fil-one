@@ -20,6 +20,17 @@ vi.mock('../lib/aurora-backoffice.js', () => ({
   getBucketStorageSamples: (...args: unknown[]) => mockGetBucketStorageSamples(...(args as [])),
 }));
 
+const mockGetAuroraPortalApiKey = vi.fn();
+vi.mock('../lib/aurora-portal.js', () => ({
+  getAuroraPortalApiKey: (...args: unknown[]) => mockGetAuroraPortalApiKey(...args),
+}));
+
+const mockGetBucketInfo = vi.fn();
+vi.mock('@filone/aurora-portal-client', () => ({
+  createClient: () => 'mock-client',
+  getBucketInfo: (...args: unknown[]) => mockGetBucketInfo(...args),
+}));
+
 vi.mock('../lib/auth-secrets.js', () => ({
   getAuthSecrets: () => ({
     AUTH0_CLIENT_ID: 'test-client-id',
@@ -37,6 +48,7 @@ vi.mock('jose', () => ({
 process.env.AUTH0_DOMAIN = 'test.auth0.com';
 process.env.AUTH0_AUDIENCE = 'https://api.test.com';
 process.env.FILONE_STAGE = 'test';
+process.env.AURORA_PORTAL_URL = 'https://portal.dev.aur.lu';
 
 const ddbMock = mockClient(DynamoDBClient);
 
@@ -80,6 +92,12 @@ describe('GET /api/buckets/{name}/analytics handler', () => {
     vi.clearAllMocks();
     ddbMock.reset();
     mockGetBucketStorageSamples.mockResolvedValue([]);
+    mockGetAuroraPortalApiKey.mockResolvedValue('test-api-key');
+    mockGetBucketInfo.mockResolvedValue({
+      data: { name: 'my-bucket', createdAt: '2026-01-15T10:00:00Z' },
+      error: undefined,
+      response: { status: 200 },
+    });
   });
 
   it('returns analytics from Aurora', async () => {
@@ -155,5 +173,51 @@ describe('GET /api/buckets/{name}/analytics handler', () => {
 
     expect(result.statusCode).toBe(503);
     expect(mockGetBucketStorageSamples).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when bucket is not owned by the org', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant(AURORA_TENANT_ID));
+    mockGetBucketInfo.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Not found' },
+      response: { status: 404 },
+    });
+
+    const result = await baseHandler(authenticatedEvent('other-orgs-bucket'));
+
+    expect(result.statusCode).toBe(404);
+    const body = JSON.parse(result.body!);
+    expect(body).toStrictEqual({ message: 'Bucket not found' });
+    expect(mockGetBucketStorageSamples).not.toHaveBeenCalled();
+  });
+
+  it('throws when portal returns a non-404 error', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant(AURORA_TENANT_ID));
+    mockGetBucketInfo.mockResolvedValue({
+      data: undefined,
+      error: { message: 'Internal error' },
+      response: { status: 500 },
+    });
+
+    await expect(baseHandler(authenticatedEvent('my-bucket'))).rejects.toThrow(
+      `Failed to verify bucket "my-bucket" ownership for tenant ${AURORA_TENANT_ID}`,
+    );
+    expect(mockGetBucketStorageSamples).not.toHaveBeenCalled();
+  });
+
+  it('verifies bucket ownership with correct tenant ID', async () => {
+    ddbMock.on(GetItemCommand).resolves(orgProfileWithTenant(AURORA_TENANT_ID));
+    mockGetBucketStorageSamples.mockResolvedValue([
+      { timestamp: '2026-01-01T00:00:00Z', bytesUsed: 1000, objectCount: 1 },
+    ]);
+
+    await baseHandler(authenticatedEvent('my-bucket'));
+
+    expect(mockGetAuroraPortalApiKey).toHaveBeenCalledWith('test', AURORA_TENANT_ID);
+    expect(mockGetBucketInfo).toHaveBeenCalledWith({
+      client: 'mock-client',
+      path: { tenantId: AURORA_TENANT_ID, bucketName: 'my-bucket' },
+      throwOnError: false,
+    });
   });
 });
