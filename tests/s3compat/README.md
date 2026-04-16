@@ -11,11 +11,14 @@ All scripts share a unified report format: timestamped files in `aurora/logs/` a
 
 ## Setup
 
+This project uses [uv](https://docs.astral.sh/uv/) for Python dependency management.
+See [Installing uv](https://docs.astral.sh/uv/getting-started/installation/) to get started.
+
 **Install dependencies:**
 ```bash
-cd testing
-pip install -r requirements.txt
-pip install -r s3-tests/requirements.txt   # needed for compatibility_test.py
+cd tests/s3compat
+uv sync                                      # installs deps from pyproject.toml
+uv pip install -r ceph-s3-tests/requirements.txt  # needed for compatibility_test.py
 ```
 
 **Configure credentials:**
@@ -24,9 +27,9 @@ cp aurora/.env.example aurora/.env
 # Edit aurora/.env — at minimum set S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET
 ```
 
-All scripts must be run from the `testing/` directory:
+All scripts must be run from the `tests/s3compat/` directory:
 ```bash
-cd testing
+cd tests/s3compat
 ```
 
 ---
@@ -149,9 +152,9 @@ python compatibility_test.py --provider aurora --test-file s3tests/functional/te
 
 ---
 
-## Running s3-tests Directly
+## Running ceph-s3-tests Directly
 
-The `compatibility_test.py` script auto-generates the config and wraps everything in a report. If you want to run `s3-tests` directly with tox or pytest — for faster iteration, specific test selection, or to get raw pytest output — follow these steps.
+The `compatibility_test.py` script auto-generates the config and wraps everything in a report. If you want to run `ceph-s3-tests` directly with tox or pytest — for faster iteration, specific test selection, or to get raw pytest output — follow these steps.
 
 ### Preconditions
 
@@ -167,30 +170,30 @@ The s3-tests suite creates a fresh bucket for each test and deletes it in teardo
 
 Any test that checks cross-account behavior (ACLs, cross-user bucket access, etc.) requires a second Aurora API key in `[s3 alt]`. Without it, those tests fail but single-user tests are unaffected. Create a second API key in the Aurora UI and populate `AURORA_ALT_*` in `.env`.
 
-**3. Python 3.8+**
+**3. Python 3.10+**
 
-The s3-tests suite requires Python 3.8 or newer. Verify:
+The test harness requires Python 3.10 or newer (pytest 9+ dependency). Verify:
 ```bash
 python --version
 ```
 
-**4. s3-tests repo is cloned**
+**4. ceph-s3-tests submodule is initialized**
 
 ```bash
-# From the testing/ directory
-ls s3-tests/   # should exist
+# From the tests/s3compat/ directory
+ls ceph-s3-tests/   # should exist
 # If not:
-git clone https://github.com/ceph/s3-tests
+git submodule update --init tests/s3compat/ceph-s3-tests
 ```
 
 **5. Dependencies installed**
 
 ```bash
-# s3-tests dependencies (munch, gevent, isodate, etc.)
-pip install -r s3-tests/requirements.txt
+# ceph-s3-tests dependencies (munch, gevent, isodate, etc.)
+uv pip install -r ceph-s3-tests/requirements.txt
 
-# Our reporting wrapper (only needed for compatibility_test.py)
-pip install -r requirements.txt
+# Our test harness (only needed for compatibility_test.py)
+uv sync
 ```
 
 **6. STS / IAM tests require additional Aurora configuration**
@@ -206,7 +209,7 @@ The `webidentity_test` mark additionally requires a running Keycloak instance �
 
 ### 1. Create the config file
 
-The suite requires an INI config file. Copy and fill in this template, saving it as `s3-tests/aurora.conf`:
+The suite requires an INI config file. Copy and fill in this template, saving it as `ceph-s3-tests/aurora.conf`:
 
 ```ini
 [DEFAULT]
@@ -265,7 +268,7 @@ email      = alt@example.com
 Tox installs the suite's dependencies into an isolated virtualenv automatically:
 
 ```bash
-cd s3-tests
+cd ceph-s3-tests
 
 # Run all tests
 S3TEST_CONF=aurora.conf tox
@@ -279,10 +282,10 @@ S3TEST_CONF=aurora.conf tox -- s3tests/functional/test_s3.py::test_bucket_list_e
 
 ### 3. Run with pytest directly
 
-If dependencies are already installed (`pip install -r s3-tests/requirements.txt`), use pytest directly from the `s3-tests` directory for faster startup:
+If dependencies are already installed (`uv pip install -r ceph-s3-tests/requirements.txt`), use pytest directly from the `ceph-s3-tests` directory for faster startup:
 
 ```bash
-cd s3-tests
+cd ceph-s3-tests
 
 # All core S3 tests
 S3TEST_CONF=aurora.conf pytest s3tests/functional/test_s3.py

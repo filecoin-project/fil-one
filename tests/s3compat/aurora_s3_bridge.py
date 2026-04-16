@@ -10,7 +10,7 @@ without any modifications to the submodule.
 Activation
 ----------
 Only activates when the ``AURORA_PORTAL_ORIGIN`` env var is set.
-Load it with ``pytest -p aurora_s3_bridge ...`` (requires ``testing/``
+Load it with ``pytest -p aurora_s3_bridge ...`` (requires ``tests/s3compat/``
 on PYTHONPATH).
 
 What gets patched

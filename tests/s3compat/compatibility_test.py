@@ -6,8 +6,8 @@ parses the results, and writes a unified report in the same format
 as the other test scripts.
 
 Prerequisites:
-  pip install pytest pytest-json-report
-  pip install -r s3-tests/requirements.txt
+  uv sync                                    # installs deps from pyproject.toml
+  uv pip install -r ceph-s3-tests/requirements.txt
 
 Usage:
   python compatibility_test.py --provider aurora
@@ -37,7 +37,7 @@ import report as _report
 from client import resolve_provider
 
 _SCRIPTS_DIR = Path(__file__).parent
-S3TESTS_DIR = _SCRIPTS_DIR / "s3-tests"
+S3TESTS_DIR = _SCRIPTS_DIR / "ceph-s3-tests"
 
 # Marks defined in s3-tests pytest.ini that represent test categories.
 # Checked in priority order — first match wins for grouping.
@@ -87,25 +87,18 @@ def _check_prereqs():
         print(
             f"ERROR: s3-tests directory not found at {S3TESTS_DIR}\n"
             "Clone it with:\n"
-            "  git clone https://github.com/ceph/s3-tests s3-tests"
+            "  git submodule update --init tests/s3compat/ceph-s3-tests"
         )
         sys.exit(1)
 
     try:
-        subprocess.run(
-            [sys.executable, "-m", "pytest_json_report", "--version"],
-            capture_output=True, check=True,
+        import pytest_jsonreport  # noqa: F401
+    except ImportError:
+        print(
+            "ERROR: pytest-json-report is not installed.\n"
+            "Run 'uv sync' to install all dependencies from pyproject.toml."
         )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        # Try importing directly — the version check above is best-effort
-        try:
-            import pytest_jsonreport  # noqa: F401
-        except ImportError:
-            print(
-                "ERROR: pytest-json-report is not installed.\n"
-                "Install it with:  pip install pytest-json-report"
-            )
-            sys.exit(1)
+        sys.exit(1)
 
 
 def _generate_conf(tmp_dir: Path, provider: str) -> Path:
