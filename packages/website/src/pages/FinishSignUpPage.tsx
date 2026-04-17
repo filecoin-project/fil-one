@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { confirmOrg, logout } from '../lib/api.js';
+import { ORG_NAME_PATTERN } from '@filone/shared';
 import type { MeResponse } from '@filone/shared';
 import { queryKeys } from '../lib/query-client.js';
 
@@ -30,6 +31,12 @@ export function FinishSignUpPage({ me, onComplete }: FinishSignUpPageProps) {
     }
     if (trimmed.length > 100) {
       setError('Organization name must be at most 100 characters.');
+      return;
+    }
+    if (!ORG_NAME_PATTERN.test(trimmed)) {
+      setError(
+        'Organization name can only contain letters, numbers, spaces, hyphens, and periods.',
+      );
       return;
     }
 

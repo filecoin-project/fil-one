@@ -65,7 +65,9 @@ export function suggestOrgName(email: string): string | undefined {
   if (!domain || !localPart) return undefined;
 
   if (PUBLIC_EMAIL_DOMAINS.has(domain)) {
-    return capitalize(localPart.toLowerCase());
+    const raw = capitalize(localPart.toLowerCase());
+    const cleaned = raw.replace(/[^A-Za-z0-9 .-]/g, '');
+    return cleaned.length >= 2 ? cleaned : undefined;
   }
 
   // Use psl to extract the second-level domain label.

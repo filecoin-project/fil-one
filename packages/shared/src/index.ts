@@ -37,6 +37,7 @@ export {
   ConfirmOrgSchema,
   ORG_NAME_MIN_LENGTH,
   ORG_NAME_MAX_LENGTH,
+  ORG_NAME_PATTERN,
 } from './api/org.js';
 export { ApiErrorCode } from './api/coreInterfaces.js';
 export type { ErrorResponse } from './api/coreInterfaces.js';
