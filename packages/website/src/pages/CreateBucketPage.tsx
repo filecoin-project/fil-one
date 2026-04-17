@@ -110,6 +110,8 @@ export function CreateBucketPage() {
     const bucketBody = {
       name: name.trim(),
       region,
+      versioning: true,
+      lock: true,
       retention: {
         enabled: true as const,
         mode: retentionMode,
