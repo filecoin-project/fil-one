@@ -31,9 +31,9 @@ Example latencies (based on https://latency.bluegoat.net/):
 
 For our primary target market — users in Europe (eu-central-1, Germany) — the presigned path is faster:
 
-| Path                   | Hops                                                                 | Total  |
-| ---------------------- | -------------------------------------------------------------------- | ------ |
-| **Current (proxied)**  | eu-central-1 → us-east-2 (~102ms) + us-east-2 → eu-west-2 (~79ms)    | ~181ms |
+| Path                   | Hops                                                                            | Total  |
+| ---------------------- | ------------------------------------------------------------------------------- | ------ |
+| **Current (proxied)**  | eu-central-1 → us-east-2 (~102ms) + us-east-2 → eu-west-2 (~79ms)               | ~181ms |
 | **Presigned (direct)** | eu-central-1 → us-east-2 (~102ms presign) + eu-central-1 → eu-west-2 (~20ms S3) | ~122ms |
 
 That's a ~60ms (~30%) improvement for European customers on every S3 operation.

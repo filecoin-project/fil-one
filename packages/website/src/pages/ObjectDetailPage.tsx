@@ -18,7 +18,11 @@ import { CopyableField } from '../components/CopyableField';
 import { Spinner } from '../components/Spinner';
 import { formatBytes, getS3Endpoint, S3_REGION } from '@filone/shared';
 
-import type { ObjectMetadataResponse, GetBucketResponse } from '@filone/shared';
+import type {
+  ObjectMetadataResponse,
+  GetBucketResponse,
+  ObjectRetentionInfo,
+} from '@filone/shared';
 import { FILONE_STAGE } from '../env';
 import { formatDateTime } from '../lib/time.js';
 import { useObjectActions } from '../lib/use-object-actions.js';
@@ -38,6 +42,27 @@ export type ObjectDetailPageProps = {
   bucketName: string;
   objectKey: string;
 };
+
+async function fetchObjectRetention(
+  url: string,
+  method: string,
+): Promise<ObjectRetentionInfo | undefined> {
+  try {
+    const response = await executePresignedUrl(url, method);
+    const xml = await response.text();
+    return parseGetObjectRetentionResponse(xml) ?? undefined;
+  } catch (err) {
+    // Objects without retention configured return an S3 error — this is expected.
+    const msg = err instanceof Error ? err.message : '';
+    const isExpected =
+      msg.includes('NoSuchObjectLockConfiguration') ||
+      msg.includes('ObjectLockConfigurationNotFoundError');
+    if (!isExpected) {
+      console.error('Failed to fetch object retention:', err);
+    }
+    return undefined;
+  }
+}
 
 // eslint-disable-next-line max-lines-per-function, complexity/complexity
 export function ObjectDetailPage({ bucketName, objectKey }: ObjectDetailPageProps) {
@@ -67,23 +92,10 @@ export function ObjectDetailPage({ bucketName, objectKey }: ObjectDetailPageProp
       const headResponse = await executePresignedUrl(items[0].url, items[0].method);
       const head = parseHeadObjectResponse(headResponse, objectKey);
 
-      let retention = undefined;
-      if (hasObjectLock && items[1]) {
-        try {
-          const retentionResponse = await executePresignedUrl(items[1].url, items[1].method);
-          const xml = await retentionResponse.text();
-          retention = parseGetObjectRetentionResponse(xml) ?? undefined;
-        } catch (err) {
-          // Objects without retention configured return an S3 error — this is expected.
-          const msg = err instanceof Error ? err.message : '';
-          const isExpected =
-            msg.includes('NoSuchObjectLockConfiguration') ||
-            msg.includes('ObjectLockConfigurationNotFoundError');
-          if (!isExpected) {
-            console.error('Failed to fetch object retention:', err);
-          }
-        }
-      }
+      const retention =
+        hasObjectLock && items[1]
+          ? await fetchObjectRetention(items[1].url, items[1].method)
+          : undefined;
 
       return {
         key: head.key,
