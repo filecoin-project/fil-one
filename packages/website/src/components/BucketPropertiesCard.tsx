@@ -16,9 +16,10 @@ function formatRetention(mode?: string, duration?: number, durationType?: string
 }
 
 export function BucketPropertiesCard({ bucket }: { bucket: Bucket }) {
+  const columnsClass = bucket.defaultRetention ? 'sm:grid-cols-4' : 'sm:grid-cols-3';
   return (
     <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-      <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-x-8 gap-y-4 ${columnsClass}`}>
         <div className="flex items-start gap-2.5">
           <ClockCounterClockwiseIcon
             size={16}

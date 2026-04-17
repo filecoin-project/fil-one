@@ -82,7 +82,7 @@ export function ObjectBrowser({
         <p className="mb-1 text-base font-medium text-zinc-700">No objects yet</p>
         <p className="mb-6 text-sm text-zinc-500">Upload your first object to this bucket</p>
         <Button
-          variant="filled"
+          variant="primary"
           icon={ArrowUpIcon}
           onClick={() =>
             void navigate({
