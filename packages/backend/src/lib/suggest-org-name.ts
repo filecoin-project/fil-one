@@ -6,6 +6,7 @@
  */
 
 import * as psl from 'psl';
+import { ORG_NAME_DISALLOWED_CHARS, ORG_NAME_MIN_LENGTH } from '@filone/shared';
 
 export const PUBLIC_EMAIL_DOMAINS = new Set([
   // Google
@@ -66,8 +67,8 @@ export function suggestOrgName(email: string): string | undefined {
 
   if (PUBLIC_EMAIL_DOMAINS.has(domain)) {
     const raw = capitalize(localPart.toLowerCase());
-    const cleaned = raw.replace(/[^A-Za-z0-9 .-]/g, '');
-    return cleaned.length >= 2 ? cleaned : undefined;
+    const cleaned = raw.replace(ORG_NAME_DISALLOWED_CHARS, '');
+    return cleaned.length >= ORG_NAME_MIN_LENGTH ? cleaned : undefined;
   }
 
   // Use psl to extract the second-level domain label.

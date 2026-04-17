@@ -8,6 +8,7 @@ export enum OrgRole {
 export const ORG_NAME_MIN_LENGTH = 2;
 export const ORG_NAME_MAX_LENGTH = 100;
 export const ORG_NAME_PATTERN = /^[A-Za-z0-9 .-]+$/;
+export const ORG_NAME_DISALLOWED_CHARS = /[^A-Za-z0-9 .-]/g;
 
 export const OrgNameSchema = z
   .string()
