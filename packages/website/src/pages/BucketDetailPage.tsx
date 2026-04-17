@@ -157,7 +157,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
       <div className="mt-2 mb-2 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-zinc-900">{bucketName}</h1>
         <Button
-          variant="filled"
+          variant="primary"
           icon={ArrowUpIcon}
           onClick={() =>
             void navigate({

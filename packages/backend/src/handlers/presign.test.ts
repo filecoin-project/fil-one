@@ -226,16 +226,21 @@ describe('presign baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
-    expect(body.items).toHaveLength(2);
-    expect(body.items[0]).toMatchObject({
-      url: 'https://s3.example.com/list?signed',
-      method: 'GET',
+    expect(body).toEqual({
+      items: [
+        {
+          url: 'https://s3.example.com/list?signed',
+          method: 'GET',
+          expiresAt: expect.any(String),
+        },
+        {
+          url: 'https://s3.example.com/head?signed',
+          method: 'HEAD',
+          expiresAt: expect.any(String),
+        },
+      ],
+      endpoint: expect.any(String),
     });
-    expect(body.items[1]).toMatchObject({
-      url: 'https://s3.example.com/head?signed',
-      method: 'HEAD',
-    });
-    expect(body.endpoint).toBeDefined();
   });
 
   it('preserves item order matching request order', async () => {
@@ -253,10 +258,26 @@ describe('presign baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
-    expect(body.items).toHaveLength(3);
-    expect(body.items[0].method).toBe('GET');
-    expect(body.items[1].method).toBe('DELETE');
-    expect(body.items[2].method).toBe('GET');
+    expect(body).toEqual({
+      items: [
+        {
+          url: 'https://s3.example.com/get?signed',
+          method: 'GET',
+          expiresAt: expect.any(String),
+        },
+        {
+          url: 'https://s3.example.com/delete?signed',
+          method: 'DELETE',
+          expiresAt: expect.any(String),
+        },
+        {
+          url: 'https://s3.example.com/list?signed',
+          method: 'GET',
+          expiresAt: expect.any(String),
+        },
+      ],
+      endpoint: expect.any(String),
+    });
   });
 
   it('returns presigned URL for putObject with metadata', async () => {
@@ -278,9 +299,15 @@ describe('presign baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
-    expect(body.items[0]).toMatchObject({
-      url: 'https://s3.example.com/put?signed',
-      method: 'PUT',
+    expect(body).toEqual({
+      items: [
+        {
+          url: 'https://s3.example.com/put?signed',
+          method: 'PUT',
+          expiresAt: expect.any(String),
+        },
+      ],
+      endpoint: expect.any(String),
     });
     expect(mockGetPresignedPutObjectUrl).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -307,9 +334,15 @@ describe('presign baseHandler', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body as string);
-    expect(body.items[0]).toMatchObject({
-      url: 'https://s3.example.com/retention?signed',
-      method: 'GET',
+    expect(body).toEqual({
+      items: [
+        {
+          url: 'https://s3.example.com/retention?signed',
+          method: 'GET',
+          expiresAt: expect.any(String),
+        },
+      ],
+      endpoint: expect.any(String),
     });
   });
 
