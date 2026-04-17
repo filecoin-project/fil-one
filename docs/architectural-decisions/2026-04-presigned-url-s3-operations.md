@@ -27,14 +27,25 @@ Browser -> Lambda (presign, ~50ms) -> Browser -> Aurora S3 (direct)
 
 Moving S3 operations from Lambda-proxied to browser-direct changes the network routing. For users geographically close to the Lambda region (us-east-2), the presigned path is faster because it eliminates the proxy hop. For users far from the Aurora S3 region (eu-west-1), the direct browser-to-Aurora path can be slower than the Lambda-to-Aurora path because the Lambda is closer to Aurora than the browser is.
 
-Example latencies (based on https://latency.bluegoat.net/) for a user in New Zealand (ap-southeast-6):
+Example latencies (based on https://latency.bluegoat.net/):
+
+For our primary target market — users in Europe (eu-central-1, Germany) — the presigned path is faster:
+
+| Path                   | Hops                                                                 | Total  |
+| ---------------------- | -------------------------------------------------------------------- | ------ |
+| **Current (proxied)**  | eu-central-1 → us-east-2 (~102ms) + us-east-2 → eu-west-2 (~79ms)    | ~181ms |
+| **Presigned (direct)** | eu-central-1 → us-east-2 (~102ms presign) + eu-central-1 → eu-west-2 (~20ms S3) | ~122ms |
+
+That's a ~60ms (~30%) improvement for European customers on every S3 operation.
+
+For users in geographies far from both regions (e.g., New Zealand, ap-southeast-6), the presigned path can be slower because the browser hop to eu-west-1 is longer than the Lambda hop:
 
 | Path                   | Hops                                                                                 | Total  |
 | ---------------------- | ------------------------------------------------------------------------------------ | ------ |
 | **Current (proxied)**  | ap-southeast-6 → us-east-2 (~212ms) + us-east-2 → eu-west-1 (~90ms)                  | ~302ms |
 | **Presigned (direct)** | ap-southeast-6 → us-east-2 (~212ms presign) + ap-southeast-6 → eu-west-1 (~296ms S3) | ~508ms |
 
-This is an acceptable trade-off because: the presign call is a lightweight JSON request (~50ms Lambda execution), most latency-sensitive operations (list, head) return small payloads, and the consolidated Lambda at 512 MB with lower provisioned concurrency reduces ongoing infrastructure cost. For large file uploads/downloads, the direct path avoids the API Gateway payload size limit and data transfer overhead, which is a net improvement regardless of routing.
+This is an acceptable trade-off because: our primary target geography benefits, the presign call is a lightweight JSON request (~50ms Lambda execution), most latency-sensitive operations (list, head) return small payloads, and the consolidated Lambda at 512 MB with lower provisioned concurrency reduces ongoing infrastructure cost. For large file uploads/downloads, the direct path avoids the API Gateway payload size limit and data transfer overhead, which is a net improvement regardless of routing.
 
 ## Options Considered
 
@@ -137,6 +148,10 @@ Five handlers are replaced by one:
 ### Aurora CORS Header Exposure
 
 The Aurora S3 endpoint must expose `x-fil-cid` and `x-amz-meta-*` headers via `Access-Control-Expose-Headers` for HeadObject to work from the browser. Without this, the Filecoin CID and custom metadata are invisible to JavaScript. Aurora's CORS configuration has been verified to support GET, HEAD, PUT, and DELETE methods with the required exposed headers (`x-fil-cid`, `x-amz-meta-*`, `ETag`, `Content-Length`, `Content-Type`, `Last-Modified`). Both the presign handler and the frontend changes can ship together.
+
+### Multi-Provider Header Support
+
+The browser-direct path makes response headers part of the provider contract. Any future S3-compatible provider must expose `x-amz-meta-*` (standard) via CORS for custom metadata to reach the UI, and — for Filecoin-specific features — also `x-fil-cid` (non-standard, Aurora-specific today). `x-fil-cid` is not part of the S3 spec, so supporting Filecoin features on a non-Aurora provider will either require the provider to adopt the same custom header or require a provider-specific path to resolve the CID. This constraint is tracked alongside the broader provider contract requirements.
 
 ### S3 XML Parsing in the Browser
 
