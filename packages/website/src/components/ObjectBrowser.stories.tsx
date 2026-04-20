@@ -72,6 +72,49 @@ const sampleVersions: S3ObjectVersion[] = [
   },
 ];
 
+const multiVersionVersions: S3ObjectVersion[] = [
+  {
+    key: 'report.pdf',
+    sizeBytes: 524_288,
+    lastModified: '2026-04-18T10:00:00Z',
+    versionId: 'v-report-3',
+    isLatest: true,
+    isDeleteMarker: false,
+  },
+  {
+    key: 'report.pdf',
+    sizeBytes: 498_112,
+    lastModified: '2026-04-15T09:00:00Z',
+    versionId: 'v-report-2',
+    isLatest: false,
+    isDeleteMarker: false,
+  },
+  {
+    key: 'report.pdf',
+    sizeBytes: 450_000,
+    lastModified: '2026-04-10T08:00:00Z',
+    versionId: 'v-report-1',
+    isLatest: false,
+    isDeleteMarker: false,
+  },
+  {
+    key: 'removed.txt',
+    sizeBytes: 0,
+    lastModified: '2026-04-17T12:00:00Z',
+    versionId: 'v-removed-dm',
+    isLatest: true,
+    isDeleteMarker: true,
+  },
+  {
+    key: 'removed.txt',
+    sizeBytes: 1024,
+    lastModified: '2026-04-12T11:00:00Z',
+    versionId: 'v-removed-1',
+    isLatest: false,
+    isDeleteMarker: false,
+  },
+];
+
 function ObjectBrowserHarness(initial: Omit<ObjectBrowserProps, 'onPrefixChange' | 'onDelete'>) {
   const [prefix, setPrefix] = useState(initial.currentPrefix);
   return (
@@ -180,6 +223,39 @@ export const Downloading: Story = {
       currentPrefix=""
       onDownload={() => {}}
       downloading="archive.zip"
+    />
+  ),
+};
+
+export const MultipleVersions: Story = {
+  render: () => (
+    <ObjectBrowserHarness
+      bucketName="my-bucket"
+      versions={multiVersionVersions}
+      currentPrefix=""
+      onDownload={() => {}}
+      downloading={null}
+    />
+  ),
+};
+
+export const DeleteMarker: Story = {
+  render: () => (
+    <ObjectBrowserHarness
+      bucketName="my-bucket"
+      versions={[
+        {
+          key: 'deleted-file.log',
+          sizeBytes: 0,
+          lastModified: '2026-04-19T09:00:00Z',
+          versionId: 'v-dm-1',
+          isLatest: true,
+          isDeleteMarker: true,
+        },
+      ]}
+      currentPrefix=""
+      onDownload={() => {}}
+      downloading={null}
     />
   ),
 };

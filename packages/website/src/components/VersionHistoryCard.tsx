@@ -3,9 +3,19 @@ import { ClockCounterClockwiseIcon } from '@phosphor-icons/react/dist/ssr';
 import { formatBytes } from '@filone/shared';
 import type { S3ObjectVersion } from '@filone/shared';
 import { formatDateTime } from '../lib/time.js';
+import { Badge } from './Badge';
 
 // ---------------------------------------------------------------------------
-// Version status badge (for header area)
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+export function truncateVersionId(versionId: string, length = 8): string {
+  if (versionId.length <= length) return versionId;
+  return `${versionId.slice(0, length)}\u2026`;
+}
+
+// ---------------------------------------------------------------------------
+// Version status badge — header context (shows "Historical version")
 // ---------------------------------------------------------------------------
 
 export function VersionBadge({
@@ -20,45 +30,45 @@ export function VersionBadge({
 
   if (current.isDeleteMarker) {
     return (
-      <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-600">
+      <Badge color="red" size="sm" weight="semibold">
         Delete marker
-      </span>
+      </Badge>
     );
   }
   if (current.isLatest) {
     return (
-      <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-600">
+      <Badge color="green" size="sm" weight="semibold">
         Latest version
-      </span>
+      </Badge>
     );
   }
   return (
-    <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600">
+    <Badge color="amber" size="sm" weight="semibold">
       Historical version
-    </span>
+    </Badge>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Status cell content
+// Version status badge — row context (shows nothing for historical)
 // ---------------------------------------------------------------------------
 
-function VersionStatusCell({ version }: { version: S3ObjectVersion }) {
+export function VersionRowBadge({ version }: { version: S3ObjectVersion }) {
   if (version.isDeleteMarker) {
     return (
-      <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+      <Badge color="red" size="sm" weight="semibold">
         Delete marker
-      </span>
+      </Badge>
     );
   }
   if (version.isLatest) {
     return (
-      <span className="rounded-full bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-600">
+      <Badge color="green" size="sm" weight="semibold">
         Latest
-      </span>
+      </Badge>
     );
   }
-  return <span className="text-zinc-400">&mdash;</span>;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,8 +94,7 @@ function VersionRow({
     });
   }
 
-  const truncatedId =
-    version.versionId.length > 12 ? `${version.versionId.slice(0, 12)}\u2026` : version.versionId;
+  const truncatedId = truncateVersionId(version.versionId, 12);
 
   return (
     <tr
@@ -110,7 +119,11 @@ function VersionRow({
         )}
       </td>
       <td className="px-3 py-2">
-        <VersionStatusCell version={version} />
+        {version.isDeleteMarker || version.isLatest ? (
+          <VersionRowBadge version={version} />
+        ) : (
+          <span className="text-zinc-400">&mdash;</span>
+        )}
       </td>
       <td className="px-3 py-2 text-zinc-600">
         {version.isDeleteMarker ? '\u2014' : formatBytes(version.sizeBytes)}

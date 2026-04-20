@@ -17,6 +17,7 @@ import type { S3ObjectVersion } from '@filone/shared';
 import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Spinner } from './Spinner';
+import { VersionRowBadge, truncateVersionId } from './VersionHistoryCard';
 import { formatDate } from '../lib/time.js';
 
 // ---------------------------------------------------------------------------
@@ -69,33 +70,6 @@ function getEntriesAtPrefix(groups: VersionGroup[], prefix: string): BrowseEntry
   files.sort((a, b) => a.name.localeCompare(b.name));
 
   return [...folderEntries, ...files];
-}
-
-function truncateVersionId(versionId: string): string {
-  if (versionId.length <= 8) return versionId;
-  return `${versionId.slice(0, 8)}\u2026`;
-}
-
-// ---------------------------------------------------------------------------
-// Status badge
-// ---------------------------------------------------------------------------
-
-function StatusBadge({ isDeleteMarker, isLatest }: { isDeleteMarker: boolean; isLatest: boolean }) {
-  if (isDeleteMarker) {
-    return (
-      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
-        Delete marker
-      </span>
-    );
-  }
-  if (isLatest) {
-    return (
-      <span className="rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-600">
-        Latest
-      </span>
-    );
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +161,7 @@ function VersionSubRow({
         {truncateVersionId(version.versionId)}
       </td>
       <td className="px-4 py-3">
-        <StatusBadge isDeleteMarker={version.isDeleteMarker} isLatest={false} />
+        <VersionRowBadge version={version} />
       </td>
       <td className="px-4 py-3 text-zinc-500">
         {version.isDeleteMarker ? '\u2014' : formatBytes(version.sizeBytes)}
@@ -275,7 +249,7 @@ function LatestVersionRow({
         {truncateVersionId(group.latest.versionId)}
       </td>
       <td className="px-4 py-3">
-        <StatusBadge isDeleteMarker={group.latest.isDeleteMarker} isLatest />
+        <VersionRowBadge version={{ ...group.latest, isLatest: true }} />
       </td>
       <td className="px-4 py-3 text-zinc-600">
         {group.latest.isDeleteMarker ? '\u2014' : formatBytes(group.latest.sizeBytes)}
