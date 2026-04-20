@@ -243,9 +243,11 @@ export function SettingsPage() {
                     <Input value={name} onChange={() => {}} disabled />
                     <p className="text-[11px] text-zinc-500">
                       Managed by {provider?.label}.{' '}
-                      <Link variant="accent" href={provider?.profileUrl ?? ''}>
-                        Update at {provider?.label}
-                      </Link>
+                      {provider?.profileUrl && (
+                        <Link variant="accent" href={provider.profileUrl}>
+                          Update at {provider?.label}
+                        </Link>
+                      )}
                     </p>
                   </>
                 ) : (
@@ -265,9 +267,11 @@ export function SettingsPage() {
                   <Input value={email} onChange={() => {}} disabled />
                   <p className="text-[11px] text-zinc-500">
                     Managed by {provider?.label}.{' '}
-                    <Link variant="accent" href={provider?.profileUrl ?? ''}>
-                      Update at {provider?.label}
-                    </Link>
+                    {provider?.profileUrl && (
+                      <Link variant="accent" href={provider.profileUrl}>
+                        Update at {provider?.label}
+                      </Link>
+                    )}
                   </p>
                 </>
               ) : (
