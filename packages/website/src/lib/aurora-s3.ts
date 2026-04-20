@@ -54,14 +54,18 @@ export function parseHeadObjectResponse(
   etag?: string;
   contentType?: string;
   metadata: Record<string, string>;
+  checksums: Record<string, string>;
   filCid?: string;
 } {
   const headers = response.headers;
 
   const metadata: Record<string, string> = {};
+  const checksums: Record<string, string> = {};
   headers.forEach((value, name) => {
     if (name.startsWith('x-amz-meta-')) {
       metadata[name.slice('x-amz-meta-'.length)] = value;
+    } else if (name.startsWith('x-amz-checksum-') && name !== 'x-amz-checksum-type') {
+      checksums[name.slice('x-amz-checksum-'.length)] = value;
     }
   });
 
@@ -78,6 +82,7 @@ export function parseHeadObjectResponse(
     ...(etag && { etag }),
     ...(contentType && { contentType }),
     metadata,
+    checksums,
     ...(filCid && { filCid }),
   };
 }
