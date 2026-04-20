@@ -40,22 +40,11 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function fetchRetention(url: string, method: string) {
-  try {
-    const response = await executePresignedUrl(url, method);
-    const xml = await response.text();
-    return parseGetObjectRetentionResponse(xml) ?? undefined;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '';
-    const isExpected =
-      msg.includes('NoSuchObjectLockConfiguration') ||
-      msg.includes('ObjectLockConfigurationNotFoundError');
-    if (!isExpected) {
-      console.error('Failed to fetch object retention:', err);
-    }
-    return undefined;
-  }
-}
+const retentionDateFormat = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 
 function buildMetadataResponse(
   head: ReturnType<typeof parseHeadObjectResponse>,
@@ -82,6 +71,27 @@ export type ObjectDetailPageProps = {
   objectKey: string;
   versionId?: string;
 };
+
+async function fetchObjectRetention(
+  url: string,
+  method: string,
+): Promise<ObjectRetentionInfo | undefined> {
+  try {
+    const response = await executePresignedUrl(url, method);
+    const xml = await response.text();
+    return parseGetObjectRetentionResponse(xml) ?? undefined;
+  } catch (err) {
+    // Objects without retention configured return an S3 error — this is expected.
+    const msg = err instanceof Error ? err.message : '';
+    const isExpected =
+      msg.includes('NoSuchObjectLockConfiguration') ||
+      msg.includes('ObjectLockConfigurationNotFoundError');
+    if (!isExpected) {
+      console.error('Failed to fetch object retention:', err);
+    }
+    return undefined;
+  }
+}
 
 // eslint-disable-next-line max-lines-per-function, complexity/complexity
 export function ObjectDetailPage({ bucketName, objectKey, versionId }: ObjectDetailPageProps) {
@@ -125,7 +135,9 @@ export function ObjectDetailPage({ bucketName, objectKey, versionId }: ObjectDet
       const head = parseHeadObjectResponse(headResponse, objectKey);
 
       const retention =
-        hasObjectLock && items[1] ? await fetchRetention(items[1].url, items[1].method) : undefined;
+        hasObjectLock && items[1]
+          ? await fetchObjectRetention(items[1].url, items[1].method)
+          : undefined;
 
       return buildMetadataResponse(head, retention);
     },
@@ -336,22 +348,9 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
           {metadata && (
             <DetailRow label="Created" value={formatDateTime(metadata.lastModified)} mono />
           )}
-          <div className="flex items-center justify-between py-1">
-            <span className="text-[13px] text-zinc-500">S3 Path</span>
-            <CopyableField label="" value={s3Path} />
-          </div>
-          {versionId && (
-            <div className="flex items-center justify-between py-1">
-              <span className="text-[13px] text-zinc-500">Version ID</span>
-              <CopyableField label="" value={versionId} />
-            </div>
-          )}
-          {etag && (
-            <div className="flex items-center justify-between py-1">
-              <span className="text-[13px] text-zinc-500">ETag</span>
-              <CopyableField label="" value={etag} />
-            </div>
-          )}
+          <CopyableDetailRow label="S3 Path" value={s3Path} />
+          {versionId && <CopyableDetailRow label="Version ID" value={versionId} />}
+          {etag && <CopyableDetailRow label="ETag" value={etag} />}
           <div className="flex items-center justify-between py-1">
             <span className="text-[13px] text-zinc-500">Retention</span>
             {metadata?.retention ? (
@@ -359,11 +358,7 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
                 <LockIcon size={12} />
                 {metadata.retention.mode === 'COMPLIANCE' ? 'Compliance' : 'Governance'}
                 {' \u00b7 Expires '}
-                {new Date(metadata.retention.retainUntilDate).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                {retentionDateFormat.format(new Date(metadata.retention.retainUntilDate))}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 font-mono text-xs text-zinc-400">
@@ -408,11 +403,7 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
             <p className="text-[13px] text-red-600">
               This object is protected by a compliance retention lock until{' '}
               <span className="font-bold">
-                {new Date(metadata.retention.retainUntilDate).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                {retentionDateFormat.format(new Date(metadata.retention.retainUntilDate))}
               </span>
               . It cannot be deleted before this date.
             </p>
@@ -455,6 +446,15 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
     <div className="flex items-center justify-between py-1">
       <span className="text-[13px] text-zinc-500">{label}</span>
       <span className={`text-xs text-zinc-900 ${mono ? 'font-mono' : ''}`}>{value}</span>
+    </div>
+  );
+}
+
+function CopyableDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-[13px] text-zinc-500">{label}</span>
+      <CopyableField label="" value={value} />
     </div>
   );
 }

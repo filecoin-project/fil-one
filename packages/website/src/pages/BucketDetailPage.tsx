@@ -11,13 +11,14 @@ import { AddBucketKeyModal } from '../components/AddBucketKeyModal';
 import { BucketPropertiesCard } from '../components/BucketPropertiesCard';
 import { ObjectBrowser } from '../components/ObjectBrowser';
 import { BucketAccessTab } from '../components/BucketAccessTab';
-import { getS3Endpoint, S3_REGION } from '@filone/shared';
+import { formatBytes, getS3Endpoint, S3_REGION } from '@filone/shared';
 import { FILONE_STAGE } from '../env';
 
 import type {
   ListObjectVersionsResponse,
   GetBucketResponse,
   ListAccessKeysResponse,
+  BucketAnalyticsResponse,
 } from '@filone/shared';
 import { apiRequest } from '../lib/api.js';
 import { formatDateTime } from '../lib/time.js';
@@ -48,6 +49,36 @@ function StatCard({
         <p className="text-2xl font-semibold text-zinc-900">{value}</p>
         <p className="text-xs text-zinc-500">{label}</p>
       </div>
+    </div>
+  );
+}
+
+function BucketStatsSection({
+  analyticsData,
+  accessKeyCount,
+  accessKeysLoading,
+}: {
+  analyticsData: BucketAnalyticsResponse | undefined;
+  accessKeyCount: number;
+  accessKeysLoading: boolean;
+}) {
+  return (
+    <div className="mb-6 grid grid-cols-3 gap-4">
+      <StatCard
+        icon={CubeIcon}
+        label="Objects"
+        value={analyticsData ? analyticsData.objectCount.toLocaleString() : '—'}
+      />
+      <StatCard
+        icon={HardDrivesIcon}
+        label="Storage used"
+        value={analyticsData ? formatBytes(analyticsData.bytesUsed) : '—'}
+      />
+      <StatCard
+        icon={KeyIcon}
+        label="API keys"
+        value={accessKeysLoading ? '—' : accessKeyCount.toLocaleString()}
+      />
     </div>
   );
 }
@@ -101,6 +132,13 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
     },
   });
   const versions = objectsData?.versions ?? [];
+
+  // Bucket analytics (object count + storage)
+  const { data: analyticsData } = useQuery({
+    queryKey: queryKeys.bucketAnalytics(bucketName),
+    queryFn: () =>
+      apiRequest<BucketAnalyticsResponse>(`/buckets/${encodeURIComponent(bucketName)}/analytics`),
+  });
 
   // Access keys scoped to this bucket
   const { data: accessKeysData, isPending: accessKeysLoading } = useQuery({
@@ -164,7 +202,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
       <div className="mt-2 mb-2 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-zinc-900">{bucketName}</h1>
         <Button
-          variant="filled"
+          variant="primary"
           icon={ArrowUpIcon}
           onClick={() =>
             void navigate({
@@ -185,16 +223,11 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
       {bucket && <BucketPropertiesCard bucket={bucket} />}
 
-      {/* TODO: Replace N/A values with real data from Aurora analytics endpoint */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        <StatCard icon={CubeIcon} label="Objects" value="N/A" />
-        <StatCard icon={HardDrivesIcon} label="Storage used" value="N/A" />
-        <StatCard
-          icon={KeyIcon}
-          label="API keys"
-          value={accessKeysLoading ? '—' : accessKeys.length.toLocaleString()}
-        />
-      </div>
+      <BucketStatsSection
+        analyticsData={analyticsData}
+        accessKeyCount={accessKeys.length}
+        accessKeysLoading={accessKeysLoading}
+      />
 
       <Tabs>
         <TabList>
