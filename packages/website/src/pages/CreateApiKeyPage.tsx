@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/ssr';
 
 import type { CreateAccessKeyResponse } from '@filone/shared';
+import { Heading } from '../components/Heading';
 import { AccessKeyFormFields } from '../components/AccessKeyFormFields.js';
 import { Button } from '../components/Button.js';
 import { SaveCredentialsModal } from '../components/SaveCredentialsModal.js';
@@ -46,10 +47,9 @@ export function CreateApiKeyPage() {
             <ArrowLeftIcon size={16} />
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-zinc-900">Create API key</h1>
-            <p className="text-sm text-zinc-500">
-              Generate credentials for S3-compatible API access
-            </p>
+            <Heading tag="h1" description="Generate credentials for S3-compatible API access">
+              Create API key
+            </Heading>
           </div>
         </div>
 

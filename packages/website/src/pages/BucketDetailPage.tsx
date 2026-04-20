@@ -14,6 +14,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { Heading } from '../components/Heading';
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -241,7 +242,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
       {/* Page header */}
       <div className="mt-2 mb-2 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900">{bucketName}</h1>
+        <Heading tag="h1">{bucketName}</Heading>
         <Button
           variant="primary"
           icon={ArrowUpIcon}

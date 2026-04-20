@@ -14,6 +14,7 @@ import type { CreateBucketResponse, RetentionMode, RetentionDurationType } from 
 import { apiRequest, createAccessKey } from '../lib/api.js';
 import { queryKeys } from '../lib/query-client.js';
 
+import { Heading } from '../components/Heading';
 import { AccessKeyFormFields } from '../components/AccessKeyFormFields';
 import { Input } from '../components/Input';
 import { ObjectSettingsFields } from '../components/ObjectSettingsFields';
@@ -209,8 +210,9 @@ export function CreateBucketPage() {
           <ArrowLeftIcon size={16} aria-hidden="true" />
         </button>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Create bucket</h1>
-          <p className="text-[13px] text-zinc-500">S3-compatible storage on Filecoin</p>
+          <Heading tag="h1" description="S3-compatible storage on Filecoin">
+            Create bucket
+          </Heading>
         </div>
       </div>
 

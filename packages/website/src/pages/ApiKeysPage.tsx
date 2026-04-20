@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { CopySimpleIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
+import { CopySimpleIcon, DatabaseIcon, PlusIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { AccessKeysTable } from '../components/AccessKeysTable';
 import { Button } from '../components/Button';
+import { Link } from '../components/Link';
+import { Heading } from '../components/Heading';
 import { CodeBlock } from '../components/CodeBlock';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Spinner } from '../components/Spinner';
@@ -33,15 +35,6 @@ type AccessKeysTabProps = {
 function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
   return (
     <>
-      <div className="mt-4 mb-4 flex items-center justify-between">
-        <span className="text-sm text-zinc-600">
-          {keys.length === 1 ? '1 key' : `${keys.length} keys`}
-        </span>
-        <Button variant="primary" icon={PlusIcon} onClick={onCreateOpen}>
-          Create new key
-        </Button>
-      </div>
-
       <AccessKeysTable
         keys={keys}
         showBuckets
@@ -49,6 +42,13 @@ function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
         onDelete={onDelete}
         onCreateOpen={onCreateOpen}
       />
+      {keys.length === 0 && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="tertiary" icon={DatabaseIcon} href="/buckets">
+            Manage buckets
+          </Button>
+        </div>
+      )}
     </>
   );
 }
@@ -184,14 +184,9 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
       <div>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-zinc-900">Quickstart (AWS CLI)</h3>
-          <a
-            href={DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs font-medium text-brand-600 hover:underline"
-          >
-            View docs ↗
-          </a>
+          <Link variant="accent" href={DOCS_URL} className="text-xs">
+            View docs
+          </Link>
         </div>
         <div className="flex flex-col gap-3">
           {[
@@ -409,10 +404,19 @@ export function ApiKeysPage() {
 
   return (
     <div className="p-8">
-      <h1 className="mb-1 text-2xl font-semibold text-zinc-900">API Keys</h1>
-      <p className="mb-6 text-sm text-zinc-500">
-        Manage credentials and connect via S3-compatible API
-      </p>
+      <div className="mb-6 flex items-center justify-between">
+        <Heading tag="h1" description="Manage credentials and connect via S3-compatible API">
+          API Keys
+        </Heading>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={PlusIcon}
+          onClick={() => void navigate({ to: '/api-keys/create' })}
+        >
+          Create new key
+        </Button>
+      </div>
 
       <Tabs>
         <TabList>

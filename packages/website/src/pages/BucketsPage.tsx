@@ -1,9 +1,11 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Link } from '@tanstack/react-router';
-import { PlusIcon, DatabaseIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
+import { PlusIcon, DatabaseIcon, TrashIcon, KeyIcon } from '@phosphor-icons/react/dist/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { Heading } from '../components/Heading';
 import { Button } from '../components/Button';
+import { EmptyStateCard } from '../components/EmptyStateCard';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
 
@@ -54,7 +56,7 @@ export function BucketsPage() {
 
   if (isError) {
     return (
-      <div className="p-6">
+      <div className="p-8">
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error?.message ?? 'Failed to load buckets'}
         </div>
@@ -63,12 +65,15 @@ export function BucketsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-8">
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-zinc-900">Buckets</h1>
+        <Heading tag="h1" description="Organize and manage your storage containers">
+          Buckets
+        </Heading>
         <Button
-          variant="primary"
+          variant="ghost"
+          size="sm"
           icon={PlusIcon}
           onClick={() => navigate({ to: '/buckets/create' })}
         >
@@ -78,20 +83,26 @@ export function BucketsPage() {
 
       {/* Content: empty state or table */}
       {buckets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 bg-white px-6 py-16 text-center">
-          <DatabaseIcon size={48} className="mb-4 text-zinc-300" aria-hidden="true" />
-          <p className="mb-1 text-base font-medium text-zinc-700">No buckets yet</p>
-          <p className="mb-6 text-sm text-zinc-500">
-            Create your first bucket to start storing objects
-          </p>
-          <Button
-            variant="primary"
-            icon={PlusIcon}
-            onClick={() => navigate({ to: '/buckets/create' })}
+        <>
+          <EmptyStateCard
+            icon={DatabaseIcon}
+            title="No buckets yet"
+            description="Create your first bucket to start storing objects"
           >
-            Create bucket
-          </Button>
-        </div>
+            <Button
+              variant="primary"
+              icon={PlusIcon}
+              onClick={() => navigate({ to: '/buckets/create' })}
+            >
+              Create bucket
+            </Button>
+          </EmptyStateCard>
+          <div className="mt-6 flex justify-center">
+            <Button variant="tertiary" icon={KeyIcon} href="/api-keys">
+              Manage API keys
+            </Button>
+          </div>
+        </>
       ) : (
         <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
           <table className="w-full text-sm">
