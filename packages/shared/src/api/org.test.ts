@@ -64,6 +64,11 @@ describe('OrgNameSchema', () => {
     expect(result).toBe('Acme Corp');
   });
 
+  it('trims whitespace when string exceeds max length', () => {
+    const result = OrgNameSchema.parse('  Acme Corp' + ' '.repeat(ORG_NAME_MAX_LENGTH));
+    expect(result).toBe('Acme Corp');
+  });
+
   it('reports allowed-characters error message', () => {
     const result = OrgNameSchema.safeParse('Acme@Corp');
     expect(result.success).toBe(false);
