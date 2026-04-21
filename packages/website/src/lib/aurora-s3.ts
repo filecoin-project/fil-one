@@ -128,8 +128,12 @@ export function parseS3ErrorResponse(xml: string): { code: string; message: stri
  * Execute a presigned URL and handle S3-level errors.
  * Throws an Error with the S3 error message on non-2xx responses.
  */
-export async function executePresignedUrl(url: string, method: string): Promise<Response> {
-  const response = await fetch(url, { method });
+export async function executePresignedUrl(
+  url: string,
+  method: string,
+  headers?: Record<string, string>,
+): Promise<Response> {
+  const response = await fetch(url, { method, ...(headers && { headers }) });
 
   if (!response.ok) {
     const body = await response.text();

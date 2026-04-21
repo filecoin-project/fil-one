@@ -257,7 +257,11 @@ export async function getPresignedHeadObjectUrl(
     );
   }
 
-  return getSignedUrl(s3, new HeadObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
+  return getSignedUrl(
+    s3,
+    new HeadObjectCommand({ Bucket: bucket, Key: key, ChecksumMode: 'ENABLED' }),
+    { expiresIn, unhoistableHeaders: new Set(['x-amz-checksum-mode']) },
+  );
 }
 
 export type PresignGetObjectRetentionOptions = PresignBaseOptions & { key: string };
