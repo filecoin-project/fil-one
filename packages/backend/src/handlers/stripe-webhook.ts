@@ -191,7 +191,7 @@ async function handleCustomerUpdated(tableName: string, customer: Stripe.Custome
 
   const defaultPm = customer.invoice_settings?.default_payment_method;
   if (!defaultPm) {
-    console.warn('[stripe-webhook] customer.updated without default_payment_method; skipping', {
+    console.info('[stripe-webhook] customer.updated without default_payment_method; skipping', {
       customerId: customer.id,
       userId,
     });
