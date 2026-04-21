@@ -21,7 +21,6 @@ import { VersionHistoryCard } from '../components/VersionHistoryCard';
 import { formatBytes, getS3Endpoint, S3_REGION } from '@filone/shared';
 
 import type {
-  ObjectChecksum,
   ObjectMetadataResponse,
   ObjectRetentionInfo,
   GetBucketResponse,
@@ -58,7 +57,6 @@ function buildMetadataResponse(
     ...(head.etag && { etag: head.etag }),
     ...(head.contentType && { contentType: head.contentType }),
     metadata: head.metadata,
-    ...(head.checksum && { checksum: head.checksum }),
     ...(retention && { retention }),
   };
 }
@@ -200,6 +198,9 @@ export function ObjectDetailPage({ bucketName, objectKey, versionId }: ObjectDet
     }
   }
 
+  // Strip surrounding quotes from ETag (S3 returns it wrapped in double-quotes).
+  const etag = metadata?.etag?.replace(/^"|"$/g, '');
+
   const s3Path = `s3://${bucketName}/${objectKey}`;
 
   const s3Endpoint = getS3Endpoint(S3_REGION, FILONE_STAGE);
@@ -262,6 +263,7 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
           <DetailRow label="Bucket" value={bucketName} mono />
           <CopyableDetailRow label="S3 Path" value={s3Path} />
           {versionId && <CopyableDetailRow label="Version ID" value={versionId} />}
+          {etag && <CopyableDetailRow label="ETag" value={etag} />}
           <div className="flex items-center justify-between py-1">
             <span className="text-[13px] text-zinc-500">Retention</span>
             {metadata?.retention ? (
@@ -306,9 +308,6 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
           </div>
         </div>
       </div>
-
-      {/* Checksum card */}
-      <ChecksumCard checksum={metadata?.checksum} />
 
       {metadata?.retention && metadata.retention.mode === 'COMPLIANCE' && (
         <div className="mt-6 rounded-lg border border-red-300/50 p-4">
@@ -378,28 +377,6 @@ function CopyableDetailRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between py-1">
       <span className="text-[13px] text-zinc-500">{label}</span>
       <CopyableField label="" value={value} />
-    </div>
-  );
-}
-
-function ChecksumCard({ checksum }: { checksum?: ObjectChecksum }) {
-  return (
-    <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-1 text-sm font-medium text-zinc-900">Checksum</h2>
-      <p className="mb-3 text-xs text-zinc-500">
-        Verified at upload. Use this value to confirm the file hasn&rsquo;t been corrupted or
-        tampered with.
-      </p>
-      {checksum ? (
-        <div className="flex flex-col gap-2">
-          <DetailRow label="Algorithm" value={checksum.algorithm} />
-          <CopyableDetailRow label="Value" value={checksum.value} />
-        </div>
-      ) : (
-        <div className="rounded-lg bg-zinc-100 px-3 py-2.5">
-          <span className="font-mono text-[11px] text-zinc-400">Checksum not available</span>
-        </div>
-      )}
     </div>
   );
 }

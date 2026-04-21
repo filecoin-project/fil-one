@@ -311,34 +311,6 @@ describe('parseHeadObjectResponse', () => {
     });
   });
 
-  it('extracts x-amz-checksum-sha256 as the SHA-256 checksum', () => {
-    const response = buildResponse({
-      'content-length': '100',
-      'last-modified': 'Wed, 15 Jan 2026 10:30:00 GMT',
-      'x-amz-checksum-sha256': 'n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDwCgg=',
-    });
-
-    const result = parseHeadObjectResponse(response, 'file.bin');
-
-    expect(result.checksum).toEqual({
-      algorithm: 'SHA-256',
-      value: 'n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDwCgg=',
-    });
-  });
-
-  it('prefers SHA-256 over other checksum headers when multiple are present', () => {
-    const response = buildResponse({
-      'content-length': '100',
-      'last-modified': 'Wed, 15 Jan 2026 10:30:00 GMT',
-      'x-amz-checksum-sha256': 'sha256value=',
-      'x-amz-checksum-crc32': 'crc32value=',
-    });
-
-    const result = parseHeadObjectResponse(response, 'file.bin');
-
-    expect(result.checksum).toEqual({ algorithm: 'SHA-256', value: 'sha256value=' });
-  });
-
   it('omits optional fields when headers are absent', () => {
     const response = buildResponse({
       'content-length': '50',
