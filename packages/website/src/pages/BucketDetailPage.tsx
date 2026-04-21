@@ -11,7 +11,7 @@ import { AddBucketKeyModal } from '../components/AddBucketKeyModal';
 import { BucketPropertiesCard } from '../components/BucketPropertiesCard';
 import { ObjectBrowser } from '../components/ObjectBrowser';
 import { BucketAccessTab } from '../components/BucketAccessTab';
-import { getS3Endpoint, S3_REGION } from '@filone/shared';
+import { getS3Endpoint, S3_REGION, formatBytes } from '@filone/shared';
 import { FILONE_STAGE } from '../env';
 
 import type {
@@ -49,6 +49,36 @@ function StatCard({
         <p className="text-2xl font-semibold text-zinc-900">{value}</p>
         <p className="text-xs text-zinc-500">{label}</p>
       </div>
+    </div>
+  );
+}
+
+function BucketStatCards({
+  analytics,
+  accessKeyCount,
+  accessKeysLoading,
+}: {
+  analytics: BucketAnalyticsResponse | undefined;
+  accessKeyCount: number;
+  accessKeysLoading: boolean;
+}) {
+  return (
+    <div className="mb-6 grid grid-cols-3 gap-4">
+      <StatCard
+        icon={CubeIcon}
+        label="Objects"
+        value={analytics ? analytics.objectCount.toLocaleString() : '—'}
+      />
+      <StatCard
+        icon={HardDrivesIcon}
+        label="Storage used"
+        value={analytics ? formatBytes(analytics.bytesUsed) : '—'}
+      />
+      <StatCard
+        icon={KeyIcon}
+        label="API keys"
+        value={accessKeysLoading ? '—' : accessKeyCount.toLocaleString()}
+      />
     </div>
   );
 }
@@ -186,24 +216,11 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
       {bucket && <BucketPropertiesCard bucket={bucket} />}
 
-      {/* Stat cards */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        <StatCard
-          icon={CubeIcon}
-          label="Objects"
-          value={analyticsData ? analyticsData.objectCount.toLocaleString() : '—'}
-        />
-        <StatCard
-          icon={HardDrivesIcon}
-          label="Storage used"
-          value={analyticsData ? formatBytes(analyticsData.bytesUsed) : '—'}
-        />
-        <StatCard
-          icon={KeyIcon}
-          label="API keys"
-          value={accessKeysLoading ? '—' : accessKeys.length.toLocaleString()}
-        />
-      </div>
+      <BucketStatCards
+        analytics={analyticsData}
+        accessKeyCount={accessKeys.length}
+        accessKeysLoading={accessKeysLoading}
+      />
 
       <Tabs>
         <TabList>
