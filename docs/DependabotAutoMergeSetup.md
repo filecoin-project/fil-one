@@ -40,5 +40,5 @@ only read Dependabot secrets. Store both values with `--app dependabot`.
 3. Copy the App's Client ID from the same settings page (it looks like
    `Iv23li...`) and store it:
    ```sh
-   pbpaste | gh secret set FIL_ONE_BOT_CLIENT_ID --app dependabot
+   gh secret set FIL_ONE_BOT_CLIENT_ID --app dependabot
    ```
