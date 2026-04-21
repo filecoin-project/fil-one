@@ -191,10 +191,11 @@ async function handleCustomerUpdated(tableName: string, customer: Stripe.Custome
 
   const defaultPm = customer.invoice_settings?.default_payment_method;
   if (!defaultPm) {
-    console.info('[stripe-webhook] customer.updated without default_payment_method; skipping', {
+    console.info('[stripe-webhook] customer.updated without default_payment_method; clearing cache', {
       customerId: customer.id,
       userId,
     });
+    await clearPaymentMethod(tableName, userId);
     return;
   }
 
@@ -202,6 +203,24 @@ async function handleCustomerUpdated(tableName: string, customer: Stripe.Custome
   const pm =
     typeof defaultPm === 'string' ? await stripe.paymentMethods.retrieve(defaultPm) : defaultPm;
   await updatePaymentMethod(tableName, userId, pm);
+}
+
+async function clearPaymentMethod(tableName: string, userId: string): Promise<void> {
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: tableName,
+      Key: {
+        pk: { S: `CUSTOMER#${userId}` },
+        sk: { S: 'SUBSCRIPTION' },
+      },
+      UpdateExpression:
+        'REMOVE paymentMethodId, paymentMethodLast4, paymentMethodBrand, paymentMethodExpMonth, paymentMethodExpYear SET updatedAt = :now',
+      ExpressionAttributeValues: {
+        ':now': { S: new Date().toISOString() },
+      },
+      ConditionExpression: 'attribute_exists(pk)',
+    }),
+  );
 }
 
 async function updatePaymentMethod(
