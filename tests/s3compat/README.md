@@ -241,7 +241,7 @@ The operations tested are defined by the Console's [presign handler](../../packa
 For each operation up to four log entries are written:
 
 1. `presign_<op>` — boto3 generated a Sig V4 URL.
-2. `preflight_<op>` — OPTIONS from `Origin: https://app.fil.one` returned `Access-Control-Allow-{Origin,Methods,Headers}` covering the method and any custom request headers. **Only emitted for `putObject` (PUT) and `deleteObject` (DELETE).** Per the Fetch spec, browsers don't send a preflight for *simple* requests (GET/HEAD with only CORS-safelisted headers), so the server's OPTIONS handling is irrelevant for those ops in a real browser and we skip the check.
+2. `preflight_<op>` — OPTIONS from `Origin: https://app.fil.one` returned `Access-Control-Allow-{Origin,Methods,Headers}` covering the method and any custom request headers. **Only emitted for `putObject` (PUT) and `deleteObject` (DELETE).** Per the Fetch spec, browsers don't send a preflight for _simple_ requests (GET/HEAD with only CORS-safelisted headers), so the server's OPTIONS handling is irrelevant for those ops in a real browser and we skip the check.
 3. `execute_<op>` — the signed URL succeeded over HTTP (or returned an S3 error listed as acceptable for that op).
 4. `response_cors_<op>` — the actual response carries `Access-Control-Allow-Origin`, and for HEAD/GET it also exposes the headers the browser needs to read (`ETag`, `Content-Length`, `Content-Type`, `Last-Modified`, plus `x-fil-cid` for the `fil-include-meta` variant; `x-amz-meta-*` must survive to the response for HEAD).
 
@@ -262,10 +262,10 @@ The script uploads one small test object at a random key under `console-presign-
 
 The Console operations only work from a browser if the bucket's CORS policy permits the origin, methods, request headers, and exposed response headers the test exercises. How that configuration is applied depends on the provider:
 
-| Provider | CORS source | Test behavior |
-| -------- | ----------- | ------------- |
-| **Akave** | S3 API (`PutBucketCors`) | The test captures the bucket's current CORS config, applies a rule tailored to the tested operations (origin, all methods, wildcard `AllowedHeaders`, the required `ExposeHeaders`), runs the checks, and restores the captured config in a `finally` block. |
-| **Aurora** | Configured out-of-band at the edge/CDN layer | The test does not call `put_bucket_cors` — Aurora rejects it. The operator must ensure the edge CORS rules match what the test asserts. |
+| Provider   | CORS source                                  | Test behavior                                                                                                                                                                                                                                                |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Akave**  | S3 API (`PutBucketCors`)                     | The test captures the bucket's current CORS config, applies a rule tailored to the tested operations (origin, all methods, wildcard `AllowedHeaders`, the required `ExposeHeaders`), runs the checks, and restores the captured config in a `finally` block. |
+| **Aurora** | Configured out-of-band at the edge/CDN layer | The test does not call `put_bucket_cors` — Aurora rejects it. The operator must ensure the edge CORS rules match what the test asserts.                                                                                                                      |
 
 Providers that manage CORS via the S3 API are listed in `PROVIDERS_WITH_PUT_BUCKET_CORS` in `console_presign_test.py`.
 
@@ -540,17 +540,17 @@ ERRORS
 
 ## File Reference
 
-| File                    | Purpose                                                           |
-| ----------------------- | ----------------------------------------------------------------- |
-| `client.py`             | boto3 client factory for Aurora and source.coop                   |
-| `report.py`             | Shared report formatting used by all scripts                      |
-| `logger.py`             | Per-operation JSONL logging + report generation for phase scripts |
-| `manifest.py`           | Upload resume state (`manifest.json`)                             |
-| `upload.py`             | Upload files from source.coop to Aurora                           |
-| `fetch.py`              | Head, get preview, and list versions                              |
-| `delete.py`             | Delete objects by key or version                                  |
-| `load_test.py`          | Concurrent load test with SQLite-backed resume                    |
-| `compatibility_test.py` | Full S3 compatibility test via ceph/s3-tests                      |
-| `console_presign_test.py` | Presigned URL + CORS test for the Console's operations          |
-| `manifest.json`         | Created at runtime — upload state                                 |
-| `load_test_state.db`    | Created at runtime — load test state                              |
+| File                      | Purpose                                                           |
+| ------------------------- | ----------------------------------------------------------------- |
+| `client.py`               | boto3 client factory for Aurora and source.coop                   |
+| `report.py`               | Shared report formatting used by all scripts                      |
+| `logger.py`               | Per-operation JSONL logging + report generation for phase scripts |
+| `manifest.py`             | Upload resume state (`manifest.json`)                             |
+| `upload.py`               | Upload files from source.coop to Aurora                           |
+| `fetch.py`                | Head, get preview, and list versions                              |
+| `delete.py`               | Delete objects by key or version                                  |
+| `load_test.py`            | Concurrent load test with SQLite-backed resume                    |
+| `compatibility_test.py`   | Full S3 compatibility test via ceph/s3-tests                      |
+| `console_presign_test.py` | Presigned URL + CORS test for the Console's operations            |
+| `manifest.json`           | Created at runtime — upload state                                 |
+| `load_test_state.db`      | Created at runtime — load test state                              |
