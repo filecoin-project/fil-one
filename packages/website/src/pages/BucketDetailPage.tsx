@@ -11,7 +11,7 @@ import { AddBucketKeyModal } from '../components/AddBucketKeyModal';
 import { BucketPropertiesCard } from '../components/BucketPropertiesCard';
 import { ObjectBrowser } from '../components/ObjectBrowser';
 import { BucketAccessTab } from '../components/BucketAccessTab';
-import { formatBytes, getS3Endpoint, S3_REGION } from '@filone/shared';
+import { getS3Endpoint, S3_REGION, formatBytes } from '@filone/shared';
 import { FILONE_STAGE } from '../env';
 
 import type {
@@ -53,12 +53,12 @@ function StatCard({
   );
 }
 
-function BucketStatsSection({
-  analyticsData,
+function BucketStatCards({
+  analytics,
   accessKeyCount,
   accessKeysLoading,
 }: {
-  analyticsData: BucketAnalyticsResponse | undefined;
+  analytics: BucketAnalyticsResponse | undefined;
   accessKeyCount: number;
   accessKeysLoading: boolean;
 }) {
@@ -67,12 +67,12 @@ function BucketStatsSection({
       <StatCard
         icon={CubeIcon}
         label="Objects"
-        value={analyticsData ? analyticsData.objectCount.toLocaleString() : '—'}
+        value={analytics ? analytics.objectCount.toLocaleString() : '—'}
       />
       <StatCard
         icon={HardDrivesIcon}
         label="Storage used"
-        value={analyticsData ? formatBytes(analyticsData.bytesUsed) : '—'}
+        value={analytics ? formatBytes(analytics.bytesUsed) : '—'}
       />
       <StatCard
         icon={KeyIcon}
@@ -223,8 +223,8 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
       {bucket && <BucketPropertiesCard bucket={bucket} />}
 
-      <BucketStatsSection
-        analyticsData={analyticsData}
+      <BucketStatCards
+        analytics={analyticsData}
         accessKeyCount={accessKeys.length}
         accessKeysLoading={accessKeysLoading}
       />
