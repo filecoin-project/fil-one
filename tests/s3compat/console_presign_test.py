@@ -316,7 +316,6 @@ def _run_case(s3, log: Logger, case: OpCase, origin: str):
                 "request_headers": case.preflight.request_headers,
                 "status_code": resp.status_code,
                 "response_headers_lower": _filter_response_headers(resp.headers),
-                "response_body_sample": resp.text[:400],
                 **details,
             }
             if ok:
@@ -339,7 +338,6 @@ def _run_case(s3, log: Logger, case: OpCase, origin: str):
     exec_entry = {
         "elapsed_s": round(time.monotonic() - t0, 3),
         "status_code": resp.status_code,
-        "response_body_sample": resp.text[:400] if _has_text_body(case) else None,
         "response_headers_lower": _filter_response_headers(resp.headers),
     }
     if resp.status_code in case.ok_statuses:
@@ -520,11 +518,6 @@ def _filter_response_headers(headers) -> dict:
         if lk in LOGGED_RESPONSE_HEADERS or any(lk.startswith(p) for p in LOGGED_RESPONSE_HEADER_PREFIXES):
             out[lk] = v
     return out
-
-
-def _has_text_body(case: OpCase) -> bool:
-    # HEAD responses have no body; PUT/DELETE success bodies are empty.
-    return case.http_method == "GET"
 
 
 # ── Setup helpers ──────────────────────────────────────────────────────

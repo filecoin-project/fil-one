@@ -1,12 +1,12 @@
-# Aurora S3 Testing
+# S3 On-Ramp Testing
 
-Three test suites against the Aurora S3-compatible API:
+Three test suites for validating FilOne S3 on-ramps (Aurora, Akave, …):
 
-1. **Upload, fetch, delete, and load tests** — targeted upload, fetch, delete, and load tests using the `harvard-lil/gov-data` dataset on source.coop. Files are streamed directly (source → Aurora) without writing to disk.
-2. **Compatibility Test** — runs the [ceph/s3-tests](https://github.com/ceph/s3-tests) suite (~750 tests) against Aurora to measure full S3 API compatibility.
-3. **Console presigned-URL test** — verifies a provider supports the presigned URL operations the FilOne Console issues and that they are executable from a browser running on `https://app.fil.one` (CORS).
+1. **Upload, fetch, delete, and load tests** — targeted upload, fetch, delete, and load tests using the `harvard-lil/gov-data` dataset on source.coop. Files are streamed directly (source → on-ramp) without writing to disk.
+2. **Compatibility Test** — runs the [ceph/s3-tests](https://github.com/ceph/s3-tests) suite (~750 tests) against an on-ramp to measure full S3 API compatibility.
+3. **Console presigned-URL test** — verifies an on-ramp supports the presigned URL operations the FilOne Console issues and that they are executable from a browser running on `https://app.fil.one` (CORS).
 
-All scripts share a unified report format: timestamped files in `aurora/logs/` and `aurora/reports/`.
+Each on-ramp has its own directory (`aurora/`, `akave/`, …) holding its `.env`, logs, and reports. All scripts share a unified report format: timestamped files in `<on-ramp>/logs/` and `<on-ramp>/reports/`.
 
 ---
 
@@ -224,7 +224,7 @@ The quarantine marks are configured in `_QUARANTINE_MARKS` in
 
 ## Console Presigned-URL Test
 
-Verifies that a provider can sign (with AWS Sig V4) every S3 operation the FilOne Console issues via its batch presign endpoint, and that the resulting URLs are executable from a browser running on `https://app.fil.one` — i.e., the bucket's CORS configuration permits them.
+Verifies that an on-ramp can sign (with AWS Sig V4) every S3 operation the FilOne Console issues via its batch presign endpoint, and that the resulting URLs are executable from a browser running on `https://app.fil.one` — i.e., the bucket's CORS configuration permits them. Works against any on-ramp.
 
 The operations tested are defined by the Console's [presign handler](../../packages/backend/src/handlers/presign.ts):
 
