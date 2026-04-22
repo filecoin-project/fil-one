@@ -40,6 +40,16 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export class PollTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`pollUntil timed out after ${timeoutMs}ms`);
+    this.name = 'PollTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export async function pollUntil<T>(
   fn: () => Promise<T | null>,
   timeoutMs: number,
@@ -55,7 +65,7 @@ export async function pollUntil<T>(
     await sleep(delay);
     delay = Math.min(delay * 2, maxDelay);
   }
-  throw new Error(`pollUntil timed out after ${timeoutMs}ms`);
+  throw new PollTimeoutError(timeoutMs);
 }
 
 // =============================================================================

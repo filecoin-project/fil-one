@@ -6,13 +6,14 @@ export {
   getUserInfoTableName,
   sleep,
   pollUntil,
+  PollTimeoutError,
   seedBillingRecord,
   getBillingRecord,
   deleteBillingRecord,
   createTestCustomer,
 } from '../helpers.js';
 
-import { getStripeClient, pollUntil, getBillingRecord } from '../helpers.js';
+import { getStripeClient, pollUntil, PollTimeoutError, getBillingRecord } from '../helpers.js';
 import { Resource } from 'sst';
 
 // =============================================================================
@@ -161,10 +162,11 @@ export async function pollTestClockReady({
       { initialDelay: 200 },
     );
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('pollUntil timed out')) {
+    if (err instanceof PollTimeoutError) {
       throw new Error(
         `pollTestClockReady timed out after ${timeoutSeconds}s ` +
           `(last status: ${lastStatus ?? 'unknown'}, clockId: ${clockId})`,
+        { cause: err },
       );
     }
     throw err;
