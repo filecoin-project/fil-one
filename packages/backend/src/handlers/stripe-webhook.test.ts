@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { buildEvent } from '../test/lambda-test-utilities.js';
+import { type MetricEvent, reportMetric } from '../lib/metrics.js';
 import { SubscriptionStatus } from '@filone/shared';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,12 @@ vi.mock('../lib/stripe-client.js', () => ({
   }),
   getWebhookSecret: vi.fn().mockResolvedValue('whsec_test_fake'),
 }));
+
+vi.mock('../lib/metrics.js', () => ({
+  reportMetric: vi.fn(),
+}));
+
+const reportMetricMock = vi.mocked(reportMetric);
 
 const ddbMock = mockClient(DynamoDBClient);
 
@@ -181,21 +188,10 @@ function setupAuroraTenantResolution() {
 // ---------------------------------------------------------------------------
 
 describe('stripe-webhook handler', () => {
-  let stdoutSpy: MockInstance;
-
-  function dunningEmissions(): Array<Record<string, unknown>> {
-    return stdoutSpy.mock.calls
-      .map((args) => {
-        try {
-          return JSON.parse(String(args[0])) as Record<string, unknown>;
-        } catch {
-          return null;
-        }
-      })
-      .filter(
-        (line): line is Record<string, unknown> =>
-          !!line && (line as { DunningEscalation?: unknown }).DunningEscalation === 1,
-      );
+  function dunningEmissions(): MetricEvent[] {
+    return reportMetricMock.mock.calls
+      .map(([event]) => event)
+      .filter((e) => (e as { DunningEscalation?: unknown }).DunningEscalation === 1);
   }
 
   beforeEach(() => {
@@ -209,11 +205,7 @@ describe('stripe-webhook handler', () => {
     mockPaymentMethodsRetrieve.mockReset();
     mockUpdateTenantStatus.mockReset();
     mockUpdateTenantStatus.mockResolvedValue(undefined);
-    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-  });
-
-  afterEach(() => {
-    stdoutSpy.mockRestore();
+    reportMetricMock.mockReset();
   });
 
   // -----------------------------------------------------------------------
