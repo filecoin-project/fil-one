@@ -140,17 +140,33 @@ export async function pollForPaymentMethod({
 
 export async function pollTestClockReady({
   clockId,
-  timeoutSeconds = 120,
+  timeoutSeconds = 270,
 }: {
   clockId: string;
   timeoutSeconds?: number;
 }): Promise<void> {
-  await pollUntil(
-    async () => {
-      const clockState = await getStripeClient().testHelpers.testClocks.retrieve(clockId);
-      return clockState.status === 'ready' ? true : null;
-    },
-    timeoutSeconds * 1000,
-    { initialDelay: 200 },
-  );
+  let lastStatus: string | undefined;
+  try {
+    await pollUntil(
+      async () => {
+        const clockState = await getStripeClient().testHelpers.testClocks.retrieve(clockId);
+        lastStatus = clockState.status;
+        if (clockState.status === 'ready') return true;
+        if (clockState.status === 'internal_failure') {
+          throw new Error(`Test clock ${clockId} entered internal_failure state`);
+        }
+        return null;
+      },
+      timeoutSeconds * 1000,
+      { initialDelay: 200 },
+    );
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('pollUntil timed out')) {
+      throw new Error(
+        `pollTestClockReady timed out after ${timeoutSeconds}s ` +
+          `(last status: ${lastStatus ?? 'unknown'}, clockId: ${clockId})`,
+      );
+    }
+    throw err;
+  }
 }

@@ -46,14 +46,13 @@ export async function pollUntil<T>(
   opts?: { initialDelay?: number; maxDelay?: number },
 ): Promise<T> {
   const { initialDelay = 500, maxDelay = 2000 } = opts ?? {};
-  let elapsed = 0;
+  const deadline = Date.now() + timeoutMs;
   let delay = initialDelay;
 
-  while (elapsed < timeoutMs) {
+  while (Date.now() < deadline) {
     const result = await fn();
     if (result !== null) return result;
     await sleep(delay);
-    elapsed += delay;
     delay = Math.min(delay * 2, maxDelay);
   }
   throw new Error(`pollUntil timed out after ${timeoutMs}ms`);
