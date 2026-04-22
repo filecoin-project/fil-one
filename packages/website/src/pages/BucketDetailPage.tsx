@@ -152,16 +152,16 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
 
   const invalidateObjectsCache = useCallback(
     (key: string, versionId?: string) => {
-      queryClient.setQueryData<ListObjectVersionsResponse>(queryKeys.objects(bucketName), (old) =>
-        old
-          ? {
-              ...old,
-              versions: old.versions.filter(
-                (v) => !(v.key === key && (!versionId || v.versionId === versionId)),
-              ),
-            }
-          : old,
-      );
+      if (versionId) {
+        queryClient.setQueryData<ListObjectVersionsResponse>(queryKeys.objects(bucketName), (old) =>
+          old
+            ? {
+                ...old,
+                versions: old.versions.filter((v) => !(v.key === key && v.versionId === versionId)),
+              }
+            : old,
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: queryKeys.objects(bucketName) });
     },
     [queryClient, bucketName],

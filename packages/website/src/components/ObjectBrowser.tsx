@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   ArrowUpIcon,
@@ -449,9 +449,8 @@ export function ObjectBrowser({
                 const isExpanded = expandedKeys.has(group.key);
 
                 return (
-                  <>
+                  <Fragment key={`object:${group.key}`}>
                     <LatestVersionRow
-                      key={`object:${group.key}`}
                       entry={entry}
                       group={group}
                       isExpanded={isExpanded}
@@ -467,7 +466,7 @@ export function ObjectBrowser({
                         .filter((v) => v !== group.latest)
                         .map((version) => (
                           <VersionSubRow
-                            key={`version:${version.versionId}`}
+                            key={`version:${group.key}:${version.versionId}`}
                             version={version}
                             groupKey={group.key}
                             displayName={entry.name}
@@ -477,7 +476,7 @@ export function ObjectBrowser({
                             onNavigate={navigateToObject}
                           />
                         ))}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
