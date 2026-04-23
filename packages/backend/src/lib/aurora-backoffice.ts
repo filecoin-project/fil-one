@@ -364,10 +364,10 @@ export async function getTenantStatus({
 }: {
   tenantId: string;
 }): Promise<TenantStatusResult> {
-  const partnerId = process.env.AURORA_PARTNER_ID!;
-  const client = createBackofficeClient();
-
   try {
+    const partnerId = process.env.AURORA_PARTNER_ID!;
+    const client = createBackofficeClient();
+
     const { data, error, response } = await getTenant({
       client,
       path: { partnerId, tenantId },
