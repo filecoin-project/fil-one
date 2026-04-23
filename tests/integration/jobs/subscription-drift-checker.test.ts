@@ -29,7 +29,8 @@ describe('subscription-drift-checker — active sub + non-existent Aurora tenant
     const result = await invokeDriftChecker();
 
     expect(result.functionError).toBeUndefined();
+    expect(result.logTail).toBeDefined();
     // The summary emission is a structured log line containing this key.
-    expect(result.logTail).toContain('SubscriptionDriftCheckScanned');
+    expect(result.logTail!).toContain('SubscriptionDriftCheckScanned');
   });
 });
