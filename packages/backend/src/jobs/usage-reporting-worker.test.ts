@@ -15,17 +15,23 @@ vi.mock('sst', () => ({
 }));
 
 const mockSetOrgAuroraTenantStatus = vi.fn().mockResolvedValue(undefined);
+const mockGetOrgName = vi.fn().mockResolvedValue(undefined);
 vi.mock('../lib/org-profile.js', () => ({
   setOrgAuroraTenantStatus: (...args: unknown[]) => mockSetOrgAuroraTenantStatus(...args),
+  getOrgName: (...args: unknown[]) => mockGetOrgName(...args),
 }));
 
 const mockMeterEventsCreate = vi.fn().mockResolvedValue({});
+const mockCustomersUpdate = vi.fn().mockResolvedValue({});
 vi.mock('../lib/stripe-client.js', () => ({
   getStripeClient: () => ({
     billing: {
       meterEvents: { create: mockMeterEventsCreate },
     },
+    customers: { update: mockCustomersUpdate },
   }),
+  updateCustomerMetadata: (customerId: string, metadata: Record<string, string>) =>
+    mockCustomersUpdate(customerId, { metadata }),
 }));
 
 const mockGetStorageSamples = vi.fn();
@@ -374,6 +380,79 @@ describe('usage-reporting-worker', () => {
       for (const call of putCalls) {
         expect(call.args[0].input.Item!.lockAction).toEqual({ S: 'skipped:paid' });
       }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Org metadata sync to Stripe
+  // -----------------------------------------------------------------------
+  describe('org metadata sync', () => {
+    it('syncs organization_name and storage_gb to Stripe with latest snapshot', async () => {
+      mockGetOrgName.mockResolvedValueOnce('Acme Corp');
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 500_000_000_000 },
+        { timestamp: '2024-01-01T01:00:00Z', bytesUsed: 1_500_000_000_000 },
+      ]);
+
+      await handler(basePayload);
+
+      expect(mockCustomersUpdate).toHaveBeenCalledOnce();
+      expect(mockCustomersUpdate).toHaveBeenCalledWith('cus_123', {
+        metadata: {
+          storage_gb: '1500',
+          organization_name: 'Acme Corp',
+        },
+      });
+    });
+
+    it('sync failure is swallowed and recorded in audit', async () => {
+      mockGetOrgName.mockResolvedValueOnce('Acme Corp');
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+      mockCustomersUpdate.mockRejectedValueOnce(new Error('Stripe metadata error'));
+
+      await expect(handler(basePayload)).resolves.toBeUndefined();
+
+      const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
+      expect(item.orgSyncAction.S).toMatch(/^error:/);
+    });
+
+    it('skips sync when no org name and zero storage', async () => {
+      mockGetOrgName.mockResolvedValueOnce(undefined);
+      mockGetStorageSamples.mockResolvedValue([]);
+
+      await handler(basePayload);
+
+      expect(mockCustomersUpdate).not.toHaveBeenCalled();
+      const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
+      expect(item.orgSyncAction).toEqual({ S: 'skipped:nothing-to-sync' });
+    });
+
+    it('syncs storage_gb only when org name missing', async () => {
+      mockGetOrgName.mockResolvedValueOnce(undefined);
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 2_000_000_000_000 },
+      ]);
+
+      await handler(basePayload);
+
+      expect(mockCustomersUpdate).toHaveBeenCalledOnce();
+      expect(mockCustomersUpdate).toHaveBeenCalledWith('cus_123', {
+        metadata: { storage_gb: '2000' },
+      });
+    });
+
+    it('audit record includes orgSyncAction on success', async () => {
+      mockGetOrgName.mockResolvedValueOnce('Acme Corp');
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+
+      await handler(basePayload);
+
+      const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
+      expect(item.orgSyncAction).toEqual({ S: 'ok' });
     });
   });
 });
