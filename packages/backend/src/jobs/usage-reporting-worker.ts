@@ -123,11 +123,10 @@ export async function handler(event: UsageReportingWorkerPayload): Promise<void>
 
   await reportStorageToStripe(stripeCustomerId, averageStorageGbUsed);
 
-  const currentStorageGb = Math.round(currentStorageBytes / GB_BYTES);
   const orgSyncAction = await safeSyncOrgMetadata({
     stripeCustomerId,
     orgName,
-    currentStorageGb,
+    currentStorageBytes,
   });
 
   const lockAction = isTrial
@@ -200,12 +199,13 @@ async function safeEnforceTrialLocks(params: {
 async function safeSyncOrgMetadata(params: {
   stripeCustomerId: string;
   orgName: string | undefined;
-  currentStorageGb: number;
+  currentStorageBytes: number;
 }): Promise<string> {
-  if (!params.orgName && params.currentStorageGb === 0) return 'skipped:nothing-to-sync';
+  if (!params.orgName && params.currentStorageBytes === 0) return 'skipped:nothing-to-sync';
   try {
+    const storageGb = Math.round(params.currentStorageBytes / GB_BYTES);
     const metadata: Record<string, string> = {
-      [STRIPE_METADATA_KEYS.storageGb]: String(params.currentStorageGb),
+      [STRIPE_METADATA_KEYS.storageGb]: String(storageGb),
     };
     if (params.orgName) metadata[STRIPE_METADATA_KEYS.organizationName] = params.orgName;
     await updateCustomerMetadata(params.stripeCustomerId, metadata);

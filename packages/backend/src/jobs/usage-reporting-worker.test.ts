@@ -448,5 +448,20 @@ describe('usage-reporting-worker', () => {
       const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
       expect(item.orgSyncAction).toEqual({ S: 'ok' });
     });
+
+    it('syncs sub-GB storage even when no org name (rounds to 0 but is not empty)', async () => {
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 100_000_000 }, // 100 MB
+      ]);
+
+      await handler({ ...basePayload, orgName: undefined });
+
+      expect(mockCustomersUpdate).toHaveBeenCalledOnce();
+      expect(mockCustomersUpdate).toHaveBeenCalledWith('cus_123', {
+        metadata: { storage_gb: '0' },
+      });
+      const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
+      expect(item.orgSyncAction).toEqual({ S: 'ok' });
+    });
   });
 });
