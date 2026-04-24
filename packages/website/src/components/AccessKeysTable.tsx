@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { DotsThreeIcon, KeyIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { IconBox } from './IconBox';
 
-import type { AccessKey, GranularPermission } from '@filone/shared';
+import type { AccessKey } from '@filone/shared';
 import { GRANULAR_PERMISSION_LABELS } from '@filone/shared';
 
 import { Badge } from './Badge';
@@ -21,69 +21,6 @@ function StatusBadge({ status }: { status: AccessKey['status'] }) {
     <Badge color="grey" size="sm" weight="medium">
       Inactive
     </Badge>
-  );
-}
-
-function DataProtectionBadge({
-  granularPermissions,
-}: {
-  granularPermissions: GranularPermission[];
-}) {
-  const [visible, setVisible] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const tooltipId = useId();
-
-  function show() {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 6, left: rect.left + rect.width / 2 });
-    }
-    setVisible(true);
-  }
-
-  function hide() {
-    setVisible(false);
-  }
-
-  return (
-    <span className="inline-block">
-      <button
-        ref={buttonRef}
-        type="button"
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        onFocus={show}
-        onBlur={hide}
-        onClick={() => (visible ? hide() : show())}
-        aria-describedby={visible ? tooltipId : undefined}
-        aria-expanded={visible}
-        className="inline-flex cursor-default items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs font-normal text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-      >
-        Data protection
-      </button>
-      {visible && (
-        <div
-          id={tooltipId}
-          role="tooltip"
-          style={{ top: pos.top, left: pos.left }}
-          className="fixed z-50 -translate-x-1/2"
-        >
-          <div className="w-max max-w-56 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-lg">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-              Data protection
-            </p>
-            <ul className="flex flex-col gap-0.5">
-              {granularPermissions.map((g) => (
-                <li key={g} className="text-xs text-zinc-700">
-                  {GRANULAR_PERMISSION_LABELS[g].label}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </span>
   );
 }
 
@@ -255,7 +192,26 @@ export function AccessKeysTable({
                       </Badge>
                     ))}
                     {(key.granularPermissions ?? []).length > 0 && (
-                      <DataProtectionBadge granularPermissions={key.granularPermissions!} />
+                      <Badge
+                        color="blue"
+                        size="sm"
+                        description={
+                          <>
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                              Data protection
+                            </p>
+                            <ul className="flex flex-col gap-0.5">
+                              {key.granularPermissions!.map((g) => (
+                                <li key={g} className="text-xs text-zinc-700">
+                                  {GRANULAR_PERMISSION_LABELS[g].label}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        }
+                      >
+                        Data protection
+                      </Badge>
                     )}
                   </div>
                 </td>

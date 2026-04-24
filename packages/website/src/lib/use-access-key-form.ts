@@ -16,14 +16,23 @@ import { queryClient, queryKeys } from './query-client.js';
 
 export type UseAccessKeyFormOptions = {
   defaultBucket?: string;
+  defaultPermissions?: AccessKeyPermission[];
   onSuccess: (response: CreateAccessKeyResponse) => void;
 };
 
-export function useAccessKeyForm({ defaultBucket, onSuccess }: UseAccessKeyFormOptions) {
+const FALLBACK_PERMISSIONS: AccessKeyPermission[] = ['read', 'write', 'list'];
+
+export function useAccessKeyForm({
+  defaultBucket,
+  defaultPermissions,
+  onSuccess,
+}: UseAccessKeyFormOptions) {
   const { toast } = useToast();
 
+  const initialPermissions = defaultPermissions ?? FALLBACK_PERMISSIONS;
+
   const [keyName, setKeyName] = useState('');
-  const [permissions, setPermissions] = useState<AccessKeyPermission[]>(['read', 'write', 'list']);
+  const [permissions, setPermissions] = useState<AccessKeyPermission[]>(initialPermissions);
   const [granularPermissions, setGranularPermissions] = useState<GranularPermission[]>([]);
   const [bucketScope, setBucketScope] = useState<AccessKeyBucketScope>(
     defaultBucket ? 'specific' : 'all',
@@ -54,7 +63,7 @@ export function useAccessKeyForm({ defaultBucket, onSuccess }: UseAccessKeyFormO
 
   function reset() {
     setKeyName('');
-    setPermissions(['read', 'write', 'list']);
+    setPermissions(initialPermissions);
     setGranularPermissions([]);
     setBucketScope(defaultBucket ? 'specific' : 'all');
     setSelectedBuckets(defaultBucket ? [defaultBucket] : []);
