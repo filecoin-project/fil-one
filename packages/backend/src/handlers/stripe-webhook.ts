@@ -1,7 +1,9 @@
 import {
+  type AttributeValue,
   DeleteItemCommand,
   GetItemCommand,
   PutItemCommand,
+  ScanCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
@@ -386,12 +388,20 @@ async function handleSubscriptionDeleted(
 }
 
 async function handleCustomerDeleted(tableName: string, customer: Stripe.Customer): Promise<void> {
-  const userId = customer.metadata?.userId;
+  let userId: string | undefined = customer.metadata?.userId;
   if (!userId) {
-    console.warn('[stripe-webhook] customer.deleted without userId in metadata', {
+    userId = await resolveUserIdByStripeCustomer(tableName, customer.id);
+    if (!userId) {
+      console.warn(
+        '[stripe-webhook] customer.deleted without userId in metadata and no matching billing row',
+        { customerId: customer.id },
+      );
+      return;
+    }
+    console.info('[stripe-webhook] customer.deleted resolved userId via reverse lookup', {
       customerId: customer.id,
+      userId,
     });
-    return;
   }
 
   await applyCancellationGracePeriod({
@@ -401,6 +411,37 @@ async function handleCustomerDeleted(tableName: string, customer: Stripe.Custome
     cancellationReason: 'customer_deleted',
     attemptCount: undefined,
   });
+}
+
+// Reverse lookup for customer.deleted events whose payload lacks metadata.userId.
+// BillingTable has no GSI on stripeCustomerId; deletions are rare so a Scan is
+// acceptable. Revisit if deletion volume grows or this becomes a Lambda timeout risk.
+async function resolveUserIdByStripeCustomer(
+  tableName: string,
+  stripeCustomerId: string,
+): Promise<string | undefined> {
+  let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
+  do {
+    const result = await dynamo.send(
+      new ScanCommand({
+        TableName: tableName,
+        FilterExpression: 'sk = :sk AND stripeCustomerId = :sid',
+        ExpressionAttributeValues: {
+          ':sk': { S: 'SUBSCRIPTION' },
+          ':sid': { S: stripeCustomerId },
+        },
+        ...(lastEvaluatedKey ? { ExclusiveStartKey: lastEvaluatedKey } : {}),
+      }),
+    );
+
+    const match = result.Items?.[0];
+    if (match?.pk?.S) {
+      return match.pk.S.replace('CUSTOMER#', '');
+    }
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return undefined;
 }
 
 async function handlePaymentSucceeded(tableName: string, invoice: Stripe.Invoice): Promise<void> {

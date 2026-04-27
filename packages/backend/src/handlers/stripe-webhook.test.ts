@@ -5,6 +5,7 @@ import {
   DeleteItemCommand,
   GetItemCommand,
   PutItemCommand,
+  ScanCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
@@ -200,6 +201,7 @@ describe('stripe-webhook handler', () => {
     ddbMock.on(UpdateItemCommand).resolves({});
     ddbMock.on(DeleteItemCommand).resolves({});
     ddbMock.on(GetItemCommand).resolves({ Item: undefined });
+    ddbMock.on(ScanCommand).resolves({ Items: [] });
     mockConstructEvent.mockReset();
     mockCustomersRetrieve.mockReset();
     mockPaymentMethodsRetrieve.mockReset();
@@ -936,34 +938,111 @@ describe('stripe-webhook handler', () => {
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
 
-    it('skips DDB update and warns when metadata has no userId', async () => {
+    it('attempts reverse lookup and warns when metadata has no userId and no row found', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject({ metadata: {} }));
 
       const result = await handler(buildWebhookEvent('{}'));
 
+      expect(ddbMock.commandCalls(ScanCommand)).toHaveLength(1);
+      expect(ddbMock.commandCalls(ScanCommand)[0].args[0].input).toEqual(
+        expect.objectContaining({
+          TableName: TABLE_NAME,
+          FilterExpression: 'sk = :sk AND stripeCustomerId = :sid',
+          ExpressionAttributeValues: {
+            ':sk': { S: 'SUBSCRIPTION' },
+            ':sid': { S: MOCK_CUSTOMER_ID },
+          },
+        }),
+      );
       expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('customer.deleted without userId'),
+        expect.stringContaining('no matching billing row'),
         expect.objectContaining({ customerId: MOCK_CUSTOMER_ID }),
       );
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
       consoleSpy.mockRestore();
     });
 
-    it('skips DDB update and warns when metadata is missing entirely', async () => {
+    it('attempts reverse lookup and warns when metadata is missing entirely', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       setupStripeEvent('customer.deleted', { id: MOCK_CUSTOMER_ID, deleted: true });
 
       const result = await handler(buildWebhookEvent('{}'));
 
+      expect(ddbMock.commandCalls(ScanCommand)).toHaveLength(1);
       expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('customer.deleted without userId'),
+        expect.stringContaining('no matching billing row'),
         expect.objectContaining({ customerId: MOCK_CUSTOMER_ID }),
       );
       expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
       consoleSpy.mockRestore();
+    });
+
+    it('falls back to reverse lookup and applies grace period when scan finds the row', async () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject({ metadata: {} }));
+      ddbMock.on(ScanCommand).resolves({
+        Items: [
+          marshall({
+            pk: `CUSTOMER#${MOCK_USER_ID}`,
+            sk: 'SUBSCRIPTION',
+            stripeCustomerId: MOCK_CUSTOMER_ID,
+            orgId: MOCK_ORG_ID,
+          }),
+        ],
+      });
+
+      const result = await handler(buildWebhookEvent('{}'));
+
+      const billingUpdate = ddbMock
+        .commandCalls(UpdateItemCommand)
+        .find((c) => c.args[0].input.TableName === TABLE_NAME);
+      expect(billingUpdate).toBeDefined();
+      expect(billingUpdate!.args[0].input.Key).toEqual({
+        pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
+        sk: { S: 'SUBSCRIPTION' },
+      });
+      expect(billingUpdate!.args[0].input.ExpressionAttributeValues).toEqual(
+        expect.objectContaining({ ':status': { S: SubscriptionStatus.GracePeriod } }),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('resolved userId via reverse lookup'),
+        expect.objectContaining({ customerId: MOCK_CUSTOMER_ID, userId: MOCK_USER_ID }),
+      );
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+      infoSpy.mockRestore();
+    });
+
+    it('paginates the reverse lookup scan when first page is empty but has LastEvaluatedKey', async () => {
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject({ metadata: {} }));
+      ddbMock
+        .on(ScanCommand)
+        .resolvesOnce({ Items: [], LastEvaluatedKey: { pk: { S: 'CUSTOMER#other' } } })
+        .resolvesOnce({
+          Items: [
+            marshall({
+              pk: `CUSTOMER#${MOCK_USER_ID}`,
+              sk: 'SUBSCRIPTION',
+              stripeCustomerId: MOCK_CUSTOMER_ID,
+              orgId: MOCK_ORG_ID,
+            }),
+          ],
+        });
+
+      const result = await handler(buildWebhookEvent('{}'));
+
+      expect(ddbMock.commandCalls(ScanCommand)).toHaveLength(2);
+      const billingUpdate = ddbMock
+        .commandCalls(UpdateItemCommand)
+        .find((c) => c.args[0].input.TableName === TABLE_NAME);
+      expect(billingUpdate).toBeDefined();
+      expect(billingUpdate!.args[0].input.Key).toEqual({
+        pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
+        sk: { S: 'SUBSCRIPTION' },
+      });
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
     });
 
     it('calls updateTenantStatus WRITE_LOCKED and writes auroraTenantStatus to org profile', async () => {
