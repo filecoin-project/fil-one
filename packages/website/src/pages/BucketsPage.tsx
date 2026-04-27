@@ -68,7 +68,7 @@ export function BucketsPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-zinc-900">Buckets</h1>
         <Button
-          variant="filled"
+          variant="primary"
           icon={PlusIcon}
           onClick={() => navigate({ to: '/buckets/create' })}
         >
@@ -85,7 +85,7 @@ export function BucketsPage() {
             Create your first bucket to start storing objects
           </p>
           <Button
-            variant="filled"
+            variant="primary"
             icon={PlusIcon}
             onClick={() => navigate({ to: '/buckets/create' })}
           >
@@ -108,6 +108,9 @@ export function BucketsPage() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
                   Visibility
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500">
+                  Features
                 </th>
                 <th className="px-4 py-3" aria-label="Actions" />
               </tr>
@@ -139,6 +142,23 @@ export function BucketsPage() {
                         Private
                       </span>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {bucket.versioning && (
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          Versioned
+                        </span>
+                      )}
+                      {bucket.objectLockEnabled && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Object Lock
+                        </span>
+                      )}
+                      {!bucket.versioning && !bucket.objectLockEnabled && (
+                        <span className="text-xs text-zinc-400">&mdash;</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
