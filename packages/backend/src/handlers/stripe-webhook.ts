@@ -98,6 +98,13 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         await handleSubscriptionDeleted(tableName, subscription);
         break;
       }
+      case 'customer.deleted': {
+        // Stripe's customer.deleted event preserves metadata at the time of
+        // deletion, even though Stripe.DeletedCustomer types omit it.
+        const customer = stripeEvent.data.object as Stripe.Customer;
+        await handleCustomerDeleted(tableName, customer);
+        break;
+      }
       case 'customer.updated': {
         const customer = stripeEvent.data.object as Stripe.Customer;
         await handleCustomerUpdated(tableName, customer);
@@ -298,19 +305,14 @@ async function updateBillingRecord(
   );
 }
 
-async function handleSubscriptionDeleted(
-  tableName: string,
-  subscription: Stripe.Subscription,
-): Promise<void> {
-  const stripe = getStripeClient();
-  const customerId = getCustomerIdString(subscription.customer);
-  const customer = await stripe.customers.retrieve(customerId);
-  if ('deleted' in customer && customer.deleted) return;
-
-  const userId = customer.metadata?.userId;
-  if (!userId) return;
-
-  const graceDays = subscription.trial_end ? TRIAL_GRACE_DAYS : PAID_GRACE_DAYS;
+async function applyCancellationGracePeriod(args: {
+  tableName: string;
+  userId: string;
+  graceDays: number;
+  cancellationReason: string;
+  attemptCount: number | null | undefined;
+}): Promise<void> {
+  const { tableName, userId, graceDays, cancellationReason, attemptCount } = args;
 
   const now = new Date();
   const gracePeriodEndsAt = new Date(now.getTime() + graceDays * 24 * 60 * 60 * 1000).toISOString();
@@ -332,12 +334,9 @@ async function handleSubscriptionDeleted(
     }),
   );
 
-  const latestInvoice = subscription.latest_invoice;
-  const attemptCount =
-    latestInvoice && typeof latestInvoice !== 'string' ? latestInvoice.attempt_count : undefined;
   emitDunningEscalation({
     stage: 'canceled',
-    reason: subscription.cancellation_details?.reason ?? 'unknown',
+    reason: cancellationReason,
     attemptBucket: bucketAttempt(attemptCount),
   });
 
@@ -358,6 +357,50 @@ async function handleSubscriptionDeleted(
   } catch (error) {
     console.error('[stripe-webhook] Failed to WRITE_LOCK Aurora tenant', { userId, error });
   }
+}
+
+async function handleSubscriptionDeleted(
+  tableName: string,
+  subscription: Stripe.Subscription,
+): Promise<void> {
+  const stripe = getStripeClient();
+  const customerId = getCustomerIdString(subscription.customer);
+  const customer = await stripe.customers.retrieve(customerId);
+  if ('deleted' in customer && customer.deleted) return;
+
+  const userId = customer.metadata?.userId;
+  if (!userId) return;
+
+  const graceDays = subscription.trial_end ? TRIAL_GRACE_DAYS : PAID_GRACE_DAYS;
+  const latestInvoice = subscription.latest_invoice;
+  const attemptCount =
+    latestInvoice && typeof latestInvoice !== 'string' ? latestInvoice.attempt_count : undefined;
+
+  await applyCancellationGracePeriod({
+    tableName,
+    userId,
+    graceDays,
+    cancellationReason: subscription.cancellation_details?.reason ?? 'unknown',
+    attemptCount,
+  });
+}
+
+async function handleCustomerDeleted(tableName: string, customer: Stripe.Customer): Promise<void> {
+  const userId = customer.metadata?.userId;
+  if (!userId) {
+    console.warn('[stripe-webhook] customer.deleted without userId in metadata', {
+      customerId: customer.id,
+    });
+    return;
+  }
+
+  await applyCancellationGracePeriod({
+    tableName,
+    userId,
+    graceDays: PAID_GRACE_DAYS,
+    cancellationReason: 'customer_deleted',
+    attemptCount: undefined,
+  });
 }
 
 async function handlePaymentSucceeded(tableName: string, invoice: Stripe.Invoice): Promise<void> {

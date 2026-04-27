@@ -891,6 +891,156 @@ describe('stripe-webhook handler', () => {
   });
 
   // -----------------------------------------------------------------------
+  // 5b. customer.deleted
+  // -----------------------------------------------------------------------
+  describe('customer.deleted', () => {
+    function mockDeletedCustomerEventObject(overrides?: Record<string, unknown>) {
+      return {
+        id: MOCK_CUSTOMER_ID,
+        deleted: true,
+        metadata: { userId: MOCK_USER_ID },
+        ...overrides,
+      };
+    }
+
+    it('sets GracePeriod status with 30-day grace window', async () => {
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject());
+
+      const before = Date.now();
+      const result = await handler(buildWebhookEvent('{}'));
+      const after = Date.now();
+
+      const updateCalls = ddbMock.commandCalls(UpdateItemCommand);
+      expect(updateCalls).toHaveLength(1);
+
+      const input = updateCalls[0].args[0].input;
+      expect(input).toStrictEqual({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: { S: `CUSTOMER#${MOCK_USER_ID}` },
+          sk: { S: 'SUBSCRIPTION' },
+        },
+        UpdateExpression:
+          'SET subscriptionStatus = :status, canceledAt = :now, gracePeriodEndsAt = :grace, updatedAt = :now',
+        ExpressionAttributeValues: {
+          ':status': { S: SubscriptionStatus.GracePeriod },
+          ':now': { S: expect.any(String) },
+          ':grace': { S: expect.any(String) },
+        },
+      });
+
+      const graceDate = new Date(input.ExpressionAttributeValues![':grace'].S!).getTime();
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+      expect(graceDate).toBeGreaterThanOrEqual(before + thirtyDays - 5000);
+      expect(graceDate).toBeLessThanOrEqual(after + thirtyDays + 5000);
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+    });
+
+    it('skips DDB update and warns when metadata has no userId', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject({ metadata: {} }));
+
+      const result = await handler(buildWebhookEvent('{}'));
+
+      expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('customer.deleted without userId'),
+        expect.objectContaining({ customerId: MOCK_CUSTOMER_ID }),
+      );
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+      consoleSpy.mockRestore();
+    });
+
+    it('skips DDB update and warns when metadata is missing entirely', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      setupStripeEvent('customer.deleted', { id: MOCK_CUSTOMER_ID, deleted: true });
+
+      const result = await handler(buildWebhookEvent('{}'));
+
+      expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('customer.deleted without userId'),
+        expect.objectContaining({ customerId: MOCK_CUSTOMER_ID }),
+      );
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+      consoleSpy.mockRestore();
+    });
+
+    it('calls updateTenantStatus WRITE_LOCKED and writes auroraTenantStatus to org profile', async () => {
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject());
+      setupAuroraTenantResolution();
+
+      const result = await handler(buildWebhookEvent('{}'));
+
+      expect(mockUpdateTenantStatus).toHaveBeenCalledWith({
+        tenantId: MOCK_AURORA_TENANT_ID,
+        status: 'WRITE_LOCKED',
+      });
+
+      const orgProfileUpdate = ddbMock
+        .commandCalls(UpdateItemCommand)
+        .find(
+          (c) =>
+            c.args[0].input.TableName === 'UserInfoTable' &&
+            c.args[0].input.ExpressionAttributeValues?.[':s']?.S === 'WRITE_LOCKED',
+        );
+      expect(orgProfileUpdate).toBeDefined();
+      expect(orgProfileUpdate!.args[0].input.Key).toEqual({
+        pk: { S: `ORG#${MOCK_ORG_ID}` },
+        sk: { S: 'PROFILE' },
+      });
+
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+    });
+
+    it('does not fail webhook when Aurora WRITE_LOCK fails', async () => {
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject());
+      setupAuroraTenantResolution();
+      mockUpdateTenantStatus.mockRejectedValue(new Error('Aurora API error'));
+
+      const result = await handler(buildWebhookEvent('{}'));
+
+      // BillingTable update should still have happened
+      const billingUpdate = ddbMock
+        .commandCalls(UpdateItemCommand)
+        .find((c) => c.args[0].input.TableName === TABLE_NAME);
+      expect(billingUpdate).toBeDefined();
+
+      // Org profile auroraTenantStatus must NOT be updated when updateTenantStatus fails
+      const orgProfileUpdate = ddbMock
+        .commandCalls(UpdateItemCommand)
+        .find(
+          (c) =>
+            c.args[0].input.TableName === 'UserInfoTable' &&
+            c.args[0].input.ExpressionAttributeValues?.[':s']?.S === 'WRITE_LOCKED',
+        );
+      expect(orgProfileUpdate).toBeUndefined();
+      expect(result).toEqual({ statusCode: 200, body: JSON.stringify({ received: true }) });
+    });
+
+    it('emits dunning canceled metric with reason=customer_deleted', async () => {
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject());
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(dunningEmissions()[0]).toMatchObject({
+        stage: 'canceled',
+        reason: 'customer_deleted',
+        attemptBucket: 'unknown',
+        DunningEscalation: 1,
+      });
+    });
+
+    it('does NOT call stripe.customers.retrieve', async () => {
+      setupStripeEvent('customer.deleted', mockDeletedCustomerEventObject());
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(mockCustomersRetrieve).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // 6. customer.subscription.trial_will_end
   // -----------------------------------------------------------------------
   describe('customer.subscription.trial_will_end', () => {

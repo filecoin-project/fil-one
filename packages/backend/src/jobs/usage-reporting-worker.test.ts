@@ -278,6 +278,96 @@ describe('usage-reporting-worker', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Stripe resource_missing — customer deleted upstream
+  // -----------------------------------------------------------------------
+  describe('Stripe resource_missing — customer deleted upstream', () => {
+    function makeResourceMissingError(): Error {
+      const err = new Error('No such customer: cus_123') as Error & { code: string };
+      err.code = 'resource_missing';
+      return err;
+    }
+
+    it('does not throw when Stripe returns resource_missing', async () => {
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+      mockMeterEventsCreate.mockRejectedValueOnce(makeResourceMissingError());
+
+      await expect(handler(basePayload)).resolves.toBeUndefined();
+    });
+
+    it('audit record has reportedToStripe: false when meter event hits resource_missing', async () => {
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+      mockMeterEventsCreate.mockRejectedValueOnce(makeResourceMissingError());
+
+      await handler(basePayload);
+
+      const putCalls = ddbMock.commandCalls(PutItemCommand);
+      expect(putCalls).toHaveLength(1);
+      const item = putCalls[0].args[0].input.Item!;
+      expect(item.reportedToStripe).toEqual({ BOOL: false });
+    });
+
+    it('logs structured warn with orgId, subscriptionId, stripeCustomerId on resource_missing', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+      mockMeterEventsCreate.mockRejectedValueOnce(makeResourceMissingError());
+
+      await handler(basePayload);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Stripe customer missing'),
+        expect.objectContaining({
+          orgId: 'org-1',
+          subscriptionId: 'sub_123',
+          stripeCustomerId: 'cus_123',
+          code: 'resource_missing',
+        }),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('continues with trial lock enforcement when meter event hits resource_missing', async () => {
+      const trialPayload: UsageReportingWorkerPayload = {
+        ...basePayload,
+        subscriptionStatus: 'trialing',
+      };
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_500_000_000_000 },
+      ]);
+      mockGetOperationsSamples.mockResolvedValue([]);
+      mockGetTenantInfo.mockResolvedValue({ status: 'ACTIVE' });
+      mockMeterEventsCreate.mockRejectedValueOnce(makeResourceMissingError());
+
+      await handler(trialPayload);
+
+      expect(mockUpdateTenantStatus).toHaveBeenCalledWith({
+        tenantId: 'aurora-tenant-123',
+        status: 'WRITE_LOCKED',
+      });
+      const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
+      expect(item.lockAction).toEqual({ S: 'WRITE_LOCKED' });
+      expect(item.reportedToStripe).toEqual({ BOOL: false });
+    });
+
+    it('still propagates non-resource_missing Stripe errors', async () => {
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+      const err = new Error('rate limited') as Error & { code: string };
+      err.code = 'rate_limit';
+      mockMeterEventsCreate.mockRejectedValueOnce(err);
+
+      await expect(handler(basePayload)).rejects.toThrow('rate limited');
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Idempotency — running twice
   // -----------------------------------------------------------------------
   describe('idempotency — running twice', () => {
