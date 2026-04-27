@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import type { UsageReportingWorkerPayload } from './usage-reporting-worker.js';
@@ -274,6 +274,47 @@ describe('usage-reporting-worker', () => {
 
       const item = ddbMock.commandCalls(PutItemCommand)[0].args[0].input.Item!;
       expect(item.lockAction).toEqual({ S: 'error:Aurora down' });
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // STRIPE_METER_EVENT_NAME validation
+  // -----------------------------------------------------------------------
+  describe('STRIPE_METER_EVENT_NAME validation', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('throws a descriptive error when env var is unset', async () => {
+      vi.stubEnv('STRIPE_METER_EVENT_NAME', undefined);
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+
+      await expect(handler(basePayload)).rejects.toThrow(
+        'STRIPE_METER_EVENT_NAME env var is not set',
+      );
+      expect(mockMeterEventsCreate).not.toHaveBeenCalled();
+    });
+
+    it('throws a descriptive error when env var is empty string', async () => {
+      vi.stubEnv('STRIPE_METER_EVENT_NAME', '');
+      mockGetStorageSamples.mockResolvedValue([
+        { timestamp: '2024-01-01T00:00:00Z', bytesUsed: 1_000_000_000_000 },
+      ]);
+
+      await expect(handler(basePayload)).rejects.toThrow(
+        'STRIPE_METER_EVENT_NAME env var is not set',
+      );
+      expect(mockMeterEventsCreate).not.toHaveBeenCalled();
+    });
+
+    it('does not validate env var when usage is zero (Stripe call skipped)', async () => {
+      vi.stubEnv('STRIPE_METER_EVENT_NAME', '');
+      mockGetStorageSamples.mockResolvedValue([]);
+
+      await expect(handler(basePayload)).resolves.toBeUndefined();
+      expect(mockMeterEventsCreate).not.toHaveBeenCalled();
     });
   });
 

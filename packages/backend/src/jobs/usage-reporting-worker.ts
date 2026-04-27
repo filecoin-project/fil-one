@@ -166,10 +166,15 @@ async function reportStorageToStripe(params: {
   const { orgId, subscriptionId, stripeCustomerId, averageStorageGbUsed } = params;
   if (averageStorageGbUsed <= 0) return { reported: false };
 
+  const eventName = process.env.STRIPE_METER_EVENT_NAME;
+  if (!eventName) {
+    throw new Error('STRIPE_METER_EVENT_NAME env var is not set');
+  }
+
   const stripe = getStripeClient();
   try {
     await stripe.billing.meterEvents.create({
-      event_name: process.env.STRIPE_METER_EVENT_NAME ?? '',
+      event_name: eventName,
       payload: {
         stripe_customer_id: stripeCustomerId,
         value: String(averageStorageGbUsed),
