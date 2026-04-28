@@ -3,13 +3,6 @@ name: 'Prune old Lambda versions'
 on:
   schedule:
     - cron: '0 9 * * *'
-  workflow_dispatch:
-    inputs:
-      keep:
-        description: 'Number of most-recent versions to retain per function'
-        required: false
-        type: string
-        default: '3'
 
 jobs:
   prune:
@@ -28,26 +21,18 @@ jobs:
       contents: read
     env:
       REGION: us-east-2
-      KEEP: ${{ github.event.inputs.keep || '3' }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Validate inputs
-        run: |
-          if ! [[ "$KEEP" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::keep must be a positive integer, got: '$KEEP'"
-            exit 1
-          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: us-east-2
+          aws-region: ${{ env.REGION }}
 
       - name: Prune old Lambda versions
-        run: bin/prune-lambda-versions.sh "${{ matrix.stage }}" "$KEEP"
+        run: bin/prune-lambda-versions.sh "${{ matrix.stage }}"
 
       - name: Notify Slack on failure
         if: failure()
