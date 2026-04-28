@@ -1,4 +1,4 @@
-name: 'Prune Lambda versions'
+name: 'Prune old Lambda versions'
 
 on:
   schedule:
