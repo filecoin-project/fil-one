@@ -119,8 +119,12 @@ describe('Usage Reporting Worker (direct Lambda invoke)', () => {
 
       const customer = await getStripeClient().customers.retrieve(cusId);
       if (customer.deleted) throw new Error('Customer was unexpectedly deleted');
-      expect(customer.metadata.organization_name).toBe(orgName);
-      expect(customer.metadata.storage_gb).toMatch(/^\d+$/);
+      expect(customer.metadata).toEqual({
+        orgId: expect.any(String),
+        userId: expect.any(String),
+        organization_name: orgName,
+        storage_used: expect.stringMatching(/^\d+(\.\d+)? (B|KB|MB|GB|TB)$/),
+      });
 
       const audit = await getAuditRecord(syncOrgId, reportDate);
       expect(audit?.orgSyncAction).toStrictEqual({ S: 'ok' });
