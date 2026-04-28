@@ -34,7 +34,6 @@ interface Auth0Client {
 // ── Constants ─────────────────────────────────────────────────────────
 
 const WEBHOOK_EVENTS: Stripe.WebhookEndpointCreateParams.EnabledEvent[] = [
-  'customer.deleted',
   'customer.updated',
   'customer.subscription.created',
   'customer.subscription.updated',
