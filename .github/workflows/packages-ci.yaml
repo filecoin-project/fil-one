@@ -318,7 +318,15 @@ jobs:
             }
 
   dispatch-telemetry:
-    needs: [check-packages, check-storybook, deploy-staging, test-staging, deploy-production, test-production]
+    needs:
+      [
+        check-packages,
+        check-storybook,
+        deploy-staging,
+        test-staging,
+        deploy-production,
+        test-production,
+      ]
     if: >-
       always() && (
         github.event_name == 'push' ||
