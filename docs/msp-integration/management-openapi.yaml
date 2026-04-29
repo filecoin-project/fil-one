@@ -37,6 +37,8 @@ info:
         already in the requested status.
       * `DELETE /tenants/{tenantId}` returns 204 even if the tenant is
         already gone.
+      * `DELETE /tenants/{tenantId}/api-keys/{keyId}` returns 204 even if
+        the API key was already revoked.
       * `POST /tenants/{tenantId}/access-keys` returns 409 on duplicate
         `name`; the caller can recover via list + get.
       * `DELETE /tenants/{tenantId}/access-keys/{accessKeyId}` returns 204
@@ -211,6 +213,18 @@ paths:
         returned only in this response and cannot be retrieved later.
         FilOne stores the secret in its own secret store and presents it
         as a bearer token on subsequent tenant-scoped calls.
+
+        Multiple API keys may be active for a tenant simultaneously.
+        This is the property key rotation depends on:
+
+          1. Issue a new key with `POST /tenants/{tenantId}/api-keys`.
+          2. Switch all callers to use the new key.
+          3. Revoke the old key with
+             `DELETE /tenants/{tenantId}/api-keys/{keyId}`.
+
+        During step 2 both keys are valid, so callers can roll over
+        without downtime. The MSP may impose a per-tenant cap on the
+        number of concurrently-active keys.
       security:
         - PartnerKey: []
       requestBody:
@@ -232,6 +246,25 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+
+  /tenants/{tenantId}/api-keys/{keyId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/ApiKeyId'
+    delete:
+      tags: [API Keys]
+      summary: Revoke a per-tenant API key
+      description: |
+        Revokes the API key identified by `keyId`. Subsequent requests
+        signed with that key must fail. Returns 204 even if the key was
+        already deleted (idempotent).
+      security:
+        - PartnerKey: []
+      responses:
+        '204':
+          description: Revoked (or already revoked).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /tenants/{tenantId}/access-keys:
     parameters:
@@ -449,6 +482,13 @@ components:
       name: accessKeyId
       required: true
       description: AWS-style access key ID (the value used by S3 clients).
+      schema:
+        type: string
+    ApiKeyId:
+      in: path
+      name: keyId
+      required: true
+      description: Stable identifier returned by `POST /tenants/{tenantId}/api-keys`.
       schema:
         type: string
     BucketName:

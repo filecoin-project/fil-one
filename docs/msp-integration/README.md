@@ -83,6 +83,8 @@ After the tenant is created and set up, FilOne creates a per-tenant API key thro
 
 This separation limits the blast radius if a per-tenant key is compromised.
 
+The MSP must also support **key rotation**: a tenant must be able to hold more than one active API key at the same time, so that FilOne can issue a new key, switch callers over to it, and only then revoke the old one. The standard flow is issue → switch → revoke; both keys are valid during the overlap window. Revocation is a separate endpoint that takes the key's identifier (returned by the create call) and is idempotent — calling it twice for the same key is not an error.
+
 ## **Bucket Management**
 
 FilOne web Console manages buckets via the standard S3 API. FilOne's UI lets users create, list, inspect, and delete buckets.

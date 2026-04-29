@@ -18,7 +18,7 @@ Bucket creation, listing, deletion and all object operations are not in scope fo
 
 ## Decision
 
-Define a generic **MSP Management API** specified in [`../msp-integration/management-openapi.yaml`](../msp-integration/management-openapi.yaml). Each new MSP implements this contract; FilOne's backend talks to MSPs exclusively through it.
+Define a generic **MSP Management API** specified in `docs/msp-integration/management-openapi.yaml`. Each new MSP implements this contract; FilOne's backend talks to MSPs exclusively through it.
 
 ### Authentication
 
@@ -31,15 +31,16 @@ Two scopes:
 
 ### Tenant lifecycle
 
-A single endpoint, `POST /tenants`, performs **create + setup synchronously** and returns only after the tenant is fully operational. The call is idempotent on a client-supplied `tenantId` (FilOne's organisation ID): re-calling with the same identifier returns the existing tenant. There is no `setupStatus` field anywhere in the API and no polling endpoint — readiness is implied by the `2xx` response.
-
-`GET /tenants/{tenantId}` returns operational state: status, resource counts, and resource limits. `POST /tenants/{tenantId}/status` sets `active` / `write-locked` / `disabled`; setting the same status twice is a no-op.
-
-`DELETE /tenants/{tenantId}` permanently deletes the tenant and all resources owned by it (buckets, objects, S3 access keys, per-tenant API keys). The tenant must be in the `disabled` state — the call returns 409 otherwise. The two-phase pattern (disable, then delete) forces the caller to consciously cut off all access before committing to a destructive, irreversible operation. The endpoint is synchronous (matching `POST /tenants`) and idempotent: a call against an already-deleted tenant returns 204.
+- `POST /tenants` performs create & setup synchronously and returns only after the tenant is fully operational. The call is idempotent on a client-supplied `tenantId` (FilOne's organisation ID): re-calling with the same identifier returns the existing tenant.
+- `GET /tenants/{tenantId}` returns operational state: status, resource counts, and resource limits.
+- `POST /tenants/{tenantId}/status` sets `active` / `write-locked` / `disabled`; setting the same status twice is a no-op.
+- `DELETE /tenants/{tenantId}` permanently deletes the tenant and all resources owned by it (buckets, objects, S3 access keys, per-tenant API keys). The tenant must be in the `disabled` state — the call returns 409 otherwise. The two-phase pattern (disable, then delete) forces the caller to consciously cut off all access before committing to a destructive, irreversible operation. The endpoint is synchronous (matching `POST /tenants`) and idempotent: a call against an already-deleted tenant returns 204.
 
 ### Per-tenant API keys
 
 `POST /tenants/{tenantId}/api-keys` issues a tenant-scoped bearer token. The secret is returned only on creation. FilOne stores it in its own secret store and uses it for all subsequent tenant-scoped management calls.
+
+`DELETE /tenants/{tenantId}/api-keys/{keyId}` revokes a specific key by its identifier. Idempotent (204 if already revoked). Multiple API keys may be active for a tenant at the same time, which is the property rotation depends on: issue a new key, switch callers over, then revoke the old one. The MSP may impose a per-tenant cap on concurrently-active keys.
 
 ### S3 access keys
 
@@ -68,6 +69,7 @@ Every operation is safely retryable end-to-end:
 - `POST /tenants` returns the existing tenant on duplicate `tenantId`.
 - `POST /tenants/{id}/status` is a no-op when already in the requested status.
 - `DELETE /tenants/{id}` returns 204 if the tenant is already gone.
+- `DELETE /tenants/{id}/api-keys/{keyId}` returns 204 if the API key is already revoked.
 - `POST .../access-keys` returns 409 on duplicate name; the caller can recover via list + get.
 - `DELETE .../access-keys/{id}` returns 204 if already gone.
 
@@ -91,7 +93,7 @@ Use the partner key for every operation, including S3 access-key CRUD. Rejected.
 
 ### Bucket management endpoints in the management API
 
-Mirror Aurora's Portal API and expose `createBucket` / `listBuckets` / `getBucketInfo` / `deleteBucket` over the management contract. Rejected because the standard S3 API already covers all of this, and requiring an MSP to implement bucket CRUD in two places (S3 Gateway and management API) is duplicative. FilOne's existing bucket flows that go through Aurora's Portal will be migrated to S3 as part of integrating the new contract.
+Mirror Aurora's Portal API and expose `createBucket` / `listBuckets` / `getBucketInfo` / `deleteBucket` over the management contract. Rejected because the standard S3 API already covers all of this, and requiring an MSP to implement bucket CRUD in two places (S3 Gateway and management API) is duplicative.
 
 ### Custom `X-Api-Key` header for authentication
 
