@@ -22,7 +22,7 @@ Define a generic **MSP Management API** specified in `docs/msp-integration/manag
 
 ### Authentication
 
-Bearer tokens via the standard `Authorization: Bearer <token>` header. No custom headers.
+Bearer tokens via the standard `Authorization: Bearer <token>` header.
 
 Two scopes:
 
