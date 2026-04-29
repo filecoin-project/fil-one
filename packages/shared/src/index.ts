@@ -7,6 +7,8 @@ export {
   S3_REGION,
   S3Region,
   getS3Endpoint,
+  getAuth0Domain,
+  getStageFromHostname,
   OAUTH_STATE_COOKIE,
   CSRF_COOKIE_NAME,
   GB_BYTES,
@@ -68,8 +70,10 @@ export type { RetentionMode, RetentionDurationType } from './api/buckets.js';
 
 export type {
   S3Object,
+  S3ObjectVersion,
   ListObjectsRequest,
   ListObjectsResponse,
+  ListObjectVersionsResponse,
   DeleteObjectRequest,
   ObjectMetadataResponse,
   ObjectRetentionInfo,
