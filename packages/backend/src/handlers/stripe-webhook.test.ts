@@ -1342,4 +1342,125 @@ describe('stripe-webhook handler', () => {
       expect(dunningEmissions()).toHaveLength(0);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // 11. PaymentAttempt metric (EMF via reportMetric)
+  // -----------------------------------------------------------------------
+  describe('PaymentAttempt metric', () => {
+    function paymentAttemptEmissions(): MetricEvent[] {
+      return reportMetricMock.mock.calls
+        .map(([event]) => event)
+        .filter((e) => (e as { PaymentAttempt?: unknown }).PaymentAttempt === 1);
+    }
+
+    it('emits outcome=succeeded with reason=ok on payment_succeeded', async () => {
+      setupStripeEvent('invoice.payment_succeeded', mockInvoice({ attempt_count: 1 }));
+      setupCustomerRetrieve();
+
+      await handler(buildWebhookEvent('{}'));
+
+      const emissions = paymentAttemptEmissions();
+      expect(emissions).toHaveLength(1);
+      expect(emissions[0]).toMatchObject({
+        outcome: 'succeeded',
+        reason: 'ok',
+        attemptBucket: '1',
+        PaymentAttempt: 1,
+      });
+      expect(emissions[0]._aws).toMatchObject({
+        CloudWatchMetrics: [
+          {
+            Namespace: 'FilOne',
+            Dimensions: [['outcome'], ['outcome', 'reason'], ['outcome', 'attemptBucket']],
+            Metrics: [{ Name: 'PaymentAttempt', Unit: 'Count' }],
+          },
+        ],
+      });
+    });
+
+    it('emits outcome=failed with reason from last_finalization_error.code', async () => {
+      setupStripeEvent(
+        'invoice.payment_failed',
+        mockInvoice({
+          attempt_count: 2,
+          last_finalization_error: { code: 'card_declined' },
+        }),
+      );
+      setupCustomerRetrieve();
+
+      await handler(buildWebhookEvent('{}'));
+
+      const emissions = paymentAttemptEmissions();
+      expect(emissions).toHaveLength(1);
+      expect(emissions[0]).toMatchObject({
+        outcome: 'failed',
+        reason: 'card_declined',
+        attemptBucket: '2',
+        PaymentAttempt: 1,
+      });
+    });
+
+    it('reports reason="unknown" on payment_failed when last_finalization_error missing', async () => {
+      setupStripeEvent('invoice.payment_failed', mockInvoice({ attempt_count: 1 }));
+      setupCustomerRetrieve();
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(paymentAttemptEmissions()[0]).toMatchObject({
+        outcome: 'failed',
+        reason: 'unknown',
+        attemptBucket: '1',
+      });
+    });
+
+    it('buckets attempt_count>=4 into "4+"', async () => {
+      setupStripeEvent('invoice.payment_succeeded', mockInvoice({ attempt_count: 5 }));
+      setupCustomerRetrieve();
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(paymentAttemptEmissions()[0]).toMatchObject({
+        outcome: 'succeeded',
+        attemptBucket: '4+',
+      });
+    });
+
+    it('reports attemptBucket="unknown" when attempt_count is missing', async () => {
+      setupStripeEvent('invoice.payment_succeeded', mockInvoice());
+      setupCustomerRetrieve();
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(paymentAttemptEmissions()[0]).toMatchObject({
+        outcome: 'succeeded',
+        attemptBucket: 'unknown',
+      });
+    });
+
+    it('emits even when invoice.customer is null (DDB processing skipped)', async () => {
+      setupStripeEvent(
+        'invoice.payment_failed',
+        mockInvoice({
+          customer: null,
+          attempt_count: 1,
+          last_finalization_error: { code: 'card_declined' },
+        }),
+      );
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
+      const emissions = paymentAttemptEmissions();
+      expect(emissions).toHaveLength(1);
+      expect(emissions[0]).toMatchObject({ outcome: 'failed', reason: 'card_declined' });
+    });
+
+    it('does NOT emit on unrelated events (customer.subscription.created)', async () => {
+      setupStripeEvent('customer.subscription.created', mockSubscription());
+
+      await handler(buildWebhookEvent('{}'));
+
+      expect(paymentAttemptEmissions()).toHaveLength(0);
+    });
+  });
 });

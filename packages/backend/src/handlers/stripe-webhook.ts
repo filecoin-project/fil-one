@@ -361,6 +361,12 @@ async function handleSubscriptionDeleted(
 }
 
 async function handlePaymentSucceeded(tableName: string, invoice: Stripe.Invoice): Promise<void> {
+  emitPaymentAttempt({
+    outcome: 'succeeded',
+    reason: 'ok',
+    attemptBucket: bucketAttempt(invoice.attempt_count),
+  });
+
   if (!invoice.customer) return;
   const stripe = getStripeClient();
   const customerId = getCustomerIdString(invoice.customer);
@@ -418,6 +424,7 @@ async function handlePaymentSucceeded(tableName: string, invoice: Stripe.Invoice
 }
 
 type DunningStage = 'entered' | 'retry' | 'recovered' | 'canceled';
+type PaymentOutcome = 'succeeded' | 'failed';
 
 function bucketAttempt(n: number | null | undefined): string {
   if (!n || n < 1) return 'unknown';
@@ -448,7 +455,36 @@ function emitDunningEscalation(args: {
   });
 }
 
+function emitPaymentAttempt(args: {
+  outcome: PaymentOutcome;
+  reason: string;
+  attemptBucket: string;
+}): void {
+  reportMetric({
+    _aws: {
+      Timestamp: Date.now(),
+      CloudWatchMetrics: [
+        {
+          Namespace: 'FilOne',
+          Dimensions: [['outcome'], ['outcome', 'reason'], ['outcome', 'attemptBucket']],
+          Metrics: [{ Name: 'PaymentAttempt', Unit: 'Count' }],
+        },
+      ],
+    },
+    outcome: args.outcome,
+    reason: args.reason,
+    attemptBucket: args.attemptBucket,
+    PaymentAttempt: 1,
+  });
+}
+
 async function handlePaymentFailed(tableName: string, invoice: Stripe.Invoice): Promise<void> {
+  emitPaymentAttempt({
+    outcome: 'failed',
+    reason: invoice.last_finalization_error?.code ?? 'unknown',
+    attemptBucket: bucketAttempt(invoice.attempt_count),
+  });
+
   if (!invoice.customer) return;
   const stripe = getStripeClient();
   const customerId = getCustomerIdString(invoice.customer);
