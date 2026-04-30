@@ -1,7 +1,6 @@
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyResultV2 } from 'aws-lambda';
-import type { ErrorResponse } from '@filone/shared';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import {
   deleteAuthenticationMethod,
@@ -17,18 +16,10 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { sub } = getUserInfo(event);
 
+  // Remove any email factor before enrolling a strong factor. Email is only
+  // allowed as the sole MFA method (it shares a channel with password reset),
+  // so once a strong factor is added it must not remain.
   const enrollments = await getMfaEnrollments(sub, { includeEmail: true });
-  const strongEnrollments = enrollments.filter((e) => e.type !== 'email');
-  if (strongEnrollments.length > 0) {
-    return new ResponseBuilder()
-      .status(400)
-      .body<ErrorResponse>({ message: 'MFA is already enabled.' })
-      .build();
-  }
-
-  // If the user only has email MFA, remove it so the Post-Login Action
-  // sees no enrolled factors and triggers strong-factor enrollment via
-  // enrollWithAny. The UI confirms this replacement before calling.
   for (const enrollment of enrollments) {
     if (enrollment.type === 'email') {
       await deleteAuthenticationMethod(sub, enrollment.id);
@@ -36,12 +27,14 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   }
 
   // Flag the user for enrollment. The Post-Login Action will detect
-  // this flag and trigger MFA enrollment via Universal Login.
+  // this flag and trigger MFA enrollment via Universal Login. Multiple
+  // strong factors are allowed — clicking "Add authenticator or key"
+  // again enrolls an additional factor.
   await flagMfaEnrollment(sub);
 
   return new ResponseBuilder()
     .status(200)
-    .body({ message: 'MFA enrollment flag set. Client should redirect to Auth0.' })
+    .body({ message: 'Redirecting to enroll your authenticator.' })
     .build();
 }
 

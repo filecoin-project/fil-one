@@ -466,6 +466,94 @@ describe('deleteAllAuthenticators', () => {
     });
   });
 
+  it('does not clear mfa_enrolling when a delete fails (partial failure)', async () => {
+    let patchBody: Record<string, unknown> | undefined;
+
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/oauth/token')) return mockTokenResponse();
+      if (urlStr.endsWith('/authentication-methods') && (!init?.method || init.method === 'GET')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/enrollments') && (!init?.method || init.method === 'GET')) {
+        return new Response(
+          JSON.stringify([
+            { id: 'otp|1', type: 'authenticator', status: 'confirmed' },
+            { id: 'webauthn|2', type: 'webauthn-roaming', status: 'confirmed' },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (
+        urlStr.includes(`/guardian/enrollments/${encodeURIComponent('otp|1')}`) &&
+        init?.method === 'DELETE'
+      ) {
+        return new Response('', { status: 200 });
+      }
+      if (
+        urlStr.includes(`/guardian/enrollments/${encodeURIComponent('webauthn|2')}`) &&
+        init?.method === 'DELETE'
+      ) {
+        return new Response('boom', { status: 500 });
+      }
+      if (urlStr.includes('/api/v2/users/') && init?.method === 'PATCH') {
+        patchBody = JSON.parse(init.body as string);
+        return new Response('{}', { status: 200 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await expect(deleteAllAuthenticators('auth0|abc123')).rejects.toThrow(
+      /Failed to delete 1 of 2 MFA factor/,
+    );
+    // Critical: leaving the flag set means the Post-Login Action keeps
+    // protecting the user with whatever factors remain.
+    expect(patchBody).toBeUndefined();
+  });
+
+  it('attempts every delete even when one fails', async () => {
+    const guardianAttempts: string[] = [];
+
+    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/oauth/token')) return mockTokenResponse();
+      if (urlStr.endsWith('/authentication-methods') && (!init?.method || init.method === 'GET')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (urlStr.includes('/enrollments') && (!init?.method || init.method === 'GET')) {
+        return new Response(
+          JSON.stringify([
+            { id: 'otp|1', type: 'authenticator', status: 'confirmed' },
+            { id: 'webauthn|2', type: 'webauthn-roaming', status: 'confirmed' },
+            { id: 'otp|3', type: 'authenticator', status: 'confirmed' },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (urlStr.includes('/guardian/enrollments/') && init?.method === 'DELETE') {
+        const id = urlStr.split('/guardian/enrollments/')[1];
+        guardianAttempts.push(id);
+        if (id === encodeURIComponent('webauthn|2')) {
+          return new Response('boom', { status: 500 });
+        }
+        return new Response('', { status: 200 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    await expect(deleteAllAuthenticators('auth0|abc123')).rejects.toThrow();
+
+    // All three were attempted — Promise.allSettled does not bail on first failure.
+    expect(guardianAttempts).toHaveLength(3);
+    expect(guardianAttempts).toEqual(
+      expect.arrayContaining([
+        encodeURIComponent('otp|1'),
+        encodeURIComponent('webauthn|2'),
+        encodeURIComponent('otp|3'),
+      ]),
+    );
+  });
+
   it('deletes email-only enrollments via authentication-methods', async () => {
     const authMethodDeletedUrls: string[] = [];
     let patchBody: Record<string, unknown> | undefined;

@@ -125,7 +125,7 @@ describe('POST /api/mfa/enroll handler', () => {
     expect(result).toMatchObject({
       statusCode: 200,
       body: JSON.stringify({
-        message: 'MFA enrollment flag set. Client should redirect to Auth0.',
+        message: 'Redirecting to enroll your authenticator.',
       }),
     });
     expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SUB);
@@ -141,25 +141,28 @@ describe('POST /api/mfa/enroll handler', () => {
     expect(result).toMatchObject({
       statusCode: 200,
       body: JSON.stringify({
-        message: 'MFA enrollment flag set. Client should redirect to Auth0.',
+        message: 'Redirecting to enroll your authenticator.',
       }),
     });
     expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SOCIAL_SUB);
   });
 
-  it('returns 400 and does not flag enrollment when a strong MFA factor is already enabled', async () => {
+  it('flags enrollment for an additional strong factor when one is already enrolled', async () => {
     setupAuthMocks();
     mockGetMfaEnrollments.mockResolvedValue([
       { id: 'test', type: 'authenticator', status: 'confirmed' },
     ]);
+    mockFlagMfaEnrollment.mockResolvedValue(undefined);
 
     const result = await handler(enrollMfaEvent(), buildContext());
 
     expect(result).toMatchObject({
-      statusCode: 400,
-      body: JSON.stringify({ message: 'MFA is already enabled.' }),
+      statusCode: 200,
+      body: JSON.stringify({
+        message: 'Redirecting to enroll your authenticator.',
+      }),
     });
-    expect(mockFlagMfaEnrollment).not.toHaveBeenCalled();
+    expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SUB);
     expect(mockDeleteAuthenticationMethod).not.toHaveBeenCalled();
   });
 
@@ -176,7 +179,7 @@ describe('POST /api/mfa/enroll handler', () => {
     expect(result).toMatchObject({
       statusCode: 200,
       body: JSON.stringify({
-        message: 'MFA enrollment flag set. Client should redirect to Auth0.',
+        message: 'Redirecting to enroll your authenticator.',
       }),
     });
     expect(mockDeleteAuthenticationMethod).toHaveBeenCalledWith(MOCK_SUB, 'email|am-1');

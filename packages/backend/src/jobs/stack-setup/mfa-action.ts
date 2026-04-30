@@ -46,36 +46,34 @@ export async function onExecutePostLogin(event: PostLoginEvent, api: PostLoginAp
   const hasMfa = enrolledFactors.length > 0;
   const mfaEnrolling = event.user.app_metadata?.mfa_enrolling === true;
 
-  // Email is the weakest factor (same channel as password reset). Only allow
-  // the email challenge when the user has nothing stronger enrolled — otherwise
-  // anyone with the password could downgrade to email.
-  const strongFactorTypes = new Set(['otp', 'webauthn-roaming', 'webauthn-platform']);
-  const hasStrongFactor = enrolledFactors.some((f) => strongFactorTypes.has(f.type));
-  const challengeTypes: MfaFactor[] = [
-    { type: 'otp' },
-    { type: 'webauthn-roaming' },
-    { type: 'webauthn-platform' },
-  ];
-  if (!hasStrongFactor) {
-    challengeTypes.push({ type: 'email' });
-  }
-
-  if (mfaEnrolling && !hasMfa) {
-    // User clicked "Enable with authenticator/key" — let them choose.
-    // Email enrollment is handled server-side via the Management API,
-    // not via Actions, so it is not offered here.
+  if (mfaEnrolling) {
+    // User clicked "Enable" / "Add authenticator or key" — clear the flag and
+    // offer strong-factor enrollment. This works whether or not the user
+    // already has a strong factor, allowing additional methods to be added.
+    // Email enrollment is handled server-side via the Management API.
+    api.user.setAppMetadata('mfa_enrolling', false);
     api.authentication.enrollWithAny([
       { type: 'otp' },
       { type: 'webauthn-roaming' },
       { type: 'webauthn-platform' },
     ]);
-  } else if (mfaEnrolling && hasMfa) {
-    // Already enrolled (e.g. re-login after enrolling). Clear the flag and challenge.
-    api.user.setAppMetadata('mfa_enrolling', false);
-    api.authentication.challengeWithAny(challengeTypes);
-  } else if (hasMfa) {
-    // Normal login for enrolled user — challenge with any enrolled factor
-    // (including email-only users who enrolled via the Management API).
+    return;
+  }
+
+  if (hasMfa) {
+    // Email is the weakest factor (same channel as password reset). Only allow
+    // the email challenge when the user has nothing stronger enrolled — otherwise
+    // anyone with the password could downgrade to email.
+    const strongFactorTypes = new Set(['otp', 'webauthn-roaming', 'webauthn-platform']);
+    const hasStrongFactor = enrolledFactors.some((f) => strongFactorTypes.has(f.type));
+    const challengeTypes: MfaFactor[] = [
+      { type: 'otp' },
+      { type: 'webauthn-roaming' },
+      { type: 'webauthn-platform' },
+    ];
+    if (!hasStrongFactor) {
+      challengeTypes.push({ type: 'email' });
+    }
     api.authentication.challengeWithAny(challengeTypes);
   }
   // No MFA enrolled and not enrolling — skip MFA.

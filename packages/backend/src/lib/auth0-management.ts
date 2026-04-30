@@ -292,34 +292,32 @@ export async function deleteAuthenticationMethod(sub: string, methodId: string):
 /**
  * Delete all MFA enrollments for a user (both Guardian and authentication-methods),
  * then clear the mfa_enrolling flag. The Post-Login Action will no longer challenge.
+ *
+ * Deletes are attempted in parallel via Promise.allSettled so a single failure
+ * does not strand the user with a half-deleted set of factors. The
+ * mfa_enrolling flag is only cleared when every delete succeeded — leaving it
+ * set on partial failure keeps the Post-Login Action protective until the
+ * caller retries.
  */
 export async function deleteAllAuthenticators(sub: string): Promise<void> {
-  // Get all enrollments including email
   const enrollments = await getMfaEnrollments(sub, { includeEmail: true });
-  const domain = getDomain();
-  const token = await getManagementToken();
 
-  for (const enrollment of enrollments) {
-    if (enrollment.type === 'email') {
-      // Email enrollments are authentication-methods, not Guardian enrollments
-      await deleteAuthenticationMethod(sub, enrollment.id);
-    } else {
-      const delResp = await fetch(
-        `https://${domain}/api/v2/guardian/enrollments/${encodeURIComponent(enrollment.id)}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+  const results = await Promise.allSettled(
+    enrollments.map((enrollment) =>
+      enrollment.type === 'email'
+        ? deleteAuthenticationMethod(sub, enrollment.id)
+        : deleteGuardianEnrollment(enrollment.id),
+    ),
+  );
 
-      if (!delResp.ok) {
-        const body = await delResp.text();
-        throw new Error(`Auth0 delete enrollment failed (${delResp.status}): ${body}`);
-      }
-    }
+  const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failures.length > 0) {
+    const reasons = failures.map((f) => String(f.reason)).join('; ');
+    throw new Error(
+      `Failed to delete ${failures.length} of ${enrollments.length} MFA factor(s): ${reasons}`,
+    );
   }
 
-  // Clear the enrolling flag
   await updateAuth0User(sub, {
     app_metadata: { mfa_enrolling: false },
   });
