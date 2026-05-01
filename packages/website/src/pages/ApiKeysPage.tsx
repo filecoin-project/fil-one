@@ -33,13 +33,10 @@ type AccessKeysTabProps = {
 function AccessKeysTab({ keys, onCreateOpen, onDelete }: AccessKeysTabProps) {
   return (
     <>
-      <div className="mt-4 mb-4 flex items-center justify-between">
+      <div className="mt-4 mb-4">
         <span className="text-sm text-zinc-600">
           {keys.length === 1 ? '1 key' : `${keys.length} keys`}
         </span>
-        <Button variant="primary" icon={PlusIcon} onClick={onCreateOpen}>
-          Create new key
-        </Button>
       </div>
 
       <AccessKeysTable
@@ -409,10 +406,22 @@ export function ApiKeysPage() {
 
   return (
     <div className="p-8">
-      <h1 className="mb-1 text-2xl font-semibold text-zinc-900">API Keys</h1>
-      <p className="mb-6 text-sm text-zinc-500">
-        Manage credentials and connect via S3-compatible API
-      </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="mb-1 text-2xl font-semibold text-zinc-900">API Keys</h1>
+          <p className="text-sm text-zinc-500">
+            Manage credentials and connect via S3-compatible API
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={PlusIcon}
+          onClick={() => void navigate({ to: '/api-keys/create' })}
+        >
+          Create new key
+        </Button>
+      </div>
 
       <Tabs>
         <TabList>

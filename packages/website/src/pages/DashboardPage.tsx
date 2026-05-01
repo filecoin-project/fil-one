@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 const UsageTrends = lazy(() => import('./UsageTrends'));
 
 import { Button } from '../components/Button';
+import { IconButton } from '../components/IconButton';
 import { ProgressBar } from '../components/ProgressBar';
 import { formatBytes } from '@filone/shared';
 
@@ -186,13 +187,9 @@ export function DashboardPage() {
       {/* 1. Page header */}
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-zinc-900">Dashboard</h1>
-        <Link
-          to="/buckets"
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] hover:bg-zinc-50"
-        >
-          <PlusIcon size={16} />
+        <Button variant="ghost" size="sm" icon={PlusIcon} href="/buckets">
           New bucket
-        </Link>
+        </Button>
       </div>
 
       {/* 2. Trial banner */}
@@ -221,14 +218,12 @@ export function DashboardPage() {
               Upgrade
               <span aria-hidden="true">→</span>
             </Link>
-            <button
-              type="button"
+            <IconButton
+              icon={XIcon}
               aria-label="Dismiss trial banner"
               onClick={() => setTrialBannerVisible(false)}
-              className="rounded-md p-1.5 text-zinc-400 hover:text-zinc-600"
-            >
-              <XIcon size={16} />
-            </button>
+              size="sm"
+            />
           </div>
         </div>
       )}

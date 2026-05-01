@@ -222,14 +222,11 @@ aws s3 cp s3://${bucketName}/${objectKey} ./local-copy \\
 
       {/* Page header */}
       <div className="mt-2 mb-6 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => void navigate({ to: '/buckets/$bucketName', params: { bucketName } })}
-          className="flex size-8 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-900"
+        <IconButton
+          icon={ArrowLeftIcon}
           aria-label="Back to bucket"
-        >
-          <ArrowLeftIcon size={16} aria-hidden="true" />
-        </button>
+          onClick={() => void navigate({ to: '/buckets/$bucketName', params: { bucketName } })}
+        />
         <div className="flex-1">
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{objectKey}</h1>
           <p className="text-[13px] text-zinc-500">{bucketName}</p>

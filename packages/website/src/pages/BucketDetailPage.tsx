@@ -203,6 +203,7 @@ export function BucketDetailPage({ bucketName, prefix }: BucketDetailPageProps) 
         <h1 className="text-2xl font-semibold text-zinc-900">{bucketName}</h1>
         <Button
           variant="primary"
+          size="md"
           icon={ArrowUpIcon}
           onClick={() =>
             void navigate({
