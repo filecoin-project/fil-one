@@ -5,7 +5,7 @@ import { Button } from './Button';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SettingRow } from './SettingRow';
 import { useToast } from './Toast';
-import { enrollMfa, enrollEmailMfa, disableMfa, deleteMfaEnrollment } from '../lib/api.js';
+import { enrollMfa, disableMfa, deleteMfaEnrollment } from '../lib/api.js';
 import type { MeResponse, MfaEnrollment } from '@filone/shared';
 import { queryKeys } from '../lib/query-client.js';
 
@@ -17,8 +17,6 @@ function formatEnrollmentType(type: MfaEnrollment['type']): string {
       return 'Security key';
     case 'webauthn-platform':
       return 'Device biometrics';
-    case 'email':
-      return 'Email';
     default:
       return type;
   }
@@ -94,9 +92,6 @@ function useEnrolledMfaMutations() {
 }
 
 function EnrolledDialogs({
-  confirmReplaceEmail,
-  closeReplaceEmail,
-  onReplaceEmail,
   enrollmentBeingDeleted,
   closeDelete,
   onDelete,
@@ -104,9 +99,6 @@ function EnrolledDialogs({
   closeDisable,
   onDisable,
 }: {
-  confirmReplaceEmail: boolean;
-  closeReplaceEmail: () => void;
-  onReplaceEmail: () => Promise<void>;
   enrollmentBeingDeleted: MfaEnrollment | undefined;
   closeDelete: () => void;
   onDelete: () => Promise<void>;
@@ -120,14 +112,6 @@ function EnrolledDialogs({
 
   return (
     <>
-      <ConfirmDialog
-        open={confirmReplaceEmail}
-        onClose={closeReplaceEmail}
-        onConfirm={onReplaceEmail}
-        title="Replace email two-factor authentication"
-        description="Enabling an authenticator or security key will replace your email two-factor authentication."
-        confirmLabel="Replace email MFA"
-      />
       <ConfirmDialog
         open={enrollmentBeingDeleted !== undefined}
         onClose={closeDelete}
@@ -151,19 +135,9 @@ function EnrolledDialogs({
 function EnrolledView({ me }: { me: MeResponse }) {
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [confirmReplaceEmail, setConfirmReplaceEmail] = useState(false);
 
   const { enroll, disable, remove } = useEnrolledMfaMutations();
-  const onlyEmailEnrolled = me.mfaEnrollments.every((e) => e.type === 'email');
   const enrollmentBeingDeleted = me.mfaEnrollments.find((e) => e.id === confirmDeleteId);
-
-  function handleEnroll() {
-    if (onlyEmailEnrolled) {
-      setConfirmReplaceEmail(true);
-      return;
-    }
-    enroll.mutate();
-  }
 
   return (
     <>
@@ -171,7 +145,12 @@ function EnrolledView({ me }: { me: MeResponse }) {
         label="Two-factor authentication"
         description="Your account is protected with two-factor authentication"
         action={
-          <Button variant="ghost" size="sm" onClick={handleEnroll} disabled={enroll.isPending}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => enroll.mutate()}
+            disabled={enroll.isPending}
+          >
             {enroll.isPending ? 'Redirecting...' : 'Add authenticator or key'}
           </Button>
         }
@@ -193,11 +172,6 @@ function EnrolledView({ me }: { me: MeResponse }) {
         </button>
       </div>
       <EnrolledDialogs
-        confirmReplaceEmail={confirmReplaceEmail}
-        closeReplaceEmail={() => setConfirmReplaceEmail(false)}
-        onReplaceEmail={async () => {
-          await enroll.mutateAsync();
-        }}
         enrollmentBeingDeleted={enrollmentBeingDeleted}
         closeDelete={() => setConfirmDeleteId(null)}
         onDelete={async () => {
@@ -216,7 +190,6 @@ function EnrolledView({ me }: { me: MeResponse }) {
 
 function EnableView() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   const enrollMfaMutation = useMutation({
     mutationFn: () => enrollMfa(),
@@ -225,57 +198,21 @@ function EnableView() {
     },
   });
 
-  const enrollEmailMfaMutation = useMutation({
-    mutationFn: () => enrollEmailMfa(),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.meWithMfa });
-      toast.success('Email two-factor authentication enabled');
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Failed to enable email MFA');
-    },
-  });
-
   return (
-    <>
-      <SettingRow
-        label="Two-factor authentication"
-        description="Add an extra layer of security to your account"
-        action={<span />}
-      />
-      <div className="flex flex-col gap-2 ml-0.5">
-        <button
-          className="flex items-center justify-between rounded-md border border-[#e1e4ea] bg-zinc-50 px-3 py-2.5 hover:bg-zinc-100 transition-colors text-left w-full"
-          onClick={() => enrollEmailMfaMutation.mutate()}
-          disabled={enrollEmailMfaMutation.isPending}
-        >
-          <div>
-            <p className="text-[13px] font-medium text-zinc-900">
-              {enrollEmailMfaMutation.isPending ? 'Enabling...' : 'Enable with email'}
-            </p>
-            <p className="text-[11px] text-zinc-500">
-              Receive a 6-digit code at your verified email address
-            </p>
-          </div>
-        </button>
-        <button
-          className="flex items-center justify-between rounded-md border border-[#e1e4ea] bg-zinc-50 px-3 py-2.5 hover:bg-zinc-100 transition-colors text-left w-full"
+    <SettingRow
+      label="Two-factor authentication"
+      description="Use an authenticator app, security key, or device biometrics to add an extra layer of security to your account"
+      action={
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => enrollMfaMutation.mutate()}
           disabled={enrollMfaMutation.isPending}
         >
-          <div>
-            <p className="text-[13px] font-medium text-zinc-900">
-              {enrollMfaMutation.isPending
-                ? 'Redirecting...'
-                : 'Enable with authenticator app or security key'}
-            </p>
-            <p className="text-[11px] text-zinc-500">
-              Use an app like Google Authenticator, or a hardware security key
-            </p>
-          </div>
-        </button>
-      </div>
-    </>
+          {enrollMfaMutation.isPending ? 'Redirecting...' : 'Enable'}
+        </Button>
+      }
+    />
   );
 }
 

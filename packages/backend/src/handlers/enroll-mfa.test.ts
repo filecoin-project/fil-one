@@ -6,16 +6,10 @@ import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 // Mocks
 // ---------------------------------------------------------------------------
 
-const mockGetMfaEnrollments = vi.fn();
 const mockFlagMfaEnrollment = vi.fn();
-const mockDeleteAuthenticationMethod = vi.fn();
-const mockSetEmailMfaActive = vi.fn();
 vi.mock('../lib/auth0-management.js', () => ({
   getConnectionType: (sub: string) => sub.split('|')[0] ?? 'unknown',
-  getMfaEnrollments: (...args: unknown[]) => mockGetMfaEnrollments(...args),
   flagMfaEnrollment: (...args: unknown[]) => mockFlagMfaEnrollment(...args),
-  deleteAuthenticationMethod: (...args: unknown[]) => mockDeleteAuthenticationMethod(...args),
-  setEmailMfaActive: (...args: unknown[]) => mockSetEmailMfaActive(...args),
 }));
 
 vi.mock('sst', () => ({
@@ -119,7 +113,6 @@ describe('POST /api/mfa/enroll handler', () => {
 
   it('flags user for enrollment and returns 200 for database connection users', async () => {
     setupAuthMocks();
-    mockGetMfaEnrollments.mockResolvedValue([]);
     mockFlagMfaEnrollment.mockResolvedValue(undefined);
 
     const result = await handler(enrollMfaEvent(), buildContext());
@@ -135,7 +128,6 @@ describe('POST /api/mfa/enroll handler', () => {
 
   it('flags user for enrollment and returns 200 for social login users', async () => {
     setupAuthMocks(MOCK_SOCIAL_SUB);
-    mockGetMfaEnrollments.mockResolvedValue([]);
     mockFlagMfaEnrollment.mockResolvedValue(undefined);
 
     const result = await handler(enrollMfaEvent(MOCK_SOCIAL_SUB), buildContext());
@@ -151,9 +143,6 @@ describe('POST /api/mfa/enroll handler', () => {
 
   it('flags enrollment for an additional strong factor when one is already enrolled', async () => {
     setupAuthMocks();
-    mockGetMfaEnrollments.mockResolvedValue([
-      { id: 'test', type: 'authenticator', status: 'confirmed' },
-    ]);
     mockFlagMfaEnrollment.mockResolvedValue(undefined);
 
     const result = await handler(enrollMfaEvent(), buildContext());
@@ -164,29 +153,6 @@ describe('POST /api/mfa/enroll handler', () => {
         message: 'Redirecting to enroll your authenticator.',
       }),
     });
-    expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SUB);
-    expect(mockDeleteAuthenticationMethod).not.toHaveBeenCalled();
-  });
-
-  it('removes the email factor, clears the email_mfa_active flag, and flags enrollment when only email MFA is enrolled', async () => {
-    setupAuthMocks();
-    mockGetMfaEnrollments.mockResolvedValue([
-      { id: 'email|am-1', type: 'email', status: 'confirmed' },
-    ]);
-    mockDeleteAuthenticationMethod.mockResolvedValue(undefined);
-    mockSetEmailMfaActive.mockResolvedValue(undefined);
-    mockFlagMfaEnrollment.mockResolvedValue(undefined);
-
-    const result = await handler(enrollMfaEvent(), buildContext());
-
-    expect(result).toMatchObject({
-      statusCode: 200,
-      body: JSON.stringify({
-        message: 'Redirecting to enroll your authenticator.',
-      }),
-    });
-    expect(mockDeleteAuthenticationMethod).toHaveBeenCalledWith(MOCK_SUB, 'email|am-1');
-    expect(mockSetEmailMfaActive).toHaveBeenCalledWith(MOCK_SUB, false);
     expect(mockFlagMfaEnrollment).toHaveBeenCalledWith(MOCK_SUB);
   });
 });

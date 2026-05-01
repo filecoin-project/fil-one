@@ -30,11 +30,9 @@ function buildApi(): CapturedApi {
 function buildEvent(opts: {
   enrolledFactors?: { type: string }[];
   mfaEnrolling?: boolean;
-  emailMfaActive?: boolean;
 }): PostLoginEvent {
   const app_metadata: Record<string, unknown> = {};
   if (opts.mfaEnrolling !== undefined) app_metadata.mfa_enrolling = opts.mfaEnrolling;
-  if (opts.emailMfaActive !== undefined) app_metadata.email_mfa_active = opts.emailMfaActive;
   return {
     user: {
       enrolledFactors: opts.enrolledFactors,
@@ -42,6 +40,12 @@ function buildEvent(opts: {
     },
   };
 }
+
+const STRONG_FACTORS = [
+  { type: 'otp' },
+  { type: 'webauthn-roaming' },
+  { type: 'webauthn-platform' },
+];
 
 describe('onExecutePostLogin', () => {
   let api: CapturedApi;
@@ -61,11 +65,7 @@ describe('onExecutePostLogin', () => {
   it('triggers strong-factor enrollment when mfa_enrolling is set and no factor exists', async () => {
     await onExecutePostLogin(buildEvent({ enrolledFactors: [], mfaEnrolling: true }), api);
 
-    expect(api.authentication.enrollWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
+    expect(api.authentication.enrollWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
     expect(api.authentication.challengeWithAny).not.toHaveBeenCalled();
   });
 
@@ -79,16 +79,8 @@ describe('onExecutePostLogin', () => {
     );
 
     expect(api.user.setAppMetadata).toHaveBeenCalledWith('mfa_enrolling', false);
-    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
-    expect(api.authentication.enrollWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
+    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
+    expect(api.authentication.enrollWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
   });
 
   it('clears the enrolling flag when triggering first-time enrollment', async () => {
@@ -97,88 +89,41 @@ describe('onExecutePostLogin', () => {
     expect(api.user.setAppMetadata).toHaveBeenCalledWith('mfa_enrolling', false);
   });
 
-  it('challenges with email only when email is the only enrolled factor and the user explicitly opted in', async () => {
-    await onExecutePostLogin(
-      buildEvent({ enrolledFactors: [{ type: 'email' }], emailMfaActive: true }),
-      api,
-    );
-
-    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-      { type: 'email' },
-    ]);
-  });
-
-  it('skips MFA entirely for an auto-enrolled email factor when email_mfa_active is not set', async () => {
-    // Auth0 silently includes {type:'email'} in enrolledFactors for every
-    // user with a verified email when the email factor is enabled tenant-wide.
-    // Without the explicit opt-in flag, the action must treat this as no MFA
-    // — otherwise every login of every test/prod user gets an email challenge.
+  it('ignores email factors entirely (auto-enrolled or otherwise)', async () => {
+    // The Auth0 dashboard email MFA factor is disabled tenant-wide so
+    // enrolledFactors should never carry email — but if it ever does (legacy
+    // user, dashboard misconfiguration), the action must not act on it.
     await onExecutePostLogin(buildEvent({ enrolledFactors: [{ type: 'email' }] }), api);
 
     expect(api.authentication.challengeWithAny).not.toHaveBeenCalled();
     expect(api.authentication.enrollWithAny).not.toHaveBeenCalled();
   });
 
-  it('still challenges the strong factor when an auto-enrolled email is present alongside it', async () => {
+  it('still challenges the strong factor when an email factor is present alongside it', async () => {
     await onExecutePostLogin(
       buildEvent({ enrolledFactors: [{ type: 'otp' }, { type: 'email' }] }),
       api,
     );
 
-    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
-  });
-
-  it('excludes email from challenge when a strong factor is enrolled', async () => {
-    await onExecutePostLogin(
-      buildEvent({ enrolledFactors: [{ type: 'otp' }, { type: 'email' }] }),
-      api,
-    );
-
-    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
+    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
   });
 
   it.each([['webauthn-roaming'], ['webauthn-platform'], ['otp']])(
-    'excludes email from challenge when %s is enrolled alongside email',
+    'challenges with the strong-factor list when %s is enrolled',
     async (strongFactor) => {
-      await onExecutePostLogin(
-        buildEvent({ enrolledFactors: [{ type: strongFactor }, { type: 'email' }] }),
-        api,
-      );
+      await onExecutePostLogin(buildEvent({ enrolledFactors: [{ type: strongFactor }] }), api);
 
-      expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-        { type: 'otp' },
-        { type: 'webauthn-roaming' },
-        { type: 'webauthn-platform' },
-      ]);
+      expect(api.authentication.challengeWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
     },
   );
 
-  it('ignores recovery-code when deciding the challenge list', async () => {
-    await onExecutePostLogin(
-      buildEvent({
-        enrolledFactors: [{ type: 'email' }, { type: 'recovery-code' }],
-        emailMfaActive: true,
-      }),
-      api,
-    );
+  it('does not challenge on a recovery-code-only user', async () => {
+    // recovery-code is counted in hasMfa so the user is challenged with the
+    // strong-factor list — recovery codes are only valid as a backup during
+    // a strong-factor challenge, never on their own.
+    await onExecutePostLogin(buildEvent({ enrolledFactors: [{ type: 'recovery-code' }] }), api);
 
-    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-      { type: 'email' },
-    ]);
+    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
   });
 
   it('ignores unknown factor types when computing hasMfa', async () => {
@@ -204,11 +149,7 @@ describe('onExecutePostLogin', () => {
       api,
     );
 
-    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
+    expect(api.authentication.challengeWithAny).toHaveBeenCalledWith(STRONG_FACTORS);
     expect(api.user.setAppMetadata).not.toHaveBeenCalled();
     expect(api.authentication.enrollWithAny).not.toHaveBeenCalled();
   });
@@ -250,7 +191,7 @@ describe('onExecutePostLogin serialization (Auth0 sandbox safety)', () => {
       event: { user: { app_metadata: {}, enrolledFactors: [{ type: 'webauthn-roaming' }] } },
     },
     {
-      name: 'enrolled with email only',
+      name: 'enrolled with email only (should be ignored)',
       event: { user: { app_metadata: {}, enrolledFactors: [{ type: 'email' }] } },
     },
     {

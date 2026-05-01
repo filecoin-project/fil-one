@@ -9,17 +9,12 @@ import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 const mockGetMfaEnrollments = vi.fn();
 const mockDeleteGuardianEnrollment = vi.fn();
 const mockDeleteAuthenticationMethod = vi.fn();
-const mockDeleteEmailGuardianEnrollments = vi.fn();
-const mockSetEmailMfaActive = vi.fn();
 const mockUpdateAuth0User = vi.fn();
 vi.mock('../lib/auth0-management.js', () => ({
   getConnectionType: (sub: string) => sub.split('|')[0] ?? 'unknown',
   getMfaEnrollments: (...args: unknown[]) => mockGetMfaEnrollments(...args),
   deleteGuardianEnrollment: (...args: unknown[]) => mockDeleteGuardianEnrollment(...args),
   deleteAuthenticationMethod: (...args: unknown[]) => mockDeleteAuthenticationMethod(...args),
-  deleteEmailGuardianEnrollments: (...args: unknown[]) =>
-    mockDeleteEmailGuardianEnrollments(...args),
-  setEmailMfaActive: (...args: unknown[]) => mockSetEmailMfaActive(...args),
   updateAuth0User: (...args: unknown[]) => mockUpdateAuth0User(...args),
 }));
 
@@ -232,48 +227,5 @@ describe('DELETE /api/mfa/enrollments/{enrollmentId} handler', () => {
       body: JSON.stringify({ message: 'Enrollment not found.' }),
     });
     expect(mockDeleteGuardianEnrollment).not.toHaveBeenCalled();
-  });
-
-  it('uses deleteAuthenticationMethod and sweeps Guardian email orphans for email-type enrollments', async () => {
-    // Auth0 mirrors authentication-methods email factors into Guardian, and
-    // the auth-methods DELETE does not cascade. Without the sweep, the user
-    // keeps getting email challenges even though the settings page shows no
-    // MFA. This test pins the sweep to the email branch.
-    const emailEnrollmentId = 'email|dev_xyz';
-    setupAuthMocks();
-    mockGetMfaEnrollments.mockResolvedValue([
-      { id: emailEnrollmentId, type: 'email', status: 'confirmed' },
-    ]);
-    mockDeleteAuthenticationMethod.mockResolvedValue(undefined);
-    mockDeleteEmailGuardianEnrollments.mockResolvedValue(undefined);
-    mockSetEmailMfaActive.mockResolvedValue(undefined);
-    mockUpdateAuth0User.mockResolvedValue(undefined);
-
-    const result = await handler(deleteEnrollmentEvent(emailEnrollmentId), buildContext());
-
-    expect(result).toMatchObject({
-      statusCode: 200,
-      body: JSON.stringify({ message: 'MFA enrollment removed.' }),
-    });
-    expect(mockDeleteAuthenticationMethod).toHaveBeenCalledWith(MOCK_SUB, emailEnrollmentId);
-    expect(mockDeleteEmailGuardianEnrollments).toHaveBeenCalledWith(MOCK_SUB);
-    expect(mockSetEmailMfaActive).toHaveBeenCalledWith(MOCK_SUB, false);
-    expect(mockDeleteGuardianEnrollment).not.toHaveBeenCalled();
-    expect(mockUpdateAuth0User).toHaveBeenCalledWith(MOCK_SUB, {
-      app_metadata: { mfa_enrolling: false },
-    });
-  });
-
-  it('does not sweep Guardian email orphans for non-email enrollments', async () => {
-    setupAuthMocks();
-    mockGetMfaEnrollments.mockResolvedValue([
-      { id: MOCK_ENROLLMENT_ID, type: 'webauthn-roaming', status: 'confirmed' },
-    ]);
-    mockDeleteAuthenticationMethod.mockResolvedValue(undefined);
-    mockUpdateAuth0User.mockResolvedValue(undefined);
-
-    await handler(deleteEnrollmentEvent(), buildContext());
-
-    expect(mockDeleteEmailGuardianEnrollments).not.toHaveBeenCalled();
   });
 });

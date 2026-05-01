@@ -9,12 +9,7 @@ import { triggerTenantSetup } from '../lib/trigger-tenant-setup.js';
 import { isOrgSetupComplete } from '../lib/org-setup-status.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import { suggestOrgName } from '../lib/suggest-org-name.js';
-import {
-  deleteAuthenticationMethod,
-  getConnectionType,
-  getMfaEnrollments,
-  setEmailMfaActive,
-} from '../lib/auth0-management.js';
+import { getConnectionType, getMfaEnrollments } from '../lib/auth0-management.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -48,22 +43,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
   const connectionType = getConnectionType(sub);
 
   const includeMfa = event.queryStringParameters?.include === 'mfa';
-  let enrollments = includeMfa ? await getMfaEnrollments(sub, { includeEmail: true }) : [];
-
-  // Email cannot coexist with a strong factor — Auth0 may attach an email
-  // authentication-method automatically after OTP/WebAuthn enrollment because
-  // the user's email is verified. Drop and delete the orphan so settings and
-  // login both reflect the actual policy (strong factor wins). Also clear
-  // the email_mfa_active flag so the Post-Login Action does not later treat
-  // the still-auto-enrolled email factor as a real one.
-  if (enrollments.some((e) => e.type !== 'email')) {
-    const orphaned = enrollments.filter((e) => e.type === 'email');
-    if (orphaned.length > 0) {
-      await Promise.all(orphaned.map((e) => deleteAuthenticationMethod(sub, e.id)));
-      await setEmailMfaActive(sub, false);
-      enrollments = enrollments.filter((e) => e.type !== 'email');
-    }
-  }
+  const enrollments = includeMfa ? await getMfaEnrollments(sub) : [];
 
   const body: MeResponse = {
     orgId,
@@ -75,7 +55,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     name,
     mfaEnrollments: enrollments.map((e) => ({
       id: e.id,
-      type: e.type as 'authenticator' | 'webauthn-roaming' | 'webauthn-platform' | 'email',
+      type: e.type as 'authenticator' | 'webauthn-roaming' | 'webauthn-platform',
       name: e.name,
       createdAt: e.enrolled_at ?? '',
     })),

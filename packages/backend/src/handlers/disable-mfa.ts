@@ -13,7 +13,7 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyResultV2> {
   const { sub } = getUserInfo(event);
 
-  const enrollments = await getMfaEnrollments(sub, { includeEmail: true });
+  const enrollments = await getMfaEnrollments(sub);
   if (enrollments.length === 0) {
     return new ResponseBuilder()
       .status(400)

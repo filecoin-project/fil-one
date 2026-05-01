@@ -5,10 +5,8 @@ import type { ErrorResponse } from '@filone/shared';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import {
   deleteAuthenticationMethod,
-  deleteEmailGuardianEnrollments,
   deleteGuardianEnrollment,
   getMfaEnrollments,
-  setEmailMfaActive,
   updateAuth0User,
 } from '../lib/auth0-management.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
@@ -28,8 +26,7 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
       .build();
   }
 
-  // Verify the enrollment belongs to this user (include email enrollments)
-  const enrollments = await getMfaEnrollments(sub, { includeEmail: true });
+  const enrollments = await getMfaEnrollments(sub);
   const enrollment = enrollments.find((e) => e.id === enrollmentId);
 
   if (!enrollment) {
@@ -46,16 +43,6 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     await deleteGuardianEnrollment(enrollmentId);
   } else {
     await deleteAuthenticationMethod(sub, enrollmentId);
-  }
-
-  // Email factors are mirrored into Guardian. The auth-methods delete does
-  // not cascade, so sweep any orphan Guardian email rows or Auth0 keeps
-  // challenging via email even though our settings page shows nothing. Also
-  // clear the explicit-opt-in flag — otherwise the auto-enrolled email factor
-  // (which Auth0 manufactures from email_verified) would re-trigger challenges.
-  if (enrollment.type === 'email') {
-    await deleteEmailGuardianEnrollments(sub);
-    await setEmailMfaActive(sub, false);
   }
 
   // If this was the last MFA enrollment, clear the enrolling flag

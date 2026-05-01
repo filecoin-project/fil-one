@@ -20,11 +20,9 @@ process.env.AUTH0_DOMAIN = 'test.auth0.com';
 import {
   flagMfaEnrollment,
   getMfaEnrollments,
-  enrollEmailMfa,
   deleteGuardianEnrollment,
   deleteAuthenticationMethod,
   deleteAllAuthenticators,
-  deleteEmailGuardianEnrollments,
   getConnectionType,
   MFA_GUARDIAN_TYPES,
 } from './auth0-management.js';
@@ -123,10 +121,11 @@ describe('getMfaEnrollments', () => {
     vi.clearAllMocks();
   });
 
-  it('returns TOTP and WebAuthn from /authentication-methods, excluding email by default', async () => {
+  it('returns TOTP and WebAuthn from /authentication-methods, excluding email entries', async () => {
     // Repro for the original bug: a user with both TOTP and WebAuthn enrolled
     // had only one of them visible in Settings because the older code only
     // pulled OTP from Guardian and ignored TOTP in /authentication-methods.
+    // Email entries (which Auth0 may attach automatically) must never surface.
     setupFetchMock([
       {
         match: '/authentication-methods',
@@ -148,7 +147,6 @@ describe('getMfaEnrollments', () => {
             {
               id: 'email|am-1',
               type: 'email',
-              email: 'user@example.com',
               confirmed: true,
               created_at: '2026-04-01T00:00:00.000Z',
             },
@@ -215,111 +213,6 @@ describe('getMfaEnrollments', () => {
     ]);
   });
 
-  it('includes email from /authentication-methods when includeEmail is true', async () => {
-    setupFetchMock([
-      {
-        match: '/authentication-methods',
-        response: new Response(
-          JSON.stringify([
-            {
-              id: 'totp|am-2',
-              type: 'totp',
-              confirmed: true,
-              created_at: '2026-04-03T00:00:00.000Z',
-            },
-            {
-              id: 'webauthn|am-3',
-              type: 'webauthn-roaming',
-              name: 'My key',
-              confirmed: true,
-              created_at: '2026-04-02T00:00:00.000Z',
-            },
-            {
-              id: 'email|am-1',
-              type: 'email',
-              name: 'Email',
-              email: 'user@example.com',
-              confirmed: true,
-              created_at: '2026-04-01T00:00:00.000Z',
-            },
-            { id: 'pwd|am-2', type: 'password', confirmed: true },
-          ]),
-          { status: 200 },
-        ),
-      },
-      {
-        match: '/enrollments',
-        response: new Response(JSON.stringify([]), { status: 200 }),
-      },
-    ]);
-
-    const result = await getMfaEnrollments('auth0|abc123', { includeEmail: true });
-
-    expect(result).toEqual([
-      {
-        id: 'totp|am-2',
-        type: 'authenticator',
-        status: 'confirmed',
-        name: undefined,
-        enrolled_at: '2026-04-03T00:00:00.000Z',
-        source: 'auth-methods',
-      },
-      {
-        id: 'webauthn|am-3',
-        type: 'webauthn-roaming',
-        status: 'confirmed',
-        name: 'My key',
-        enrolled_at: '2026-04-02T00:00:00.000Z',
-        source: 'auth-methods',
-      },
-      {
-        id: 'email|am-1',
-        type: 'email',
-        status: 'confirmed',
-        name: 'Email',
-        enrolled_at: '2026-04-01T00:00:00.000Z',
-        source: 'auth-methods',
-      },
-    ]);
-  });
-
-  it('returns email-only enrollment when no Guardian factors exist', async () => {
-    setupFetchMock([
-      {
-        match: '/authentication-methods',
-        response: new Response(
-          JSON.stringify([
-            {
-              id: 'email|am-1',
-              type: 'email',
-              email: 'user@example.com',
-              confirmed: true,
-              created_at: '2026-04-01T00:00:00.000Z',
-            },
-          ]),
-          { status: 200 },
-        ),
-      },
-      {
-        match: '/enrollments',
-        response: new Response(JSON.stringify([]), { status: 200 }),
-      },
-    ]);
-
-    const result = await getMfaEnrollments('auth0|abc123', { includeEmail: true });
-
-    expect(result).toEqual([
-      {
-        id: 'email|am-1',
-        type: 'email',
-        status: 'confirmed',
-        name: 'user@example.com',
-        enrolled_at: '2026-04-01T00:00:00.000Z',
-        source: 'auth-methods',
-      },
-    ]);
-  });
-
   it('returns empty array when no MFA enrollments exist', async () => {
     setupFetchMock([
       {
@@ -368,53 +261,6 @@ describe('getMfaEnrollments', () => {
 
     await expect(getMfaEnrollments('auth0|abc123')).rejects.toThrow(
       'Auth0 list authentication methods failed (403): Forbidden',
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// enrollEmailMfa
-// ---------------------------------------------------------------------------
-
-describe('enrollEmailMfa', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('calls POST on authentication-methods with email type', async () => {
-    let capturedUrl: string | undefined;
-    let capturedBody: Record<string, unknown> | undefined;
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (String(url).includes('/oauth/token')) return mockTokenResponse();
-      if (String(url).includes('/authentication-methods') && init?.method === 'POST') {
-        capturedUrl = String(url);
-        capturedBody = JSON.parse(init.body as string);
-        return new Response('{}', { status: 201 });
-      }
-      return new Response('Not found', { status: 404 });
-    });
-
-    await enrollEmailMfa('auth0|abc123', 'user@example.com');
-
-    expect(capturedUrl).toContain('/api/v2/users/auth0%7Cabc123/authentication-methods');
-    expect(capturedBody).toEqual({
-      type: 'email',
-      name: 'Email',
-      email: 'user@example.com',
-    });
-  });
-
-  it('throws on API error', async () => {
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (String(url).includes('/oauth/token')) return mockTokenResponse();
-      if (init?.method === 'POST') {
-        return new Response('Conflict', { status: 409 });
-      }
-      return new Response('Not found', { status: 404 });
-    });
-
-    await expect(enrollEmailMfa('auth0|abc123', 'user@example.com')).rejects.toThrow(
-      'Auth0 enroll email MFA failed (409): Conflict',
     );
   });
 });
@@ -512,7 +358,7 @@ describe('deleteAllAuthenticators', () => {
     vi.clearAllMocks();
   });
 
-  it('deletes Guardian (OTP), authentication-method (WebAuthn, email) factors then clears mfa_enrolling flag', async () => {
+  it('deletes Guardian (OTP) and authentication-method (WebAuthn) factors then clears mfa_enrolling flag', async () => {
     const guardianDeletedIds: string[] = [];
     const authMethodDeletedUrls: string[] = [];
     let patchBody: Record<string, unknown> | undefined;
@@ -522,10 +368,7 @@ describe('deleteAllAuthenticators', () => {
       if (urlStr.includes('/oauth/token')) return mockTokenResponse();
       if (urlStr.endsWith('/authentication-methods') && (!init?.method || init.method === 'GET')) {
         return new Response(
-          JSON.stringify([
-            { id: 'webauthn|2', type: 'webauthn-roaming', confirmed: true },
-            { id: 'email|3', type: 'email', confirmed: true },
-          ]),
+          JSON.stringify([{ id: 'webauthn|2', type: 'webauthn-roaming', confirmed: true }]),
           { status: 200 },
         );
       }
@@ -554,13 +397,12 @@ describe('deleteAllAuthenticators', () => {
     await deleteAllAuthenticators('auth0|abc123');
 
     expect(guardianDeletedIds).toEqual([encodeURIComponent('otp|1')]);
-    expect(authMethodDeletedUrls).toHaveLength(2);
+    expect(authMethodDeletedUrls).toHaveLength(1);
     expect(authMethodDeletedUrls.some((u) => u.includes(encodeURIComponent('webauthn|2')))).toBe(
       true,
     );
-    expect(authMethodDeletedUrls.some((u) => u.includes(encodeURIComponent('email|3')))).toBe(true);
     expect(patchBody).toEqual({
-      app_metadata: { mfa_enrolling: false, email_mfa_active: false },
+      app_metadata: { mfa_enrolling: false },
     });
   });
 
@@ -652,165 +494,6 @@ describe('deleteAllAuthenticators', () => {
       expect.arrayContaining([encodeURIComponent('otp|1'), encodeURIComponent('otp|3')]),
     );
     expect(authMethodAttempts).toEqual([encodeURIComponent('webauthn|2')]);
-  });
-
-  it('also sweeps orphan Guardian email rows when an email factor is present', async () => {
-    // Reproduces the production bug: Auth0 mirrors authentication-methods email
-    // factors into Guardian, and the auth-methods DELETE does not cascade.
-    // After "removing" email MFA the Guardian email row would persist and
-    // event.user.enrolledFactors would still report email — so the user kept
-    // getting the email challenge.
-    const guardianDeletes: string[] = [];
-    const authMethodDeletes: string[] = [];
-
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      const urlStr = String(url);
-      if (urlStr.includes('/oauth/token')) return mockTokenResponse();
-      if (urlStr.endsWith('/authentication-methods') && (!init?.method || init.method === 'GET')) {
-        return new Response(
-          JSON.stringify([
-            {
-              id: 'email|am-1',
-              type: 'email',
-              email: 'user@example.com',
-              confirmed: true,
-            },
-          ]),
-          { status: 200 },
-        );
-      }
-      if (urlStr.endsWith('/enrollments') && (!init?.method || init.method === 'GET')) {
-        // Both getMfaEnrollments and deleteEmailGuardianEnrollments hit this.
-        return new Response(
-          JSON.stringify([{ id: 'email|dev_orphan', type: 'email', status: 'confirmed' }]),
-          { status: 200 },
-        );
-      }
-      if (urlStr.includes('/guardian/enrollments/') && init?.method === 'DELETE') {
-        guardianDeletes.push(urlStr.split('/guardian/enrollments/')[1]);
-        return new Response('', { status: 200 });
-      }
-      if (urlStr.includes('/authentication-methods/') && init?.method === 'DELETE') {
-        authMethodDeletes.push(urlStr.split('/authentication-methods/')[1]);
-        return new Response(null, { status: 200 });
-      }
-      if (urlStr.includes('/api/v2/users/') && init?.method === 'PATCH') {
-        return new Response('{}', { status: 200 });
-      }
-      return new Response('Not found', { status: 404 });
-    });
-
-    await deleteAllAuthenticators('auth0|abc123');
-
-    expect(authMethodDeletes).toEqual([encodeURIComponent('email|am-1')]);
-    expect(guardianDeletes).toEqual([encodeURIComponent('email|dev_orphan')]);
-  });
-
-  it('deletes email-only enrollments via authentication-methods', async () => {
-    const authMethodDeletedUrls: string[] = [];
-    let patchBody: Record<string, unknown> | undefined;
-
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      const urlStr = String(url);
-      if (urlStr.includes('/oauth/token')) return mockTokenResponse();
-      if (urlStr.endsWith('/authentication-methods') && (!init?.method || init.method === 'GET')) {
-        return new Response(JSON.stringify([{ id: 'email|1', type: 'email', confirmed: true }]), {
-          status: 200,
-        });
-      }
-      if (urlStr.includes('/enrollments') && (!init?.method || init.method === 'GET')) {
-        return new Response(JSON.stringify([]), { status: 200 });
-      }
-      if (urlStr.includes('/authentication-methods/') && init?.method === 'DELETE') {
-        authMethodDeletedUrls.push(urlStr);
-        return new Response(null, { status: 200 });
-      }
-      if (urlStr.includes('/api/v2/users/') && init?.method === 'PATCH') {
-        patchBody = JSON.parse(init.body as string);
-        return new Response('{}', { status: 200 });
-      }
-      return new Response('Not found', { status: 404 });
-    });
-
-    await deleteAllAuthenticators('auth0|abc123');
-
-    expect(authMethodDeletedUrls).toHaveLength(1);
-    expect(patchBody).toEqual({
-      app_metadata: { mfa_enrolling: false, email_mfa_active: false },
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deleteEmailGuardianEnrollments
-// ---------------------------------------------------------------------------
-
-describe('deleteEmailGuardianEnrollments', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('deletes every Guardian enrollment with type=email', async () => {
-    const guardianDeletes: string[] = [];
-
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      const urlStr = String(url);
-      if (urlStr.includes('/oauth/token')) return mockTokenResponse();
-      if (urlStr.endsWith('/enrollments') && (!init?.method || init.method === 'GET')) {
-        return new Response(
-          JSON.stringify([
-            { id: 'email|dev_a', type: 'email', status: 'confirmed' },
-            { id: 'otp|1', type: 'authenticator', status: 'confirmed' },
-            { id: 'email|dev_b', type: 'email', status: 'confirmed' },
-          ]),
-          { status: 200 },
-        );
-      }
-      if (urlStr.includes('/guardian/enrollments/') && init?.method === 'DELETE') {
-        guardianDeletes.push(urlStr.split('/guardian/enrollments/')[1]);
-        return new Response('', { status: 200 });
-      }
-      return new Response('Not found', { status: 404 });
-    });
-
-    await deleteEmailGuardianEnrollments('auth0|abc123');
-
-    // Only the email rows are deleted — strong factors are left alone.
-    expect(guardianDeletes.sort()).toEqual(
-      [encodeURIComponent('email|dev_a'), encodeURIComponent('email|dev_b')].sort(),
-    );
-  });
-
-  it('is a no-op when there are no Guardian email rows', async () => {
-    const guardianDeletes: string[] = [];
-
-    mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
-      const urlStr = String(url);
-      if (urlStr.includes('/oauth/token')) return mockTokenResponse();
-      if (urlStr.endsWith('/enrollments') && (!init?.method || init.method === 'GET')) {
-        return new Response(JSON.stringify([]), { status: 200 });
-      }
-      if (urlStr.includes('/guardian/enrollments/') && init?.method === 'DELETE') {
-        guardianDeletes.push(urlStr);
-        return new Response('', { status: 200 });
-      }
-      return new Response('Not found', { status: 404 });
-    });
-
-    await deleteEmailGuardianEnrollments('auth0|abc123');
-
-    expect(guardianDeletes).toHaveLength(0);
-  });
-
-  it('throws when the Guardian list call fails', async () => {
-    mockFetch.mockImplementation(async (url: string) => {
-      if (String(url).includes('/oauth/token')) return mockTokenResponse();
-      return new Response('Forbidden', { status: 403 });
-    });
-
-    await expect(deleteEmailGuardianEnrollments('auth0|abc123')).rejects.toThrow(
-      'Auth0 list enrollments failed (403): Forbidden',
-    );
   });
 });
 

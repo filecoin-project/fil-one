@@ -133,21 +133,6 @@ export async function flagMfaEnrollment(sub: string): Promise<void> {
   });
 }
 
-/**
- * Mark whether the user has explicitly opted into email MFA.
- *
- * Auth0 silently auto-enrolls every verified-email user into email MFA when
- * the email factor is enabled tenant-wide, so `event.user.enrolledFactors` is
- * not a reliable signal of intent. The Post-Login Action treats email as a
- * real factor only when this flag is true. Set it on explicit enrollment via
- * the Settings page; clear it whenever the email factor is removed.
- */
-export async function setEmailMfaActive(sub: string, active: boolean): Promise<void> {
-  await updateAuth0User(sub, {
-    app_metadata: { email_mfa_active: active },
-  });
-}
-
 export interface GuardianEnrollment {
   id: string;
   type: string;
@@ -176,7 +161,6 @@ interface Auth0AuthenticationMethod {
   id: string;
   type: string;
   name?: string;
-  email?: string;
   confirmed?: boolean;
   created_at?: string;
 }
@@ -188,10 +172,7 @@ interface Auth0AuthenticationMethod {
  * Auth0 reports TOTP as `type: 'totp'`; we normalize it to `'authenticator'`
  * so the UI, action, and existing type definitions stay unchanged.
  */
-function authMethodToEnrollment(
-  m: Auth0AuthenticationMethod,
-  includeEmail: boolean,
-): GuardianEnrollment | null {
+function authMethodToEnrollment(m: Auth0AuthenticationMethod): GuardianEnrollment | null {
   if (m.confirmed === false) return null;
 
   const base = {
@@ -206,9 +187,6 @@ function authMethodToEnrollment(
   if (m.type === 'webauthn-roaming' || m.type === 'webauthn-platform') {
     return { ...base, type: m.type };
   }
-  if (m.type === 'email' && includeEmail) {
-    return { ...base, type: 'email', name: m.name ?? m.email };
-  }
   return null;
 }
 
@@ -220,20 +198,17 @@ function authMethodToEnrollment(
  *   - /api/v2/users/{id}/authentication-methods  (the unified, modern endpoint)
  *
  * Modern Auth0 puts every factor in /authentication-methods (TOTP appears as
- * `type: 'totp'`, WebAuthn as `webauthn-roaming`/`webauthn-platform`, email as
- * `email`). Guardian is only kept around for users with legacy enrollments
- * that were never migrated. We prefer the modern source so newly-added factors
- * (which Auth0 no longer mirrors into Guardian) are visible — without that,
- * a user who enrolls TOTP after a WebAuthn factor will have their TOTP
- * dropped from the settings UI.
+ * `type: 'totp'`, WebAuthn as `webauthn-roaming`/`webauthn-platform`).
+ * Guardian is only kept around for users with legacy OTP enrollments that were
+ * never migrated. We prefer the modern source so newly-added factors (which
+ * Auth0 no longer mirrors into Guardian) are visible — without that, a user
+ * who enrolls TOTP after a WebAuthn factor will have their TOTP dropped from
+ * the settings UI.
  *
  * Each result is tagged with its source so the delete handlers know which
  * endpoint to call (the two endpoints use different ids for the same factor).
  */
-export async function getMfaEnrollments(
-  sub: string,
-  options?: { includeEmail?: boolean },
-): Promise<GuardianEnrollment[]> {
+export async function getMfaEnrollments(sub: string): Promise<GuardianEnrollment[]> {
   const domain = getDomain();
   const token = await getManagementToken();
   const headers = { Authorization: `Bearer ${token}` };
@@ -255,12 +230,11 @@ export async function getMfaEnrollments(
 
   const guardianEnrollments = (await guardianResp.json()) as GuardianEnrollment[];
   const methods = (await methodsResp.json()) as Auth0AuthenticationMethod[];
-  const includeEmail = options?.includeEmail === true;
 
   // Pull everything from /authentication-methods first — modern source, with
   // ids that route to the auth-methods delete endpoint.
   const result = methods
-    .map((m) => authMethodToEnrollment(m, includeEmail))
+    .map((m) => authMethodToEnrollment(m))
     .filter((e): e is GuardianEnrollment => e !== null);
 
   // Fallback: if /authentication-methods has no TOTP but Guardian does, the
@@ -276,34 +250,6 @@ export async function getMfaEnrollments(
   }
 
   return result;
-}
-
-/**
- * Delete every Guardian email enrollment for the user.
- *
- * Auth0 mirrors email factors created via the authentication-methods API into
- * Guardian. Deleting the authentication-method does NOT cascade to Guardian,
- * so the orphan keeps `event.user.enrolledFactors` populated and the
- * Post-Login Action keeps challenging with email. This sweep removes those
- * orphans so MFA truly turns off when email is removed.
- */
-export async function deleteEmailGuardianEnrollments(sub: string): Promise<void> {
-  const domain = getDomain();
-  const token = await getManagementToken();
-  const resp = await fetch(
-    `https://${domain}/api/v2/users/${encodeURIComponent(sub)}/enrollments`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Auth0 list enrollments failed (${resp.status}): ${body}`);
-  }
-
-  const enrollments = (await resp.json()) as GuardianEnrollment[];
-  const emailIds = enrollments.filter((e) => e.type === 'email').map((e) => e.id);
-
-  await Promise.all(emailIds.map((id) => deleteGuardianEnrollment(id)));
 }
 
 /**
@@ -327,41 +273,8 @@ export async function deleteGuardianEnrollment(enrollmentId: string): Promise<vo
 }
 
 /**
- * Add email as an MFA factor via the Management API.
- * The Management API only allows adding email when the user has NO other
- * authentication methods. This makes email a low-friction first factor.
- * The factor is immediately confirmed — safe because the user's email
- * is already verified in our app. The Post-Login Action will see this
- * in event.user.enrolledFactors and challenge with a 6-digit email code.
- */
-export async function enrollEmailMfa(sub: string, email: string): Promise<void> {
-  const domain = getDomain();
-  const token = await getManagementToken();
-  const resp = await fetch(
-    `https://${domain}/api/v2/users/${encodeURIComponent(sub)}/authentication-methods`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'email',
-        name: 'Email',
-        email,
-      }),
-    },
-  );
-
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Auth0 enroll email MFA failed (${resp.status}): ${body}`);
-  }
-}
-
-/**
- * Delete a single authentication method by ID (for email-type enrollments
- * which are stored as authentication-methods, not Guardian enrollments).
+ * Delete a single authentication method by ID. Used for TOTP and WebAuthn
+ * factors enrolled via Universal Login, which land in /authentication-methods.
  */
 export async function deleteAuthenticationMethod(sub: string, methodId: string): Promise<void> {
   const domain = getDomain();
@@ -391,20 +304,13 @@ export async function deleteAuthenticationMethod(sub: string, methodId: string):
  * caller retries.
  */
 export async function deleteAllAuthenticators(sub: string): Promise<void> {
-  const enrollments = await getMfaEnrollments(sub, { includeEmail: true });
-  const hasEmail = enrollments.some((e) => e.type === 'email');
+  const enrollments = await getMfaEnrollments(sub);
 
   const operations: Array<Promise<void>> = enrollments.map((enrollment) =>
     enrollment.source === 'guardian'
       ? deleteGuardianEnrollment(enrollment.id)
       : deleteAuthenticationMethod(sub, enrollment.id),
   );
-  // Email factors are mirrored into Guardian and the auth-methods delete does
-  // not cascade. Sweep any orphan Guardian email rows so the user is not
-  // re-challenged with email after MFA is "removed".
-  if (hasEmail) {
-    operations.push(deleteEmailGuardianEnrollments(sub));
-  }
 
   const results = await Promise.allSettled(operations);
 
@@ -417,6 +323,6 @@ export async function deleteAllAuthenticators(sub: string): Promise<void> {
   }
 
   await updateAuth0User(sub, {
-    app_metadata: { mfa_enrolling: false, email_mfa_active: false },
+    app_metadata: { mfa_enrolling: false },
   });
 }

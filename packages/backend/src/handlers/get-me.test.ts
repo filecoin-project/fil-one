@@ -29,15 +29,11 @@ vi.mock('../lib/trigger-tenant-setup.js', () => ({
 }));
 
 const mockGetMfaEnrollments = vi.fn();
-const mockDeleteAuthenticationMethod = vi.fn();
-const mockSetEmailMfaActive = vi.fn();
 vi.mock('../lib/auth0-management.js', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     getMfaEnrollments: (...args: unknown[]) => mockGetMfaEnrollments(...args),
-    deleteAuthenticationMethod: (...args: unknown[]) => mockDeleteAuthenticationMethod(...args),
-    setEmailMfaActive: (...args: unknown[]) => mockSetEmailMfaActive(...args),
   };
 });
 
@@ -358,7 +354,7 @@ describe('GET /api/me handler', () => {
 
     const result = await handler(authenticatedEvent({ include: 'mfa' }), buildContext());
 
-    expect(mockGetMfaEnrollments).toHaveBeenCalledWith(MOCK_SUB, { includeEmail: true });
+    expect(mockGetMfaEnrollments).toHaveBeenCalledWith(MOCK_SUB);
     expect(result).toMatchObject({
       statusCode: 200,
       body: JSON.stringify({
@@ -378,103 +374,6 @@ describe('GET /api/me handler', () => {
         ],
         connectionType: 'auth0',
       }),
-    });
-    expect(mockDeleteAuthenticationMethod).not.toHaveBeenCalled();
-  });
-
-  it('deletes orphaned email auth-methods when a strong factor is enrolled', async () => {
-    mockGetMfaEnrollments.mockResolvedValue([
-      {
-        id: 'authenticator|dev_otp',
-        type: 'authenticator',
-        status: 'confirmed',
-        name: 'My OTP',
-        enrolled_at: '2026-04-10T00:00:00.000Z',
-      },
-      {
-        id: 'email|am-1',
-        type: 'email',
-        status: 'confirmed',
-        name: 'Email',
-        enrolled_at: '2026-04-01T00:00:00.000Z',
-      },
-    ]);
-    mockDeleteAuthenticationMethod.mockResolvedValue(undefined);
-    mockSetEmailMfaActive.mockResolvedValue(undefined);
-
-    ddbMock
-      .on(GetItemCommand, {
-        TableName: 'UserInfoTable',
-        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-      })
-      .resolves({
-        Item: {
-          pk: { S: `ORG#${MOCK_ORG_ID}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'Example Corp' },
-          orgConfirmed: { BOOL: true },
-          setupStatus: { S: FINAL_SETUP_STATUS },
-        },
-      });
-
-    const result = await handler(authenticatedEvent({ include: 'mfa' }), buildContext());
-
-    expect(mockDeleteAuthenticationMethod).toHaveBeenCalledWith(MOCK_SUB, 'email|am-1');
-    expect(mockSetEmailMfaActive).toHaveBeenCalledWith(MOCK_SUB, false);
-    expect(result).toMatchObject({
-      statusCode: 200,
-      body: JSON.stringify({
-        orgId: MOCK_ORG_ID,
-        orgName: 'Example Corp',
-        orgConfirmed: true,
-        emailVerified: true,
-        email: MOCK_EMAIL,
-        orgSetupComplete: true,
-        mfaEnrollments: [
-          {
-            id: 'authenticator|dev_otp',
-            type: 'authenticator',
-            name: 'My OTP',
-            createdAt: '2026-04-10T00:00:00.000Z',
-          },
-        ],
-        connectionType: 'auth0',
-      }),
-    });
-  });
-
-  it('keeps email enrollment when it is the only factor', async () => {
-    mockGetMfaEnrollments.mockResolvedValue([
-      {
-        id: 'email|am-1',
-        type: 'email',
-        status: 'confirmed',
-        name: 'Email',
-        enrolled_at: '2026-04-01T00:00:00.000Z',
-      },
-    ]);
-
-    ddbMock
-      .on(GetItemCommand, {
-        TableName: 'UserInfoTable',
-        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-      })
-      .resolves({
-        Item: {
-          pk: { S: `ORG#${MOCK_ORG_ID}` },
-          sk: { S: 'PROFILE' },
-          name: { S: 'Example Corp' },
-          orgConfirmed: { BOOL: true },
-          setupStatus: { S: FINAL_SETUP_STATUS },
-        },
-      });
-
-    const result = await handler(authenticatedEvent({ include: 'mfa' }), buildContext());
-
-    expect(mockDeleteAuthenticationMethod).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      statusCode: 200,
-      body: expect.stringContaining('"type":"email"'),
     });
   });
 });

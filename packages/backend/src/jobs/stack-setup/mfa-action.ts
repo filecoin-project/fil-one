@@ -35,42 +35,16 @@ export interface PostLoginApi {
 // ── Action handler ──────────────────────────────────────────────────────
 
 export async function onExecutePostLogin(event: PostLoginEvent, api: PostLoginApi): Promise<void> {
-  const allMfaTypes = new Set([
-    'otp',
-    'webauthn-roaming',
-    'webauthn-platform',
-    'email',
-    'recovery-code',
-  ]);
-  // Auth0 auto-includes {type:'email'} in enrolledFactors for any user with a
-  // verified email when the email factor is enabled tenant-wide — even if the
-  // user never explicitly enrolled. Treat email as a real factor only when the
-  // user opted in via the Settings page (which sets app_metadata.email_mfa_active).
-  // Without this filter, every verified-email user is silently subjected to an
-  // email MFA challenge on every login.
-  const emailMfaActive = event.user.app_metadata?.email_mfa_active === true;
-  const enrolledFactors = (event.user.enrolledFactors || []).filter((f) => {
-    if (!allMfaTypes.has(f.type)) return false;
-    if (f.type === 'email' && !emailMfaActive) return false;
-    return true;
-  });
+  const mfaTypes = new Set(['otp', 'webauthn-roaming', 'webauthn-platform', 'recovery-code']);
+  const enrolledFactors = (event.user.enrolledFactors || []).filter((f) => mfaTypes.has(f.type));
   const hasMfa = enrolledFactors.length > 0;
   const mfaEnrolling = event.user.app_metadata?.mfa_enrolling === true;
 
-  // Email is the weakest factor (same channel as password reset). Only allow
-  // the email challenge when the user has nothing stronger enrolled and has
-  // explicitly enabled email MFA — otherwise anyone with the password could
-  // downgrade to email.
-  const strongFactorTypes = new Set(['otp', 'webauthn-roaming', 'webauthn-platform']);
-  const hasStrongFactor = enrolledFactors.some((f) => strongFactorTypes.has(f.type));
-  const challengeTypes: MfaFactor[] = [
+  const factors: MfaFactor[] = [
     { type: 'otp' },
     { type: 'webauthn-roaming' },
     { type: 'webauthn-platform' },
   ];
-  if (!hasStrongFactor && emailMfaActive) {
-    challengeTypes.push({ type: 'email' });
-  }
 
   if (mfaEnrolling) {
     // User clicked "Enable" / "Add authenticator or key". Clear the flag so
@@ -82,19 +56,14 @@ export async function onExecutePostLogin(event: PostLoginEvent, api: PostLoginAp
       // new one — calling enrollWithAny alone on an already-enrolled user
       // returns "Something went wrong". challengeWithAny + enrollWithAny
       // queue in order within a single login transaction.
-      api.authentication.challengeWithAny(challengeTypes);
+      api.authentication.challengeWithAny(factors);
     }
 
-    api.authentication.enrollWithAny([
-      { type: 'otp' },
-      { type: 'webauthn-roaming' },
-      { type: 'webauthn-platform' },
-    ]);
+    api.authentication.enrollWithAny(factors);
     return;
   }
 
   if (hasMfa) {
-    api.authentication.challengeWithAny(challengeTypes);
+    api.authentication.challengeWithAny(factors);
   }
-  // No MFA enrolled and not enrolling — skip MFA.
 }

@@ -623,13 +623,6 @@ export default $config({
       extraEnv: { AUTH0_MGMT_DOMAIN: auth0MgmtDomain },
     });
     addRoute({
-      method: 'POST',
-      routePath: '/api/mfa/enroll-email',
-      handler: 'enroll-email-mfa',
-      extraLink: mgmtRuntimeResources,
-      extraEnv: { AUTH0_MGMT_DOMAIN: auth0MgmtDomain },
-    });
-    addRoute({
       method: 'DELETE',
       routePath: '/api/mfa/enrollments/{enrollmentId}',
       handler: 'delete-mfa-enrollment',
