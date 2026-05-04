@@ -6,7 +6,6 @@ import {
   CheckIcon,
   CreditCardIcon,
   ArrowRightIcon,
-  ArrowUpRightIcon,
   WarningIcon,
   DownloadSimpleIcon,
   LightningIcon,
@@ -279,7 +278,7 @@ export function BillingPage() {
         <div className="flex-1 min-w-0 flex flex-col gap-6">
           {/* Plan card */}
           <div
-            className={`rounded-lg border bg-white flex flex-col gap-4 py-4 px-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] ${isActive || isPastDue ? 'border-[rgba(16,183,127,0.3)]' : 'border-[rgba(0,128,255,0.2)]'}`}
+            className={`rounded-lg border bg-white flex flex-col gap-4 py-4 px-5 shadow-[0px_1px_2px_0px_rgba(20,24,31,0.03)] ${isActive || isPastDue ? 'border-[rgba(16,183,127,0.3)]' : 'border-zinc-200'}`}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -332,15 +331,9 @@ export function BillingPage() {
                 <p className="text-[13px] font-medium text-[#14181f]">
                   Ready to unlock unlimited storage?
                 </p>
-                <button
-                  type="button"
-                  onClick={handleUpgradeClick}
-                  className="flex items-center gap-1.5 rounded-[6px] h-8 px-4 py-2 text-[12px] font-medium leading-[18px] text-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-opacity hover:opacity-90"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #0080FF 0%, #256AF4 100%)' }}
-                >
+                <Button variant="ghost" size="sm" onClick={handleUpgradeClick}>
                   Upgrade
-                  <ArrowUpRightIcon size={16} weight="bold" />
-                </button>
+                </Button>
               </div>
             )}
 
@@ -360,15 +353,15 @@ export function BillingPage() {
                       ? 'Upgrade to keep your data and unlock unlimited storage'
                       : 'Reactivate your subscription to restore full access'}
                 </p>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={ArrowRightIcon}
+                  iconPosition="right"
                   onClick={handleUpgradeClick}
-                  className="flex items-center gap-1.5 rounded-[6px] h-8 px-4 py-2 text-[12px] font-medium leading-[18px] text-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-opacity hover:opacity-90"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #0080FF 0%, #256AF4 100%)' }}
                 >
                   {isTrialExpiredGrace ? 'Upgrade' : 'Reactivate'}
-                  <ArrowRightIcon size={16} weight="bold" />
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -589,15 +582,14 @@ export function BillingPage() {
 
               {/* CTA for trial / grace / canceled users */}
               {(isTrialing || isGracePeriod || isCanceled) && (
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  icon={LightningIcon}
                   onClick={handleUpgradeClick}
-                  className="flex w-full items-center justify-center gap-2 rounded-[6px] h-[36px] px-4 py-2 text-[13px] font-medium text-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-opacity hover:opacity-90"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #0080FF 0%, #256AF4 100%)' }}
+                  className="w-full justify-center"
                 >
-                  <LightningIcon size={16} weight="fill" />
                   {isTrialing ? 'Upgrade now' : 'Reactivate'}
-                </button>
+                </Button>
               )}
             </div>
           </div>
