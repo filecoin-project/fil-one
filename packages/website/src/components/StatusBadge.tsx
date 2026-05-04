@@ -6,6 +6,7 @@ import {
   fetchInstatusSummary,
   getStatusDisplay,
 } from '../lib/instatus.js';
+import { queryKeys } from '../lib/query-client.js';
 import { Tooltip } from './Tooltip.js';
 
 const STATUS_REFETCH_MS = 60_000;
@@ -32,7 +33,7 @@ type StatusBadgeProps = {
 
 export function StatusBadge({ collapsed }: StatusBadgeProps) {
   const { data, isPending } = useQuery({
-    queryKey: ['instatus-summary'],
+    queryKey: queryKeys.instatusSummary,
     queryFn: fetchInstatusSummary,
     staleTime: STATUS_REFETCH_MS,
     refetchInterval: STATUS_REFETCH_MS,
