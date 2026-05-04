@@ -14,6 +14,7 @@ import {
   LockSimpleIcon,
 } from '@phosphor-icons/react/dist/ssr';
 
+import { Heading } from '../components/Heading/Heading';
 import { ProgressBar } from '../components/ProgressBar';
 import { useToast } from '../components/Toast';
 import { formatBytes } from '@filone/shared';
@@ -185,8 +186,9 @@ export function BillingPage() {
   if (loading && !billing) {
     return (
       <div className="px-10 pt-10">
-        <h1 className="text-2xl font-semibold text-[#14181f] mb-1">Billing</h1>
-        <p className="text-sm text-[#677183] mb-6">Manage your plan, usage, and payment methods</p>
+          <Heading tag="h1" size="xl" description="Manage your plan, usage, and payment methods">
+            Billing
+          </Heading>
         <div className="flex gap-6">
           <div className="flex-1 flex flex-col gap-4">
             <SkeletonCard height="h-40" />
@@ -204,8 +206,9 @@ export function BillingPage() {
   if (error && !billing) {
     return (
       <div className="px-10 pt-10">
-        <h1 className="text-2xl font-semibold text-[#14181f] mb-1">Billing</h1>
-        <p className="text-sm text-[#677183] mb-6">Manage your plan, usage, and payment methods</p>
+          <Heading tag="h1" size="xl" description="Manage your plan, usage, and payment methods">
+            Billing
+          </Heading>
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
           Failed to load billing information: {error}
         </div>
@@ -217,8 +220,9 @@ export function BillingPage() {
 
   return (
     <div className="px-10 pt-10">
-      <h1 className="text-2xl font-semibold text-[#14181f] mb-1">Billing</h1>
-      <p className="text-sm text-[#677183] mb-6">Manage your plan, usage, and payment methods</p>
+      <Heading tag="h1" size="xl" description="Manage your plan, usage, and payment methods">
+        Billing
+      </Heading>
 
       {/* Past due warning banner */}
       {isPastDue && (
