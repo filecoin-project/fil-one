@@ -1373,13 +1373,13 @@ describe('stripe-webhook handler', () => {
       });
     });
 
-    it('emits even when invoice.customer is null (DDB processing skipped)', async () => {
+    it('does not emit even when invoice.customer is null', async () => {
       setupStripeEvent('invoice.payment_succeeded', mockInvoice({ customer: null }));
 
       await handler(buildWebhookEvent('{}'));
 
       expect(ddbMock.commandCalls(UpdateItemCommand)).toHaveLength(0);
-      expect(invoicePaidEmissions()).toHaveLength(1);
+      expect(invoicePaidEmissions()).toHaveLength(0);
     });
 
     it('does NOT emit on invoice.payment_failed', async () => {
