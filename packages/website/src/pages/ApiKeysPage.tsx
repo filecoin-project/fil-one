@@ -413,7 +413,7 @@ export function ApiKeysPage() {
 
   return (
     <div className="px-10 pt-10">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <Heading
           tag="h1"
           size="xl"
