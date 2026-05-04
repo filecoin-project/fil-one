@@ -596,8 +596,6 @@ export default $config({
       method: 'POST',
       routePath: '/api/me/change-password',
       handler: 'change-password',
-      extraLink: mgmtRuntimeResources,
-      extraEnv: { AUTH0_MGMT_DOMAIN: auth0MgmtDomain },
     });
     addRoute({
       method: 'POST',

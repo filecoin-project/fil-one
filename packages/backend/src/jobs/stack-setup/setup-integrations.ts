@@ -10,6 +10,7 @@ import type {
   CloudFormationCustomResourceEvent,
   CloudFormationCustomResourceResponse,
 } from 'aws-lambda';
+import { onExecutePostLogin } from './mfa-action.js';
 
 // ── Custom resource property types ────────────────────────────────────
 
@@ -29,6 +30,16 @@ interface Auth0Client {
   allowed_logout_urls?: string[];
   web_origins?: string[];
   initiate_login_uri?: string;
+}
+
+interface Auth0Action {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface Auth0Trigger {
+  bindings: { ref: { type: string; value: string }; display_name: string }[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -324,24 +335,12 @@ async function setupAuth0EmailProvider(domain: string, isProduction: boolean): P
 
 // ── Auth0 MFA Action helper ──────────────────────────────────────────
 
-import { onExecutePostLogin } from './mfa-action.js';
-
 const MFA_ACTION_NAME = 'MFA Enrollment Trigger';
 
 // The handler is type-checked at compile time (see mfa-action.ts).
 // At runtime, Function.toString() returns the esbuild-compiled JS —
 // types stripped, ready for Auth0's Action sandbox.
 const MFA_ACTION_CODE = `exports.onExecutePostLogin = ${onExecutePostLogin.toString()}`;
-
-interface Auth0Action {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface Auth0Trigger {
-  bindings: { ref: { type: string; value: string }; display_name: string }[];
-}
 
 async function setupAuth0MfaAction(domain: string): Promise<void> {
   const token = await getAuth0ManagementToken(domain);

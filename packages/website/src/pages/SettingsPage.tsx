@@ -335,28 +335,26 @@ function SecuritySection({ me }: { me: MeResponse }) {
   return (
     <SectionCard icon={ShieldCheckIcon} title="Security" description="Manage your account security">
       <div className="flex flex-col gap-3">
+        <MfaSettings me={me} />
+        <div className="h-px bg-[#e1e4ea]" />
         {!social && (
-          <>
-            <MfaSettings me={me} />
-            <div className="h-px bg-[#e1e4ea]" />
-            <SettingRow
-              label="Password"
-              description="Change your account password"
-              action={
-                <Button
-                  variant="ghost"
-                  onClick={() => changePasswordMutation.mutate()}
-                  disabled={changePasswordMutation.isPending}
-                >
-                  {changePasswordMutation.isPending ? 'Sending...' : 'Change'}
-                </Button>
-              }
-            />
-          </>
+          <SettingRow
+            label="Password"
+            description="Change your account password"
+            action={
+              <Button
+                variant="ghost"
+                onClick={() => changePasswordMutation.mutate()}
+                disabled={changePasswordMutation.isPending}
+              >
+                {changePasswordMutation.isPending ? 'Sending...' : 'Change'}
+              </Button>
+            }
+          />
         )}
         {social && provider && (
           <p className="text-xs text-zinc-500">
-            Security settings are managed by {provider.label}.{' '}
+            Password is managed by {provider.label}.{' '}
             <a
               href={provider.profileUrl}
               target="_blank"
