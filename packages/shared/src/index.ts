@@ -170,12 +170,13 @@ export {
   ACCESS_KEY_PERMISSION_REQUIREMENT,
   GRANULAR_PERMISSION_REQUIREMENT,
   excessKeyPermissions,
-  keySurvival,
+  canRetainAccessKey,
 } from './access-key-permissions.js';
 export type {
   ExcessKeyPermission,
-  KeySurvival,
-  StampedKeyPermissions,
+  AccessKeyRevocationReason,
+  KeyRetentionResult,
+  AccessKeyPermissions,
 } from './access-key-permissions.js';
 
 export { ROUTE_MANIFEST } from './route-manifest.js';
