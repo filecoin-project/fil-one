@@ -34,6 +34,7 @@ import { SaveCredentialsModal } from '../components/SaveCredentialsModal';
 import { SlowOperationIndicator } from '../components/SlowOperationIndicator';
 import { useToast } from '../components/Toast';
 import { useAccessKeyForm } from '../lib/use-access-key-form.js';
+import { useOrgSlug } from '../lib/use-org-path.js';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -43,6 +44,7 @@ import { useAccessKeyForm } from '../lib/use-access-key-form.js';
 export function CreateBucketPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const orgSlug = useOrgSlug();
   const queryClient = useQueryClient();
   const availableRegions = useAvailableRegions();
 
@@ -172,8 +174,8 @@ export function CreateBucketPage() {
         toast.error(parsed.error.issues[0].message);
         setCreating(false);
         void navigate({
-          to: '/buckets/$bucketName',
-          params: { bucketName: createdBucketName },
+          to: '/$orgSlug/buckets/$bucketName',
+          params: { orgSlug, bucketName: createdBucketName },
           search: { region },
         });
         return;
@@ -196,8 +198,8 @@ export function CreateBucketPage() {
 
     setCreating(false);
     void navigate({
-      to: '/buckets/$bucketName',
-      params: { bucketName: createdBucketName },
+      to: '/$orgSlug/buckets/$bucketName',
+      params: { orgSlug, bucketName: createdBucketName },
       search: { region },
     });
   }
@@ -205,8 +207,8 @@ export function CreateBucketPage() {
   function handleCredentialsDone() {
     setCredentials(null);
     void navigate({
-      to: '/buckets/$bucketName',
-      params: { bucketName: bucketName.trim() },
+      to: '/$orgSlug/buckets/$bucketName',
+      params: { orgSlug, bucketName: bucketName.trim() },
       search: { region },
     });
   }
@@ -231,7 +233,7 @@ export function CreateBucketPage() {
         <IconButton
           icon={ArrowLeftIcon}
           aria-label="Back to buckets"
-          onClick={() => navigate({ to: '/buckets' })}
+          onClick={() => navigate({ to: '/$orgSlug/buckets', params: { orgSlug } })}
         />
         <Heading tag="h1" description="S3-compatible storage on Filecoin">
           Create bucket

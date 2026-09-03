@@ -60,12 +60,24 @@ export {
   isOrgRole,
   OrgNameSchema,
   UpdateOrgSchema,
+  CreateOrgSchema,
+  PresignOrgLogoSchema,
   ORG_NAME_MIN_LENGTH,
   ORG_NAME_MAX_LENGTH,
   ORG_NAME_PATTERN,
   ORG_NAME_DISALLOWED_CHARS,
+  ORG_LOGO_CONTENT_TYPES,
+  ORG_LOGO_MAX_BYTES,
 } from './api/org.js';
-export type { OrgMembershipSource, UpdateOrgRequest, UpdateOrgResponse } from './api/org.js';
+export type {
+  OrgMembershipSource,
+  UpdateOrgRequest,
+  UpdateOrgResponse,
+  CreateOrgRequest,
+  CreateOrgResponse,
+  PresignOrgLogoRequest,
+  PresignOrgLogoResponse,
+} from './api/org.js';
 
 export {
   INVITATION_STATUSES,
