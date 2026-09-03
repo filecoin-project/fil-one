@@ -1,7 +1,7 @@
 import { QueryCommand } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import { S3Region, auditKeyIdSuffix, canRetainAccessKey } from '@filone/shared';
+import { NO_ROLE, S3Region, auditKeyIdSuffix, canRetainAccessKey } from '@filone/shared';
 import type {
   AccessKeyRevocationReason,
   AccessKeySummary,
@@ -109,7 +109,7 @@ export async function listOrgAccessKeys(orgId: string): Promise<MemberAccessKey[
 export function reviewAccessKeysForRole(
   accessKeys: readonly MemberAccessKey[],
   userId: string,
-  role: OrgRole,
+  role: OrgRole | typeof NO_ROLE,
 ): AccessKeyRoleChangeReview {
   const review: AccessKeyRoleChangeReview = {
     keysToRevoke: [],
@@ -139,40 +139,11 @@ export function reviewAccessKeysForRole(
   return review;
 }
 
-/**
- * Every key the member created, all of them condemned.
- *
- * Removal is the narrowing to nothing: somebody who is not in the org holds no
- * role, and a key does not outlive the membership that created it. Rows with no
- * recorded creator are outside this rule, as they are outside every other.
- */
-export async function keysOfRemovedMember(
-  orgId: string,
-  userId: string,
-): Promise<AccessKeyRoleChangeReview> {
-  const review: AccessKeyRoleChangeReview = {
-    keysToRevoke: [],
-    retainedKeyCount: 0,
-    unattributedKeyCount: 0,
-  };
-
-  for (const accessKey of await listOrgAccessKeys(orgId)) {
-    if (!accessKey.createdBy) {
-      review.unattributedKeyCount += 1;
-      continue;
-    }
-    if (accessKey.createdBy !== userId) continue;
-    review.keysToRevoke.push({ ...accessKey, reason: 'role_cannot_mint', excess: [] });
-  }
-
-  return review;
-}
-
 /** {@link listOrgAccessKeys} and {@link reviewAccessKeysForRole} in one call. */
 export async function reviewMemberAccessKeysForRole(
   orgId: string,
   userId: string,
-  role: OrgRole,
+  role: OrgRole | typeof NO_ROLE,
 ): Promise<AccessKeyRoleChangeReview> {
   return reviewAccessKeysForRole(await listOrgAccessKeys(orgId), userId, role);
 }
@@ -184,11 +155,15 @@ export async function reviewMemberAccessKeysForRole(
  * The two reads are here rather than at the call sites because their order is
  * the whole point: the sequence first, then the listing. Reversed, a mint
  * landing between them is counted by the fence and missing from the list.
+ *
+ * Removal asks about `NO_ROLE`, the narrowing to nothing: no role is left to
+ * mint under, so `canRetainAccessKey` condemns every attributed key. Rows with
+ * no recorded creator are outside this rule, as they are outside every other.
  */
 export async function reviewKeysForRoleChange(
   orgId: string,
   userId: string,
-  role: OrgRole,
+  role: OrgRole | typeof NO_ROLE,
 ): Promise<{ keysToRevoke: AccessKeyToRevoke[]; fence: KeyMintFence }> {
   const mintSeq = await readAccessKeyMintSeq({ orgId, userId });
   const { keysToRevoke } = await reviewMemberAccessKeysForRole(orgId, userId, role);

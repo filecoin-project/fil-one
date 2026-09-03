@@ -348,9 +348,9 @@ describe('POST /api/org/transfer handler', () => {
     expect(body(result)).toStrictEqual({ userId: TARGET_ID, previousOwnerUserId: USER_ID });
 
     const items = transactItems();
-    // The fence, two rows each for the promotion and the demotion, the counter,
-    // the event.
-    expect(items).toHaveLength(7);
+    // The org-deletion fence, two rows each for the promotion and the demotion,
+    // the counter, the mint-sequence fence, and the event.
+    expect(items).toHaveLength(8);
     expect(
       items.find((item) => item.Update?.Key?.sk?.S === OrgKeys.memberSk(TARGET_ID))!.Update,
     ).toMatchObject({

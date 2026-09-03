@@ -289,8 +289,8 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
     expect(result).toMatchObject({ statusCode: 204 });
     const items = transactItems();
-    // Both rows and the event.
-    expect(items).toHaveLength(3);
+    // Both rows, the mint-sequence fence, and the event.
+    expect(items).toHaveLength(4);
     expect(items[0].Delete).toMatchObject({
       Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: OrgKeys.memberSk(TARGET_ID) } },
       // Removing somebody already gone is a clean 404, not a silent success; the
@@ -302,9 +302,15 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     expect(items[1].Delete).toMatchObject({
       Key: { pk: { S: OrgKeys.userPk(TARGET_ID) }, sk: { S: OrgKeys.membershipSk(ORG_ID) } },
     });
-    // The member's mint sequence stays: a narrowing already in flight fences on
-    // that row, and its reading must not be satisfiable by a rejoined member.
-    expect(JSON.stringify(items)).not.toContain('ACCESSKEY_MINT_SEQ');
+    // The removal fences on the member's mint sequence, so a key minted against
+    // the listing it revoked from turns the change into a retry. The row is
+    // read, never deleted: its reading must not be satisfiable by a member who
+    // left and rejoined.
+    expect(items[2].ConditionCheck?.Key).toEqual({
+      pk: { S: OrgKeys.orgPk(ORG_ID) },
+      sk: { S: OrgKeys.accessKeyMintSeqSk(TARGET_ID) },
+    });
+    expect(items.filter((item) => item.Delete)).toHaveLength(2);
   });
 
   it('records the removal with no secret in it', async () => {
@@ -576,7 +582,8 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     await handler(removeEvent(), buildContext());
 
     const written = JSON.stringify(transactItems());
-    expect(written).not.toContain('ACCESSKEY');
+    // The mint-sequence fence rides this transaction; a key row never does.
+    expect(written).not.toContain('ACCESSKEY#');
     expect(written).not.toContain('RAGKEY');
   });
 

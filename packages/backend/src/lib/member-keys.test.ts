@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBClient, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
-import { OrgRole, S3Region } from '@filone/shared';
+import { NO_ROLE, OrgRole, S3Region } from '@filone/shared';
 import { sstResourceMock } from '../test/sst-resource-mock.js';
 
 vi.mock('sst', () => sstResourceMock());
@@ -213,5 +213,29 @@ describe('reviewKeysForRoleChange', () => {
     const { fence } = await reviewKeysForRoleChange(ORG_ID, MEMBER, OrgRole.Member);
 
     expect(fence).toStrictEqual({ userId: MEMBER, mintSeq: undefined });
+  });
+
+  it('condemns every attributed key of theirs under NO_ROLE, and nobody else’s', async () => {
+    // Removal is the narrowing to nothing, so a key an Owner could hold goes the
+    // same way as one nobody could: no role is left to mint under.
+    ddbMock.on(GetItemCommand).resolves({ Item: marshall({ mintSeq: 3 }) });
+    ddbMock.on(QueryCommand).resolves({
+      Items: [
+        row({ sk: 'ACCESSKEY#plain', permissions: ['read', 'write'] }),
+        row({ sk: 'ACCESSKEY#deletes-buckets', permissions: ['read', 'DeleteBucket'] }),
+        row({ sk: 'ACCESSKEY#recovered', permissions: undefined }),
+        row({ sk: 'ACCESSKEY#somebody-elses', createdBy: SOMEBODY_ELSE }),
+        row({ sk: 'ACCESSKEY#unattributed', createdBy: undefined }),
+      ],
+    });
+
+    const { keysToRevoke, fence } = await reviewKeysForRoleChange(ORG_ID, MEMBER, NO_ROLE);
+
+    expect(keysToRevoke).toStrictEqual([
+      expect.objectContaining({ id: 'plain', reason: 'role_cannot_mint', excess: [] }),
+      expect.objectContaining({ id: 'deletes-buckets', reason: 'role_cannot_mint', excess: [] }),
+      expect.objectContaining({ id: 'recovered', reason: 'role_cannot_mint', excess: [] }),
+    ]);
+    expect(fence).toStrictEqual({ userId: MEMBER, mintSeq: 3 });
   });
 });
