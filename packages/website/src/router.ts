@@ -20,7 +20,8 @@ import { Route as createApiKeyRoute } from './routes/_app/$orgSlug.api-keys.crea
 import { Route as billingRoute } from './routes/_app/$orgSlug.billing.js';
 import { Route as membersRoute } from './routes/_app/members.js';
 import { Route as orgMembersRoute } from './routes/_app/$orgSlug.members.js';
-import { Route as organizationRoute } from './routes/_app/$orgSlug.organization.js';
+import { Route as editOrganizationRoute } from './routes/_app/$orgSlug.edit-organization.js';
+import { Route as scopedOrganizationRedirectRoute } from './routes/_app/$orgSlug.organization.js';
 import { Route as settingsRoute } from './routes/_app/$orgSlug.settings.js';
 import { Route as supportRoute } from './routes/_app/$orgSlug.support.js';
 import { Route as bucketIntelligenceRoute } from './routes/_app/$orgSlug.bucket-intelligence.js';
@@ -68,7 +69,8 @@ const routeTree = rootRoute.addChildren([
       createApiKeyRoute,
       billingRoute,
       orgMembersRoute,
-      organizationRoute,
+      editOrganizationRoute,
+      scopedOrganizationRedirectRoute,
       settingsRoute,
       supportRoute,
       bucketIntelligenceRoute,
