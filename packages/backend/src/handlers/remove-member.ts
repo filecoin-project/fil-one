@@ -22,25 +22,32 @@ import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo, getVerifiedEmail } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { authorize } from '../middleware/authorize.js';
+import { requireOrgMembershipMiddleware, requirePermission } from '../middleware/authorize.js';
 import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 /**
- * DELETE /api/org/members/{userId} — take a member out of the organization.
+ * DELETE /api/org/members/{userId} — take a member out of the organization,
+ * or leave it yourself.
  *
- * Removal counts against the same ceiling as every other verb: an Admin reaches
- * Admin and below, and removing an Owner is `owners.manage`, exactly like
- * demoting one. Otherwise deletion would reach what demotion forbids.
+ * Two different gates behind one route, decided in the handler because the
+ * requirement depends on whether the path's `userId` names the caller:
  *
- * Self-removal goes through the same rules rather than around them, which has a
- * consequence worth stating: an Owner or Admin can remove themselves — and the
- * last Owner still cannot, because their own removal carries the guarded
- * decrement like anyone else's — while a Member or ReadOnly cannot, since
- * `members.manage` is what this route costs and their roles do not hold it.
- * "Leave this organization" for those two is a capability the matrix does not
- * grant in M1; it needs a product decision (a `members.leave` permission, or a
- * self-service carve-out) rather than a quiet exception here.
+ * - **Removing someone else** costs `members.manage`, capped at the same
+ *   ceiling as every other verb — an Admin reaches Admin and below, and
+ *   removing an Owner is `owners.manage`, exactly like demoting one.
+ *   Otherwise deletion would reach what demotion forbids.
+ * - **Leaving** costs nothing beyond being a member: every role, including
+ *   Member and ReadOnly (who hold no `members.manage`), may remove
+ *   themselves. This is the self-service carve-out the route's own history
+ *   flagged as a needed product decision rather than a quiet exception — a
+ *   `members.leave` permission would only ever be granted to its own holder,
+ *   so a carve-out states that directly instead of adding an entry to the
+ *   matrix nothing else reads.
+ *
+ * Either way, the last Owner still cannot leave or be removed: that guard
+ * lives in the `ownerCount` decrement's own condition below, unconditional on
+ * who the caller is.
  *
  * One transaction: both membership rows, the `ownerCount` decrement when the
  * member was an Owner, the invitations the removal retires, and the event.
@@ -69,17 +76,29 @@ export async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const targetUserId = event.pathParameters?.userId;
-  if (!targetUserId) return badRequestResponse();
-
   const { orgId, userId, membership } = getUserInfo(event);
   const actorEmail = getVerifiedEmail(event);
+
+  // Leaving costs nothing beyond being a member — the chain's
+  // `requireOrgMembershipMiddleware()` already confirmed that. Removing
+  // someone else is `members.manage`, checked ahead of the path param itself
+  // so a caller who could never do this either way is refused the same
+  // permission error a malformed request from them always got, not a 400
+  // that leaks whether the path happened to be well-formed.
+  if (targetUserId !== userId) {
+    const denied = requirePermission(event, 'members.manage');
+    if (denied) return denied;
+  }
+
+  if (!targetUserId) return badRequestResponse();
 
   const target = await resolveMembership(orgId, targetUserId);
   if (!target) return notAMemberResponse();
 
-  // `authorize('members.manage')` refused every caller without a membership row.
-  if (!canManageTargetRole(membership!.role, target.role)) {
-    return beyondCeilingResponse(target.role);
+  if (targetUserId !== userId) {
+    if (!canManageTargetRole(membership!.role, target.role)) {
+      return beyondCeilingResponse(target.role);
+    }
   }
 
   const wasOwner = target.role === OrgRole.Owner;
@@ -256,6 +275,8 @@ function invitationRaceResponse(): APIGatewayProxyStructuredResultV2 {
 export const handler = middy(baseHandler)
   .use(httpHeaderNormalizer())
   .use(authMiddleware())
-  .use(authorize('members.manage'))
+  // Membership only at the gate — the handler decides whether this request
+  // also needs `members.manage`, since a self-targeted one does not.
+  .use(requireOrgMembershipMiddleware())
   .use(csrfMiddleware())
   .use(errorHandlerMiddleware());
