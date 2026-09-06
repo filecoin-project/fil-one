@@ -113,17 +113,22 @@ export async function baseHandler(
 
   const wasOwner = target.role === OrgRole.Owner;
   const targetProfile = await readUserProfile(targetUserId);
-  const doomed = await pendingInvitationsForRemoval(orgId, {
-    userId: targetUserId,
-    emailNorm: removedMemberAddress(targetUserId, targetProfile?.email),
-  });
+  // Neither depends on the other's result, only on the profile just read, so
+  // there is no reason to pay for their DynamoDB round-trips one after the
+  // other.
+  const [doomed, floorOrg] = await Promise.all([
+    pendingInvitationsForRemoval(orgId, {
+      userId: targetUserId,
+      emailNorm: removedMemberAddress(targetUserId, targetProfile?.email),
+    }),
+    prepareFloorOrgIfLastMembership({
+      targetUserId,
+      orgId,
+      name: targetProfile?.name,
+      email: targetProfile?.email,
+    }),
+  ]);
   const { now, later } = planRevocations(doomed, wasOwner ? 3 : 2);
-  const floorOrg = await prepareFloorOrgIfLastMembership({
-    targetUserId,
-    orgId,
-    name: targetProfile?.name,
-    email: targetProfile?.email,
-  });
 
   try {
     await commitAudited({
@@ -234,7 +239,8 @@ async function removalFailureResponse(
     floorOrg: boolean;
   },
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  // `prepareFloorOrg` returns seven items; every one of its conditions failing
+  // `prepareFloorOrg` returns seven items, plus the audit Put appended
+  // alongside them above (eight total); every one of their conditions failing
   // means the same thing to the caller (try the removal again), so they share
   // one label rather than naming each row.
   const failed = cancelledLabels(err, [
@@ -242,7 +248,7 @@ async function removalFailureResponse(
     'inverse',
     ...(wasOwner ? ['ownerCount'] : []),
     ...Array.from({ length: revocations * 2 }, () => 'invitation'),
-    ...(floorOrg ? Array.from({ length: 7 }, () => 'floorOrg') : []),
+    ...(floorOrg ? Array.from({ length: 8 }, () => 'floorOrg') : []),
   ]);
   if (failed.length === 0) throw err;
   if (failed.includes('floorOrg')) return floorOrgRaceResponse();
