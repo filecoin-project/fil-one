@@ -85,13 +85,13 @@ export interface UpdateMemberRoleResponse {
 }
 
 /**
- * A membership change that stopped partway — a role change or a transfer.
+ * A role change that stopped partway.
  *
- * The keys in `revokedKeys` are gone whatever the roles now say, so the console
- * reports them rather than treating the request as a no-op. The retry is the
- * same request, which finds fewer keys.
+ * The keys named in `revokedKeys` are gone whatever the role now says, so the
+ * console reports them rather than treating the whole request as a no-op. The
+ * retry is the same PATCH, which finds fewer keys.
  */
-export interface MembershipChangeFailure {
+export interface UpdateMemberRoleFailure {
   message: string;
   revokedKeys: AccessKeySummary[];
   /** The keys a vendor refused, when that is what stopped the change. */
@@ -139,10 +139,4 @@ export interface TransferOwnershipResponse {
   userId: string;
   /** The caller, now an Admin — the org keeps exactly one Owner. */
   previousOwnerUserId: string;
-  /**
-   * The caller's own access keys the transfer revoked: an Admin cannot grant
-   * privileged operations, so a key of theirs carrying one goes with the seat.
-   * Named here rather than emailed, because the holder is the caller.
-   */
-  revokedKeys?: AccessKeySummary[];
 }

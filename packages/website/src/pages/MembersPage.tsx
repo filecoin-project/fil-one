@@ -275,19 +275,10 @@ function useOwnershipTransfer(ctx: MutationContext, onDone: () => void) {
       // to a caller who is now an Admin, and the server answers the second click
       // with a refusal rather than a second transfer.
       onDone();
-      // The caller's own keys, so the toast is the only place they hear it.
-      invalidateRevokedKeyViews(ctx.client, result.revokedKeys?.length ?? 0);
-      ctx.toastSuccess(
-        `${memberName(member)} owns this organization now. You are an admin.${revokedSuffix(result.revokedKeys)}`,
-      );
+      ctx.toastSuccess(`${memberName(member)} owns this organization now. You are an admin.`);
     },
     onError: (err) => {
-      // Gone whatever the seat now says, the same as a role change's.
-      const revoked = revokedKeysOf(err);
-      invalidateRevokedKeyViews(ctx.client, revoked.length);
-      ctx.toastError(
-        `${errorMessageOf(err, 'Failed to transfer ownership')}${revokedSuffix(revoked)}`,
-      );
+      ctx.toastError(errorMessageOf(err, 'Failed to transfer ownership'));
     },
   });
 }

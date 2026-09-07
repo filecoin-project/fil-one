@@ -7,7 +7,12 @@ import {
   canManageTargetRole,
   roleNarrows,
 } from '@filone/shared';
-import type { OrgRole, AccessKeySummary, UpdateMemberRoleResponse } from '@filone/shared';
+import type {
+  OrgRole,
+  AccessKeySummary,
+  UpdateMemberRoleFailure,
+  UpdateMemberRoleResponse,
+} from '@filone/shared';
 import { AuditSubjects, userActor } from '../lib/audit.js';
 import { commitAfterRevokingKeys } from '../lib/commit-after-revoking-keys.js';
 import { reviewKeysForRoleChange } from '../lib/member-keys.js';
@@ -37,11 +42,7 @@ import {
 } from '../lib/org-profile.js';
 import type { OrgProfileItem } from '../lib/org-profile.js';
 import { parseJsonBody } from '../lib/parse-json-body.js';
-import {
-  ResponseBuilder,
-  unattributableFailure,
-  vendorRefusedResponse,
-} from '../lib/response-builder.js';
+import { ResponseBuilder, unattributableFailure } from '../lib/response-builder.js';
 import type { ErrorWithRevokedKeys } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo, getVerifiedEmail } from '../lib/user-context.js';
@@ -149,7 +150,7 @@ export async function baseHandler(
     },
     source: SOURCE,
     onCancelled: (err, revokedKeys) => changeFailureResponse(err, { ...failure, revokedKeys }),
-    onRefused: (refused, revoked) => vendorRefusedResponse(revoked, refused, 'the role'),
+    onRefused: (refused, revoked) => vendorRefusedResponse(revoked, refused),
     notifyMember: (revoked) =>
       notifyRevokedKeys({
         orgId,
@@ -328,6 +329,28 @@ async function changeFailureResponse(
 
 function roleResponse(body: UpdateMemberRoleResponse): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder().status(200).body<UpdateMemberRoleResponse>(body).build();
+}
+
+/**
+ * A vendor refused a revocation, so the role is unchanged and the keys already
+ * revoked are named. Retrying is the same PATCH, which finds fewer keys.
+ */
+function vendorRefusedResponse(
+  revokedKeys: AccessKeySummary[],
+  failedKeys: AccessKeySummary[],
+): APIGatewayProxyStructuredResultV2 {
+  const named = failedKeys.map((key) => `"${key.keyName}"`).join(', ');
+  const subject =
+    failedKeys.length === 1 ? `The key ${named}` : `${failedKeys.length} keys (${named})`;
+
+  return new ResponseBuilder()
+    .status(502)
+    .body<UpdateMemberRoleFailure>({
+      message: `${subject} could not be revoked, so the role is unchanged. Try again.`,
+      revokedKeys,
+      failedKeys,
+    })
+    .build();
 }
 
 function lastOwnerResponse(

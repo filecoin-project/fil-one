@@ -7,7 +7,7 @@ import {
   TransactionCanceledException,
   TransactWriteItemsCommand,
 } from '@aws-sdk/client-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { ApiErrorCode, OrgRole } from '@filone/shared';
 import { sstResourceMock } from '../test/sst-resource-mock.js';
 import { auditItemIn, expectNoSecrets } from '../test/audit-assertions.js';
@@ -31,20 +31,6 @@ vi.mock('jose', () => ({
   jwtVerify: (token: unknown, jwks: unknown, opts: unknown) => mockJwtVerify(token, jwks, opts),
   decodeJwt: vi.fn(),
   createRemoteJWKSet: vi.fn((_url: unknown) => 'mock-jwks'),
-}));
-
-// The transfer revokes the outgoing Owner's privileged keys at whichever
-// orchestrator holds them, and the registry builds the FTH client at import
-// time from a secret this suite has no reason to stand up.
-const mockDeleteAccessKey = vi.fn();
-vi.mock('../lib/service-orchestrator-registry.js', () => ({
-  getOrchestratorForRegion: (region: string) => ({
-    id: region === 'us-east-1' ? 'fth' : 'aurora',
-    region,
-    accessModel: 'scoped-keys',
-    isTenantReady: () => `tenant:${region}`,
-    deleteAccessKey: (...args: unknown[]) => mockDeleteAccessKey(...args),
-  }),
 }));
 
 const ddbMock = mockClient(DynamoDBClient);
@@ -153,19 +139,6 @@ function invitationRow({
   };
 }
 
-/** The org's access-key rows, which the transfer reviews against Admin. */
-function stubAccessKeyRows(items: Record<string, unknown>[]) {
-  ddbMock
-    .on(QueryCommand, {
-      TableName: 'UserInfoTable',
-      ExpressionAttributeValues: {
-        ':pk': { S: `ORG#${ORG_ID}` },
-        ':skPrefix': { S: 'ACCESSKEY#' },
-      },
-    })
-    .resolves({ Items: items.map((item) => marshall(item)) });
-}
-
 function stubInvitationRows(items: Record<string, { S: string }>[]) {
   ddbMock
     .on(QueryCommand, {
@@ -211,8 +184,6 @@ describe('POST /api/org/transfer handler', () => {
     mockGetMfaEnrollments.mockResolvedValue([]);
 
     ddbMock.on(GetItemCommand).resolves({});
-    // The transfer lists the org's key rows before it moves the seat.
-    ddbMock.on(QueryCommand).resolves({});
     ddbMock
       .on(GetItemCommand, {
         TableName: 'UserInfoTable',
@@ -241,12 +212,8 @@ describe('POST /api/org/transfer handler', () => {
 
     const items = transactItems();
     // The fence, two rows each for the promotion and the demotion, the counter,
-    // the outgoing Owner's mint-sequence check, the event.
-    expect(items).toHaveLength(8);
-    expect(
-      items.find((item) => item.ConditionCheck?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${USER_ID}`)!
-        .ConditionCheck,
-    ).toMatchObject({ ConditionExpression: 'attribute_not_exists(pk)' });
+    // the event.
+    expect(items).toHaveLength(7);
     expect(
       items.find((item) => item.Update?.Key?.sk?.S === OrgKeys.memberSk(TARGET_ID))!.Update,
     ).toMatchObject({
@@ -326,97 +293,6 @@ describe('POST /api/org/transfer handler', () => {
     expect(unmarshall(auditItemIn(transactItems())).details).not.toHaveProperty(
       'revokedInvitations',
     );
-  });
-
-  it('revokes the outgoing Owner’s privileged key before the seat moves', async () => {
-    // An Admin holds no `privileged.grant`, so a key that writes object
-    // retention is authority the role they land in could not have minted.
-    stubAccessKeyRows([
-      {
-        pk: `ORG#${ORG_ID}`,
-        sk: 'ACCESSKEY#key-1',
-        keyName: 'retention key',
-        accessKeyId: 'AKIAEXAMPLE0001',
-        createdAt: '2026-02-01T00:00:00.000Z',
-        region: 'eu-west-1',
-        createdBy: USER_ID,
-        permissions: ['read', 'write'],
-        granularPermissions: ['PutObjectRetention'],
-      },
-      {
-        pk: `ORG#${ORG_ID}`,
-        sk: 'ACCESSKEY#key-2',
-        keyName: 'ordinary key',
-        accessKeyId: 'AKIAEXAMPLE0002',
-        createdAt: '2026-02-01T00:00:00.000Z',
-        region: 'eu-west-1',
-        createdBy: USER_ID,
-        permissions: ['read', 'write'],
-      },
-    ]);
-    mockDeleteAccessKey.mockResolvedValue(undefined);
-
-    const result = await handler(transferEvent(), buildContext());
-
-    expect(result).toMatchObject({ statusCode: 200 });
-    expect(mockDeleteAccessKey).toHaveBeenCalledTimes(1);
-    expect(body(result).revokedKeys).toMatchObject([{ keyName: 'retention key' }]);
-
-    // Before the seat moved: the revocation's own transaction is written first.
-    const calls = ddbMock.commandCalls(TransactWriteItemsCommand);
-    expect(
-      calls[0]!.args[0].input.TransactItems?.some(
-        (item) => item.Delete?.Key?.sk?.S === 'ACCESSKEY#key-1',
-      ),
-    ).toBe(true);
-    expect(
-      calls
-        .at(-1)!
-        .args[0].input.TransactItems?.some(
-          (item) => item.Update?.Key?.sk?.S === OrgKeys.memberSk(TARGET_ID),
-        ),
-    ).toBe(true);
-  });
-
-  it('leaves the seat where it is when a vendor refuses a revocation', async () => {
-    stubAccessKeyRows([
-      {
-        pk: `ORG#${ORG_ID}`,
-        sk: 'ACCESSKEY#key-1',
-        keyName: 'retention key',
-        accessKeyId: 'AKIAEXAMPLE0001',
-        createdAt: '2026-02-01T00:00:00.000Z',
-        region: 'eu-west-1',
-        createdBy: USER_ID,
-        permissions: ['read', 'write'],
-        granularPermissions: ['PutObjectLegalHold'],
-      },
-    ]);
-    mockDeleteAccessKey.mockRejectedValue(new Error('vendor down'));
-
-    const result = await handler(transferEvent(), buildContext());
-
-    expect(result).toMatchObject({ statusCode: 502 });
-    expect(body(result)).toMatchObject({
-      revokedKeys: [],
-      failedKeys: [{ keyName: 'retention key' }],
-    });
-    // No role moved, so no transaction wrote one.
-    expect(
-      ddbMock
-        .commandCalls(TransactWriteItemsCommand)
-        .flatMap((call) => call.args[0].input.TransactItems ?? [])
-        .some((item) => item.Update?.Key?.sk?.S === OrgKeys.memberSk(TARGET_ID)),
-    ).toBe(false);
-  });
-
-  it('loses to a key minted for the outgoing Owner while the transfer was in flight', async () => {
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(6, 8));
-
-    const result = await handler(transferEvent(), buildContext());
-
-    expect(result).toMatchObject({ statusCode: 409 });
-    expect(body(result).message).toContain('An access key was created for you');
   });
 
   it('returns 404 for somebody who is not a member', async () => {

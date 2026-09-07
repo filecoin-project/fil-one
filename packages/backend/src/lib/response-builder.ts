@@ -1,9 +1,4 @@
-import {
-  ApiErrorCode,
-  type AccessKeySummary,
-  type ErrorResponse,
-  type MembershipChangeFailure,
-} from '@filone/shared';
+import { ApiErrorCode, type AccessKeySummary, type ErrorResponse } from '@filone/shared';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 
 export const COOKIE_ATTRIBUTES = 'HttpOnly; Secure; SameSite=Lax; Path=/';
@@ -140,29 +135,6 @@ export type ErrorWithRevokedKeys = ErrorResponse & { revokedKeys: AccessKeySumma
  * already took. `errorHandlerMiddleware` answers with it too; nothing about the
  * fault itself is disclosed either way.
  */
-/**
- * A vendor refused a revocation, so nothing was written and the keys already
- * revoked are named. `unchanged` completes "…so ___ is unchanged".
- */
-export function vendorRefusedResponse(
-  revokedKeys: AccessKeySummary[],
-  failedKeys: AccessKeySummary[],
-  unchanged: string,
-): APIGatewayProxyStructuredResultV2 {
-  const named = failedKeys.map((key) => `"${key.keyName}"`).join(', ');
-  const subject =
-    failedKeys.length === 1 ? `The key ${named}` : `${failedKeys.length} keys (${named})`;
-
-  return new ResponseBuilder()
-    .status(502)
-    .body<MembershipChangeFailure>({
-      message: `${subject} could not be revoked, so ${unchanged} is unchanged. Try again.`,
-      revokedKeys,
-      failedKeys,
-    })
-    .build();
-}
-
 /**
  * The answer to a cancellation nothing can name. Rethrows when no key was
  * revoked, so the middleware answers; otherwise names the keys, which are gone
