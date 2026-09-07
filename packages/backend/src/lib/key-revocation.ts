@@ -23,6 +23,24 @@ export interface RevokeAccessKeyArgs {
 }
 
 /**
+ * The vendor deleted the credential and the write that records it did not land.
+ *
+ * The key is dead either way, which is the opposite of what a bare rejection
+ * from {@link revokeAccessKey} means, so callers that report what happened have
+ * to be able to tell the two apart. What survives is the row: it lists a
+ * credential that no longer exists, until somebody deletes it.
+ */
+export class RevocationNotRecordedError extends Error {
+  constructor(
+    readonly keyId: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`Access key ${keyId} was deleted at the vendor, but the record did not land.`, options);
+    this.name = 'RevocationNotRecordedError';
+  }
+}
+
+/**
  * Revoke one key at its orchestrator and delete the row that lists it.
  *
  * Revocation happens at the vendor first and cannot join a local transaction,
@@ -76,15 +94,19 @@ export async function revokeAccessKey({
     throw err;
   }
 
-  await revocation.complete({
-    outcome: 'succeeded',
-    items: [
-      {
-        Delete: {
-          TableName: Resource.UserInfoTable.name,
-          Key: marshall({ pk: AccessKeyKeys.orgPk(orgId), sk: AccessKeyKeys.keySk(keyId) }),
+  try {
+    await revocation.complete({
+      outcome: 'succeeded',
+      items: [
+        {
+          Delete: {
+            TableName: Resource.UserInfoTable.name,
+            Key: marshall({ pk: AccessKeyKeys.orgPk(orgId), sk: AccessKeyKeys.keySk(keyId) }),
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
+  } catch (err) {
+    throw new RevocationNotRecordedError(keyId, { cause: err });
+  }
 }

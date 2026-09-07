@@ -9,21 +9,22 @@ import {
   NO_ROLE,
   S3Region,
   auditKeyIdSuffix,
+  canRetainAccessKey,
   excessKeyPermissions,
   isSupportedRegion,
-  roleNarrows,
 } from '@filone/shared';
 import type {
+  AccessKeyPermissions,
   AuditActor,
   CreateAccessKeyRequest,
   CreateAccessKeyResponse,
   ErrorResponse,
   GranularPermission,
-  OrgRole,
 } from '@filone/shared';
 import { Resource } from 'sst';
+import { accessKeyMintSeqItem } from '../lib/access-key-mint-seq.js';
 import { AuditSubjects, twoPhaseAudit, userActor } from '../lib/audit.js';
-import { revokeAccessKey } from '../lib/key-revocation.js';
+import { RevocationNotRecordedError, revokeAccessKey } from '../lib/key-revocation.js';
 import { resolveMembership } from '../lib/org-membership.js';
 import type { AuditCorrelation } from '../lib/audit.js';
 import { getOrchestratorForRegion } from '../lib/service-orchestrator-registry.js';
@@ -64,11 +65,10 @@ export async function baseHandler(
   const denied = checkCreatorAuthority(event, parsed.data);
   if (denied) return denied;
 
-  const { orgId, userId, membership } = getUserInfo(event);
-  // The role the cap above was evaluated against. The key row's write asserts
-  // the role on file has not narrowed from it, and the read after that write
-  // asks again.
-  const creator = { orgId, userId, role: membership!.role };
+  const { orgId, userId } = getUserInfo(event);
+  // What the cap above admitted. The key row's write asserts the role on file
+  // can still grant it, and the read after that write asks again.
+  const creator = { orgId, userId, key: { permissions, granularPermissions } };
   const creatorEmail = getVerifiedEmail(event);
   const attribution = keyAttribution({ userId, creatorEmail });
   const actor = userActor({ userId, email: creatorEmail });
@@ -154,7 +154,7 @@ export async function baseHandler(
     return creatorRoleChangedResponse();
   }
 
-  if (await roleNarrowedSinceCap(creator)) {
+  if (await keyExceedsCurrentRole(creator)) {
     await discardRecordedKey({ minted: mintedKey, creator, actor });
     return creatorRoleChangedResponse();
   }
@@ -182,11 +182,12 @@ interface MintedKey {
   tenantId: string;
 }
 
-/** Whose role the cap was evaluated against, and the role it read. */
+/** Who the cap was evaluated for, and the key it admitted. */
 interface KeyCreator {
   orgId: string;
   userId: string;
-  role: OrgRole;
+  /** The permissions the requested key would carry. */
+  key: AccessKeyPermissions;
 }
 
 /** Whether the key row landed. When it did not, the credential is still live at the vendor. */
@@ -225,19 +226,25 @@ async function recordMintedKey({
         keyIdSuffix: auditKeyIdSuffix('s3', minted.accessKeyId),
         ...(recovered ? { recovered } : {}),
       },
-      // The cap ran against a role read before the vendor call. A narrowing
-      // that commits in between revokes the keys it can see, and this row is
-      // not one of them yet, so the row refuses to land at all. A widening
-      // strands nothing, so it is admitted.
+      // The cap ran against a role read before the vendor call, so the row
+      // only lands if the role on file could still grant the key. The sequence
+      // bump rides the same transaction, which is what lets a narrowing notice
+      // a row that landed after its listing (`lib/access-key-mint-seq.ts`) —
+      // and what keeps a refused mint from advancing it.
       items: [
         creatorRoleStillMintsCheck(creator),
+        accessKeyMintSeqItem(creator),
         { Put: { TableName: Resource.UserInfoTable.name, Item: marshall(row) } },
       ],
     });
     return { recorded: true };
   } catch (err) {
-    // The role check is item 0; `commitAudited` appends the audit Put last.
-    if (!cancelledLabels(err, ['creatorRole', 'keyRow']).includes('creatorRole')) throw err;
+    // The role check is item 0; `commitAudited` appends the audit Put last. The
+    // unconditioned bump never cancels, but it holds a position, so it holds a
+    // label.
+    if (!cancelledLabels(err, ['creatorRole', 'mintSeq', 'keyRow']).includes('creatorRole')) {
+      throw err;
+    }
     return { recorded: false, reason: 'creator_role_changed' };
   }
 }
@@ -302,6 +309,9 @@ function optionalKeyAttributes({
  * fail-closed and can throw, and a process that stops there leaves a live key
  * at the vendor with no local row and no record of it. A dangling intent is the
  * better failure: it is visible, and an orphan credential is not.
+ *
+ * When the delete fails too, the completion says so: `failed` alone would read
+ * as a mint that came to nothing.
  */
 async function discardUnrecordedKey({
   minted,
@@ -312,9 +322,11 @@ async function discardUnrecordedKey({
   mint: AuditCorrelation<'key.created'>;
   creator: Pick<KeyCreator, 'orgId' | 'userId'>;
 }): Promise<void> {
+  let cleanupFailed = false;
   try {
     await minted.orchestrator.deleteAccessKey(minted.tenantId, minted.keyId);
   } catch (err) {
+    cleanupFailed = true;
     console.error('[create-access-key] Could not discard a key minted under a stale role', {
       orgId: creator.orgId,
       userId: creator.userId,
@@ -322,7 +334,10 @@ async function discardUnrecordedKey({
       error: err,
     });
   }
-  await mint.complete({ outcome: 'failed' });
+  await mint.complete({
+    outcome: 'failed',
+    ...(cleanupFailed ? { details: { cleanupFailed } } : {}),
+  });
 }
 
 /**
@@ -335,21 +350,17 @@ async function discardUnrecordedKey({
  * write follows, and by then the narrowing's listing has already been taken
  * without it.
  *
- * So the mint looks once more. It is the request that created the problem and
- * the only one holding the credential, and undoing its own work is cheaper than
- * anything that has to go looking for it afterwards. A demotion landing between
- * the write above and this read is the one ordering neither check sees.
+ * So the mint looks once more, being the only request holding the credential. A
+ * demotion landing after this read is the narrowing's to catch
+ * (`lib/access-key-mint-seq.ts`).
  *
- * Only a narrowing counts. A widening strands nothing, so a member promoted
- * mid-mint keeps the key their new role covers; and an absent membership is
- * the narrowing to nothing, so a member removed mid-mint does not.
- *
- * Costs one consistent `GetItem` on the path of every mint, which is the price
- * of not needing a second revocation pass.
+ * The key, not the role: a promotion mid-mint strands nothing, a demotion that
+ * still grants what the key holds is no reason to take it away, and an absent
+ * membership grants nothing at all.
  */
-async function roleNarrowedSinceCap({ orgId, userId, role }: KeyCreator): Promise<boolean> {
+async function keyExceedsCurrentRole({ orgId, userId, key }: KeyCreator): Promise<boolean> {
   const current = (await resolveMembership(orgId, userId))?.role ?? NO_ROLE;
-  return roleNarrows(role, current);
+  return !canRetainAccessKey(current, key).retained;
 }
 
 /**
@@ -370,15 +381,21 @@ async function discardRecordedKey({
   try {
     await revokeAccessKey({ orgId: creator.orgId, ...minted, actor, reason: 'stale_role_at_mint' });
   } catch (err) {
-    // The row survives, listing a credential that may or may not still exist.
     // Left for the operator rather than retried: a second delete against a
-    // vendor that just refused one is not the thing to do on a request path.
-    console.error('[create-access-key] Could not discard a key whose creator was demoted', {
-      orgId: creator.orgId,
-      userId: creator.userId,
-      keyIdSuffix: auditKeyIdSuffix('s3', minted.accessKeyId),
-      error: err,
-    });
+    // vendor that just refused one is not for a request path. A
+    // `RevocationNotRecordedError` is a dead credential with a stale row;
+    // anything else may still be live.
+    console.error(
+      err instanceof RevocationNotRecordedError
+        ? '[create-access-key] Discarded a key whose creator was demoted, but its row survives'
+        : '[create-access-key] Could not discard a key whose creator was demoted',
+      {
+        orgId: creator.orgId,
+        userId: creator.userId,
+        keyIdSuffix: auditKeyIdSuffix('s3', minted.accessKeyId),
+        error: err,
+      },
+    );
   }
 }
 

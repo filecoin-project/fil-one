@@ -267,6 +267,11 @@ export interface AuditEventDetails {
      * created the credential (`create-access-key.ts`).
      */
     recovered?: boolean;
+    /**
+     * The abandoned mint's credential could not be taken back, so it is live at
+     * the vendor with no local row — this event is its only trace.
+     */
+    cleanupFailed?: boolean;
   };
   'key.deleted': {
     keyKind: AuditKeyKind;

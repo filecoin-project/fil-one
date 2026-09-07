@@ -17,11 +17,15 @@ vi.mock('./service-orchestrator-registry.js', () => ({
 }));
 
 const mockRevokeAccessKey = vi.fn();
-vi.mock('./key-revocation.js', () => ({
+// Partial: the error class is the real one, since the classification below is
+// an `instanceof` test against it.
+vi.mock('./key-revocation.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./key-revocation.js')>()),
   revokeAccessKey: (...args: unknown[]) => mockRevokeAccessKey(...args),
 }));
 
 import { userActor } from './audit.js';
+import { RevocationNotRecordedError } from './key-revocation.js';
 import { revokeMemberKeys } from './revoke-member-keys.js';
 import type { AccessKeyToRevoke } from './member-keys.js';
 
@@ -97,6 +101,21 @@ describe('revokeMemberKeys', () => {
 
     expect(ids(outcome.revoked)).toStrictEqual(['0002']);
     expect(ids(outcome.refused)).toStrictEqual(['0001', '0003']);
+  });
+
+  it('counts a key the vendor deleted but nothing recorded as revoked', async () => {
+    // The credential is gone, so the client is already broken: calling this a
+    // refusal would stop the role change and tell the member a dead key still
+    // works. What survives is the row, which is why it is logged apart.
+    mockRevokeAccessKey.mockImplementation(({ keyId }: { keyId: string }) =>
+      keyId === '0002' ? Promise.reject(new RevocationNotRecordedError(keyId)) : Promise.resolve(),
+    );
+
+    const outcome = await revoke();
+
+    expect(ids(outcome.revoked)).toStrictEqual(['0001', '0002', '0003']);
+    expect(outcome.refused).toStrictEqual([]);
+    expect(vi.mocked(console.error).mock.calls[0]?.[0]).toContain('its row survives');
   });
 
   it('treats a region with no tenant as a refusal rather than a crash, and the rest proceed', async () => {

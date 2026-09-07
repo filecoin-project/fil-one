@@ -71,14 +71,27 @@ import {
 
 const USER_INFO = { userId: 'user-1', orgId: 'org-1' };
 
-function validBody({ keyName, region = 'eu-west-1' }: { keyName?: string; region?: string }) {
+function validBody({
+  keyName,
+  region = 'eu-west-1',
+  granularPermissions,
+}: {
+  keyName?: string;
+  region?: string;
+  /** `PutObjectRetention` and `PutObjectLegalHold` need `privileged.grant`, which only an Owner holds. */
+  granularPermissions?: string[];
+}) {
   return JSON.stringify({
     keyName,
     permissions: ['read', 'write', 'list', 'delete'],
+    ...(granularPermissions ? { granularPermissions } : {}),
     bucketScope: 'all',
     region,
   });
 }
+
+/** A key only an Owner may mint, so a demotion to Admin strands it. */
+const PRIVILEGED = { granularPermissions: ['PutObjectRetention'] };
 
 function issuedAccessKey() {
   return {
@@ -979,6 +992,24 @@ describe('create-access-key baseHandler', () => {
       ).toContainEqual({ pk: { S: 'ORG#org-1' }, sk: { S: 'MEMBER#user-1' } });
     });
 
+    it('advances the mint sequence in the transaction that writes the row', async () => {
+      // Same transaction as the row on purpose: a refused mint must advance
+      // nothing, or a narrowing would cancel over a key that never existed.
+      const event = buildEvent({ body: validBody({ keyName: 'My Key' }), userInfo: USER_INFO });
+
+      await baseHandler(event);
+
+      const items = keyRowWrites()[0]!.args[0].input.TransactItems ?? [];
+      const bump = items.find(
+        (item) => item.Update?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${USER_INFO.userId}`,
+      );
+      expect(bump?.Update).toMatchObject({
+        TableName: 'OrgTable',
+        UpdateExpression: 'ADD mintSeq :one',
+      });
+      expect(items.some((item) => item.Put?.TableName === 'UserInfoTable')).toBe(true);
+    });
+
     it('keeps the key when the role is the one the cap ran against', async () => {
       const event = buildEvent({ body: validBody({ keyName: 'My Key' }), userInfo: USER_INFO });
 
@@ -1004,10 +1035,11 @@ describe('create-access-key baseHandler', () => {
 
     it('discards the key and the row when the role narrowed underneath it', async () => {
       // The row is already written, unlike the ConditionCheck path, so both
-      // halves have to go.
-      stubCreatorRole(OrgRole.Member);
+      // halves have to go. An Admin holds no `privileged.grant`, so the
+      // retention key the Owner asked for is one they could not have minted.
+      stubCreatorRole(OrgRole.Admin);
       const event = buildEvent({
-        body: validBody({ keyName: 'My Key' }),
+        body: validBody({ keyName: 'My Key', ...PRIVILEGED }),
         userInfo: {
           ...USER_INFO,
           membership: membershipFor(USER_INFO.orgId, USER_INFO.userId, OrgRole.Owner),
@@ -1031,9 +1063,9 @@ describe('create-access-key baseHandler', () => {
     });
 
     it('records the discard as a revocation the member made of their own key', async () => {
-      stubCreatorRole(OrgRole.Member);
+      stubCreatorRole(OrgRole.Admin);
       const event = buildEvent({
-        body: validBody({ keyName: 'My Key' }),
+        body: validBody({ keyName: 'My Key', ...PRIVILEGED }),
         userInfo: {
           ...USER_INFO,
           membership: membershipFor(USER_INFO.orgId, USER_INFO.userId, OrgRole.Owner),
@@ -1048,6 +1080,23 @@ describe('create-access-key baseHandler', () => {
         actor: { kind: 'user', id: 'user-1' },
         details: { keyKind: 's3', reason: 'stale_role_at_mint', keyName: 'My Key' },
       });
+    });
+
+    it('keeps the key when the narrower role could have minted it', async () => {
+      // Owner to Admin narrows the role, but not below anything this key
+      // carries — and the narrowing that demoted them would have retained the
+      // identical key, so discarding it here would contradict that.
+      stubCreatorRole(OrgRole.Admin);
+      const event = buildEvent({
+        body: validBody({ keyName: 'My Key' }),
+        userInfo: {
+          ...USER_INFO,
+          membership: membershipFor(USER_INFO.orgId, USER_INFO.userId, OrgRole.Owner),
+        },
+      });
+
+      expect((await baseHandler(event)).statusCode).toBe(201);
+      expect(mockDeleteAccessKey).not.toHaveBeenCalled();
     });
 
     it('discards the key when the member was removed outright', async () => {
@@ -1069,12 +1118,12 @@ describe('create-access-key baseHandler', () => {
     it('still answers 409 when the vendor will not take the key back', async () => {
       // The row survives, naming a credential that may still exist. Logged for
       // an operator rather than retried on a request path.
-      stubCreatorRole(OrgRole.Member);
+      stubCreatorRole(OrgRole.Admin);
       mockDeleteAccessKey.mockRejectedValue(new Error('vendor down'));
 
       const result = await baseHandler(
         buildEvent({
-          body: validBody({ keyName: 'My Key' }),
+          body: validBody({ keyName: 'My Key', ...PRIVILEGED }),
           userInfo: {
             ...USER_INFO,
             membership: membershipFor(USER_INFO.orgId, USER_INFO.userId, OrgRole.Owner),

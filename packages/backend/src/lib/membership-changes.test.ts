@@ -190,11 +190,11 @@ describe('inviterAuthorityCheck', () => {
 });
 
 describe('creatorRoleStillMintsCheck', () => {
-  it('admits only Owners when the cap ran against an Owner', () => {
+  it('admits only Owner for a key that writes object retention', () => {
     const check = creatorRoleStillMintsCheck({
       orgId: ORG_ID,
       userId: 'creator-id',
-      role: OrgRole.Owner,
+      key: { permissions: ['write'], granularPermissions: ['PutObjectRetention'] },
     });
 
     expect(check.ConditionCheck).toMatchObject({
@@ -205,38 +205,35 @@ describe('creatorRoleStillMintsCheck', () => {
     });
   });
 
-  it('admits a promotion and refuses a demotion when the cap ran against a Member', () => {
+  // The point of asking about the key rather than the cap role: an Owner
+  // demoted to Admin mid-mint keeps a key an Admin could have minted.
+  it('admits Admin for a key an Admin could mint', () => {
     const check = creatorRoleStillMintsCheck({
       orgId: ORG_ID,
       userId: 'creator-id',
-      role: OrgRole.Member,
+      key: { permissions: ['read', 'DeleteBucket'] },
     });
 
     expect(check.ConditionCheck?.ConditionExpression).toBe(
-      'attribute_exists(pk) AND #role IN (:role0, :role1, :role2)',
+      'attribute_exists(pk) AND #role IN (:role0, :role1)',
     );
     expect(check.ConditionCheck?.ExpressionAttributeValues).toStrictEqual({
       ':role0': { S: OrgRole.Owner },
       ':role1': { S: OrgRole.Admin },
-      ':role2': { S: OrgRole.Member },
     });
   });
 
-  it('admits every role when the cap ran against ReadOnly, which nothing narrows', () => {
+  it('never admits ReadOnly, which holds no keys.create at all', () => {
     const check = creatorRoleStillMintsCheck({
       orgId: ORG_ID,
       userId: 'creator-id',
-      role: OrgRole.ReadOnly,
+      key: { permissions: ['read'] },
     });
 
-    expect(check.ConditionCheck?.ConditionExpression).toBe(
-      'attribute_exists(pk) AND #role IN (:role0, :role1, :role2, :role3)',
-    );
     expect(check.ConditionCheck?.ExpressionAttributeValues).toStrictEqual({
       ':role0': { S: OrgRole.Owner },
       ':role1': { S: OrgRole.Admin },
       ':role2': { S: OrgRole.Member },
-      ':role3': { S: OrgRole.ReadOnly },
     });
   });
 });

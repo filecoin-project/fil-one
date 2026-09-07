@@ -10,7 +10,7 @@ import { resolveOrgName } from './org-profile.js';
 /**
  * Organization membership, in OrgTable.
  *
- * Three row shapes, all pk/sk (the table has no GSIs, like every other table
+ * Four row shapes, all pk/sk (the table has no GSIs, like every other table
  * here), plus one key reserved for SSO:
  * - `ORG#{orgId}` / `MEMBER#{userId}` — the authoritative membership: role,
  *   when and how the member joined.
@@ -22,6 +22,9 @@ import { resolveOrgName } from './org-profile.js';
  * - `ORG#{orgId}` / `META` — org-level counters owned by this module, starting
  *   with `ownerCount`, the last-Owner invariant. It sits beside the rows it
  *   counts so every owner-set transaction is single-table.
+ * - `ORG#{orgId}` / `ACCESSKEY_MINT_SEQ#{userId}` — how many access-key rows have
+ *   landed for the member, which a role narrowing asserts is unchanged since it
+ *   listed their keys (`lib/access-key-mint-seq.ts`).
  *
  * Two more shapes belong to invitations, and their key builders are here beside
  * the membership ones because an accept transaction writes both families at
@@ -60,6 +63,11 @@ export const OrgKeys = {
   orgPk: (orgId: string): string => `ORG#${orgId}`,
   memberSk: (userId: string): string => `${memberSkPrefix()}${userId}`,
   memberSkPrefix,
+  /**
+   * The member's access-key mint sequence. Built and compared only, never
+   * parsed back — no reader walks these rows.
+   */
+  accessKeyMintSeqSk: (userId: string): string => `ACCESSKEY_MINT_SEQ#${userId}`,
   /**
    * Inverse of {@link memberSk}. User ids are UUIDs, so the same no-`#` check as
    * {@link parseMembershipSk} makes the split unambiguous; returns undefined for

@@ -8,12 +8,26 @@ import type {
   RevocationTrigger,
   TwoPhaseAuditEventType,
 } from '@filone/shared';
+import { accessKeyMintSeqUnchangedCheck } from './access-key-mint-seq.js';
+import type { KeyMintFence } from './access-key-mint-seq.js';
 import { auditEvent, commitAudited, twoPhaseAudit } from './audit.js';
+import { cancelledLabels } from './membership-changes.js';
 import type { AccessKeyToRevoke } from './member-keys.js';
 import type { OrgProfileItem } from './org-profile.js';
 import { revokeMemberKeys } from './revoke-member-keys.js';
 
 type Response = APIGatewayProxyStructuredResultV2;
+
+/**
+ * What the commit did. `keyMinted` carries no `revoked` field on purpose: a
+ * caller cannot reach `revoked` without answering the fence first, which is what
+ * keeps the answer's wording with the flow that knows whose key it was.
+ */
+export type CommitOutcome =
+  | { revoked: AccessKeySummary[] }
+  | { response: Response }
+  /** The fence refused. These keys went before it did. */
+  | { keyMinted: AccessKeySummary[] };
 
 /**
  * The two-phase event types whose payload can carry the ids of keys a change
@@ -35,30 +49,27 @@ export type RevocationAuditEventType = {
  * revoked at the vendor BEFORE the membership is written: a member is never
  * wider at a storage vendor than the role the console records for them.
  *
- * The pass reads a list, and a key minted after that reading is not on it. Both
- * ends of that window belong to the mint rather than here: its key row carries
- * a `ConditionCheck` on the creator's role, and it reads the role once more
- * after the row lands (`create-access-key.ts`). A key that outlives this pass
- * is discarded by the request that created it.
+ * The pass reads a list, and a key minted after that reading is not on it. A
+ * mint under a role that has already narrowed is discarded by the request that
+ * created it (`create-access-key.ts`); the reverse ordering is refused by the
+ * fence appended here, which turns the change into a retry whose listing
+ * includes the key (`lib/access-key-mint-seq.ts`).
  *
- * A change that revokes no key touches no vendor, so it stays one transaction
- * and one event, the form every membership change took in M1. One that does
- * opens a two-phase pair around the pass, and the completion rides the
- * membership items with the revoked ids on it, so the change and its record
- * stay atomic. Ids rather than a count, because each revocation is its own
- * `key.deleted` outside this transaction and the ids are what join them.
+ * A change that revokes no key stays one transaction and one event. One that
+ * does opens a two-phase pair around the pass, and the completion rides the
+ * membership items carrying the revoked ids, so the change and its record stay
+ * atomic — ids rather than a count, because each revocation is its own
+ * `key.deleted` and the ids are what join them.
  *
- * The three ways it can fail are the caller's to answer, because none is
- * expressible as data here: which item cancelled means something different to
- * each change, and reading it may take another lookup. Whatever the answer, the
- * keys already revoked are gone and the member's clients are already broken, so
- * the member is told before the caller is answered and the response names them.
- * The retry is the same request, which finds fewer keys: every completed
- * revocation deleted its row.
+ * Which item cancelled means something different to each change, so the answer
+ * is the caller's. Whichever it gives, the revoked keys are gone and the
+ * member's clients are already broken, so the member is told first and the
+ * response names them.
  */
 export async function commitAfterRevokingKeys<T extends RevocationAuditEventType>({
   items,
   keys,
+  fence,
   orgId,
   orgProfile,
   actor,
@@ -74,6 +85,15 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
   /** The membership write, behind whatever fence the caller placed as item 0. */
   items: TransactWriteItem[];
   keys: readonly AccessKeyToRevoke[];
+  /**
+   * The sequence the listing was taken against, from
+   * {@link reviewKeysForRoleChange}. Undefined only for a change that revokes
+   * nothing by definition: a widening strands no key, so one minted alongside it
+   * is covered by the wider role. Required rather than optional so a flow that
+   * revokes cannot silently omit the fence and strand the key this exists to
+   * catch.
+   */
+  fence: KeyMintFence | undefined;
   orgId: string;
   /** Read once, so several orchestrators resolve their tenant from one row. */
   orgProfile: OrgProfileItem | undefined;
@@ -93,22 +113,29 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
   onRefused: (refused: AccessKeySummary[], revoked: AccessKeySummary[]) => Response;
   /** Omitted by the flow whose key holder IS the caller, already answered. */
   notifyMember?: (revoked: AccessKeySummary[]) => Promise<void>;
-}): Promise<{ revoked: AccessKeySummary[] } | { response: Response }> {
+}): Promise<CommitOutcome> {
   // `onCancelled` runs outside every `try` here: a thrown `OrgDeletingError` is
   // the fence's 410 and must reach the error handler unwrapped. So each write
   // only captures what it threw, and the answer follows the block. Wrapped
   // rather than bare, so a thrown `undefined` still counts as a cancellation.
+  // Appended last, so the caller's own labels still line up with their items and
+  // the fence sits at a position only this function knows.
+  const fenced = fence ? [...items, accessKeyMintSeqUnchangedCheck(orgId, fence)] : items;
+
   if (keys.length === 0) {
     let cancelled: { error: unknown } | undefined;
     try {
       await commitAudited({
-        items,
+        items: fenced,
         event: auditEvent({ type: auditEventType, actor, orgId, subject, details }),
       });
     } catch (error) {
       cancelled = { error };
     }
-    if (cancelled) return { response: await onCancelled(cancelled.error, []) };
+    if (cancelled) {
+      if (fenceRefused(cancelled.error, items.length)) return { keyMinted: [] };
+      return { response: await onCancelled(cancelled.error, []) };
+    }
     return { revoked: [] };
   }
 
@@ -137,20 +164,36 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
     return { response: onRefused(pass.refused, pass.revoked) };
   }
 
-  let cancelled: { error: unknown } | undefined;
-  try {
-    await correlation.complete({ outcome: 'succeeded', details: revokedIds, items });
-  } catch (error) {
-    cancelled = { error };
-  }
-  if (cancelled) {
-    console.error(`[${source}] The write cancelled after revoking keys`, {
-      orgId,
-      revoked: pass.revoked.length,
-    });
-    await notifyMember?.(pass.revoked);
-    return { response: await onCancelled(cancelled.error, pass.revoked) };
-  }
+  const cancelled = await captured(() =>
+    correlation.complete({ outcome: 'succeeded', details: revokedIds, items: fenced }),
+  );
+  if (!cancelled) return { revoked: pass.revoked };
 
-  return { revoked: pass.revoked };
+  console.error(`[${source}] The write cancelled after revoking keys`, {
+    orgId,
+    revoked: pass.revoked.length,
+  });
+  await notifyMember?.(pass.revoked);
+  if (fenceRefused(cancelled.error, items.length)) return { keyMinted: pass.revoked };
+  return { response: await onCancelled(cancelled.error, pass.revoked) };
+}
+
+/** What a write threw, wrapped so a thrown `undefined` still counts as a failure. */
+async function captured(write: () => Promise<void>): Promise<{ error: unknown } | undefined> {
+  try {
+    await write();
+    return undefined;
+  } catch (error) {
+    return { error };
+  }
+}
+
+/**
+ * Whether the cancellation was the fence's own item, which sits one past the
+ * caller's. `cancelledLabels` names positions, so the caller's items need no
+ * names here — only the one this function appended.
+ */
+function fenceRefused(err: unknown, callerItems: number): boolean {
+  const labels = [...Array.from({ length: callerItems }, () => 'caller'), 'fence'];
+  return cancelledLabels(err, labels).includes('fence');
 }

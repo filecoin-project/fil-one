@@ -1,4 +1,9 @@
-import { ApiErrorCode, type AccessKeySummary, type ErrorResponse } from '@filone/shared';
+import {
+  ApiErrorCode,
+  type AccessKeySummary,
+  type ErrorResponse,
+  type MembershipChangeFailure,
+} from '@filone/shared';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 
 export const COOKIE_ATTRIBUTES = 'HttpOnly; Secure; SameSite=Lax; Path=/';
@@ -129,6 +134,69 @@ export function tenantNotReadyResponse(): APIGatewayProxyStructuredResultV2 {
  * them would leave the console unable to say what just happened.
  */
 export type ErrorWithRevokedKeys = ErrorResponse & { revokedKeys: AccessKeySummary[] };
+
+/**
+ * The 500 for an unattributable fault, carrying the keys a revocation pass
+ * already took. `errorHandlerMiddleware` answers with it too; nothing about the
+ * fault itself is disclosed either way.
+ */
+/**
+ * A vendor refused a revocation, so nothing was written and the keys already
+ * revoked are named. `unchanged` completes "…so ___ is unchanged".
+ */
+export function vendorRefusedResponse(
+  revokedKeys: AccessKeySummary[],
+  failedKeys: AccessKeySummary[],
+  unchanged: string,
+): APIGatewayProxyStructuredResultV2 {
+  const named = failedKeys.map((key) => `"${key.keyName}"`).join(', ');
+  const subject =
+    failedKeys.length === 1 ? `The key ${named}` : `${failedKeys.length} keys (${named})`;
+
+  return new ResponseBuilder()
+    .status(502)
+    .body<MembershipChangeFailure>({
+      message: `${subject} could not be revoked, so ${unchanged} is unchanged. Try again.`,
+      revokedKeys,
+      failedKeys,
+    })
+    .build();
+}
+
+/**
+ * The answer to a cancellation nothing can name. Rethrows when no key was
+ * revoked, so the middleware answers; otherwise names the keys, which are gone
+ * whatever the failure was.
+ */
+export function unattributableFailure(
+  err: unknown,
+  {
+    source,
+    orgId,
+    revokedKeys,
+  }: { source: string; orgId: string; revokedKeys: AccessKeySummary[] },
+): APIGatewayProxyStructuredResultV2 {
+  if (revokedKeys.length === 0) throw err;
+
+  console.error(`[${source}] Unattributable failure after revoking keys`, {
+    orgId,
+    revoked: revokedKeys.length,
+    error: err,
+  });
+  return unexpectedFailureResponse(revokedKeys);
+}
+
+export function unexpectedFailureResponse(
+  revokedKeys: AccessKeySummary[] = [],
+): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(500)
+    .body<ErrorResponse | ErrorWithRevokedKeys>({
+      message: 'An unexpected server error occurred. Please try again later.',
+      ...(revokedKeys.length > 0 ? { revokedKeys } : {}),
+    })
+    .build();
+}
 
 export function badRequestResponse(message: string): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder().status(400).body<ErrorResponse>({ message }).build();

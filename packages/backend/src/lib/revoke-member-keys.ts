@@ -1,5 +1,5 @@
 import type { AuditActor, AccessKeySummary, RevocationTrigger } from '@filone/shared';
-import { revokeAccessKey } from './key-revocation.js';
+import { RevocationNotRecordedError, revokeAccessKey } from './key-revocation.js';
 import { summarizeAccessKey } from './member-keys.js';
 import type { AccessKeyToRevoke } from './member-keys.js';
 import type { OrgProfileItem } from './org-profile.js';
@@ -22,7 +22,7 @@ import { getOrchestratorForRegion } from './service-orchestrator-registry.js';
  * hundreds of keys does not time the request out revoking them one by one.
  */
 export interface RevocationOutcome {
-  /** Revoked and delisted, in the order the keys were given. */
+  /** Gone from the vendor, in the order given — including one whose row outlived it. */
   revoked: AccessKeySummary[];
   /** The keys a vendor refused, in that same order. Empty when all went. */
   refused: AccessKeySummary[];
@@ -56,6 +56,18 @@ export async function revokeMemberKeys({
     const summary = summarizeAccessKey(key);
     const outcome = outcomes[index]!;
     if (outcome.status === 'fulfilled') {
+      revoked.push(summary);
+      return;
+    }
+    // Gone at the vendor, only unrecorded: counted as revoked, and logged apart
+    // because the row it left is an operator's to clear.
+    if (outcome.reason instanceof RevocationNotRecordedError) {
+      console.error('[revoke-member-keys] A key was revoked but its row survives', {
+        orgId,
+        region: key.region,
+        keyIdSuffix: summary.accessKeyIdSuffix,
+        error: outcome.reason,
+      });
       revoked.push(summary);
       return;
     }

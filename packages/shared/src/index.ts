@@ -94,7 +94,7 @@ export type {
   MemberSummary,
   AccessKeySummary,
   RoleChangePreviewResponse,
-  UpdateMemberRoleFailure,
+  MembershipChangeFailure,
   TransferOwnershipRequest,
   TransferOwnershipResponse,
   UpdateMemberRoleRequest,

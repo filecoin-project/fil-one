@@ -1086,9 +1086,11 @@ export default $config({
       // ── Members ────────────────────────────────────────────────────
       // A narrowing revokes the keys the member could no longer mint, in
       // whichever regions hold them, and emails the member that their client
-      // just stopped working. So these routes reach every orchestrator and the
+      // just stopped working. So this route reaches every orchestrator and the
       // mail credential. `transfer-ownership` carries the same, below, beside
-      // the Management API credentials its step-up already needs.
+      // the Management API credentials its step-up already needs. `remove-member`
+      // does not: removal leaves access keys working until somebody revokes
+      // them, so it touches no vendor and sends no mail.
       //
       // Thirty seconds rather than the ten `addRoute` defaults to: a narrowing
       // reads the org's key rows and revokes each key the new role could not
@@ -1098,12 +1100,6 @@ export default $config({
       // which is FIL-1017 follow-up work. A timeout during the pass is safe by
       // design — the role is unwritten and the retry finds fewer keys.
       'update-member-role': {
-        extraEnv: orchestratorEnv,
-        permissions: [{ actions: ['ssm:GetParameter'], resources: [auroraApiKeySsmArn] }],
-        ...(sendGridApiKey ? { extraLink: [sendGridApiKey] } : {}),
-        timeout: '30 seconds',
-      },
-      'remove-member': {
         extraEnv: orchestratorEnv,
         permissions: [{ actions: ['ssm:GetParameter'], resources: [auroraApiKeySsmArn] }],
         ...(sendGridApiKey ? { extraLink: [sendGridApiKey] } : {}),
@@ -1213,11 +1209,16 @@ export default $config({
       // ── Organization ───────────────────────────────────────────────
       // Ownership transfer reads the caller's MFA enrollments to decide whether a
       // fresh sign-in is enough of a step-up, so it needs the Management API
-      // credentials the account routes already carry.
+      // credentials the account routes already carry. It also revokes the
+      // outgoing Owner's privileged keys at the vendor before the seat moves,
+      // which is what the orchestrator env and the narrowing's headroom are for
+      // — but no mail credential: the key holder is the caller, and the
+      // response tells them.
       'transfer-ownership': {
-        extraLink: [...mgmtRuntimeResources, ...(sendGridApiKey ? [sendGridApiKey] : [])],
+        extraLink: mgmtRuntimeResources,
         extraEnv: { ...orchestratorEnv, AUTH0_MGMT_DOMAIN: auth0MgmtDomain },
         permissions: [{ actions: ['ssm:GetParameter'], resources: [auroraApiKeySsmArn] }],
+        timeout: '30 seconds',
       },
 
       // ── Invitations ────────────────────────────────────────────────
