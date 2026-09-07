@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mockClient } from 'aws-sdk-client-mock';
-import { DynamoDBClient, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { OrgRole, S3Region } from '@filone/shared';
 import { sstResourceMock } from '../test/sst-resource-mock.js';
@@ -10,7 +10,6 @@ vi.mock('sst', () => sstResourceMock());
 const ddbMock = mockClient(DynamoDBClient);
 
 import {
-  reviewKeysForRoleChange,
   reviewMemberAccessKeysForRole,
   listOrgAccessKeys,
   reviewAccessKeysForRole,
@@ -186,32 +185,5 @@ describe('reviewMemberAccessKeysForRole', () => {
 
     expect(review.keysToRevoke.map((k) => k.id)).toStrictEqual(['key-2']);
     expect(review.retainedKeyCount).toBe(1);
-  });
-});
-
-describe('reviewKeysForRoleChange', () => {
-  it('reads the fence before it lists the keys', async () => {
-    // The whole reason both reads live in one function: reversed, a mint landing
-    // between them is counted by the fence and missing from the listing, and the
-    // change would commit believing it had revoked everything.
-    ddbMock.on(GetItemCommand).resolves({ Item: marshall({ mintSeq: 7 }) });
-    ddbMock.on(QueryCommand).resolves({ Items: [row({ permissions: ['read', 'DeleteBucket'] })] });
-
-    const { keysToRevoke, fence } = await reviewKeysForRoleChange(ORG_ID, MEMBER, OrgRole.Member);
-
-    expect(fence).toStrictEqual({ userId: MEMBER, mintSeq: 7 });
-    expect(keysToRevoke.map((key) => key.id)).toStrictEqual(['key-1']);
-
-    const order = ddbMock.calls().map((call) => call.args[0].constructor.name);
-    expect(order).toStrictEqual(['GetItemCommand', 'QueryCommand']);
-  });
-
-  it('reads a member who has never minted as no fence value at all', async () => {
-    ddbMock.on(GetItemCommand).resolves({});
-    ddbMock.on(QueryCommand).resolves({ Items: [] });
-
-    const { fence } = await reviewKeysForRoleChange(ORG_ID, MEMBER, OrgRole.Member);
-
-    expect(fence).toStrictEqual({ userId: MEMBER, mintSeq: undefined });
   });
 });

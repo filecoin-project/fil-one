@@ -9,8 +9,6 @@ import type {
   OrgRole,
 } from '@filone/shared';
 import { Resource } from 'sst';
-import { readAccessKeyMintSeq } from './access-key-mint-seq.js';
-import type { KeyMintFence } from './access-key-mint-seq.js';
 import { getDynamoClient } from './ddb-client.js';
 import { AccessKeyKeys } from './dynamo-records.js';
 import type { AccessKeyRecord } from './dynamo-records.js';
@@ -146,24 +144,6 @@ export async function reviewMemberAccessKeysForRole(
   role: OrgRole,
 ): Promise<AccessKeyRoleChangeReview> {
   return reviewAccessKeysForRole(await listOrgAccessKeys(orgId), userId, role);
-}
-
-/**
- * The same review, plus the fence a membership change carries to prove the
- * listing is still current (`lib/access-key-mint-seq.ts`).
- *
- * The two reads are here rather than at the call sites because their order is
- * the whole point: the sequence first, then the listing. Reversed, a mint
- * landing between them is counted by the fence and missing from the list.
- */
-export async function reviewKeysForRoleChange(
-  orgId: string,
-  userId: string,
-  role: OrgRole,
-): Promise<{ keysToRevoke: AccessKeyToRevoke[]; fence: KeyMintFence }> {
-  const mintSeq = await readAccessKeyMintSeq({ orgId, userId });
-  const { keysToRevoke } = await reviewMemberAccessKeysForRole(orgId, userId, role);
-  return { keysToRevoke, fence: { userId, mintSeq } };
 }
 
 /**

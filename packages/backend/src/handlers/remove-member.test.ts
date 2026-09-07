@@ -237,8 +237,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
     expect(result).toMatchObject({ statusCode: 204 });
     const items = transactItems();
-    // Both rows, the mint-sequence row, the event.
-    expect(items).toHaveLength(4);
+    expect(items).toHaveLength(3);
     expect(items[0].Delete).toMatchObject({
       Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: OrgKeys.memberSk(TARGET_ID) } },
       // Removing somebody already gone is a clean 404, not a silent success; the
@@ -249,14 +248,6 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     });
     expect(items[1].Delete).toMatchObject({
       Key: { pk: { S: OrgKeys.userPk(TARGET_ID) }, sk: { S: OrgKeys.membershipSk(ORG_ID) } },
-    });
-    // Nothing else would ever collect it, and a member's sequence means nothing
-    // once they are gone.
-    expect(items[2].Delete).toMatchObject({
-      Key: {
-        pk: { S: OrgKeys.orgPk(ORG_ID) },
-        sk: { S: `ACCESSKEY_MINT_SEQ#${TARGET_ID}` },
-      },
     });
   });
 
@@ -301,7 +292,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
   it('refuses to remove the last Owner', async () => {
     targetHolds(OrgRole.Owner);
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(2, 4));
 
     const result = await handler(removeEvent(), buildContext());
 
@@ -337,7 +328,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     callerHolds(OrgRole.Owner);
     targetHolds(OrgRole.Owner, USER_ID);
     stubTargetProfile(TARGET_EMAIL, USER_ID);
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(2, 4));
 
     const result = await handler(removeEvent(USER_ID), buildContext());
 
@@ -352,7 +343,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     // self-heals within a day of the drift checker's next run.
     targetHolds(OrgRole.Owner);
     stubOwnerCount(undefined);
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(2, 4));
 
     const result = await handler(removeEvent(), buildContext());
 
@@ -396,8 +387,8 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     expect(
       items.filter((item) => item.Update?.UpdateExpression === 'SET #status = :status'),
     ).toHaveLength(2);
-    // Two token deletes, the membership pair, and the mint-sequence row.
-    expect(items.filter((item) => item.Delete)).toHaveLength(5);
+    // Two status updates, two token deletes, plus the membership pair.
+    expect(items.filter((item) => item.Delete)).toHaveLength(4);
     expect(unmarshall(auditItemIn(items)).details).toMatchObject({ revokedInvitations: 2 });
   });
 
@@ -495,7 +486,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
   });
 
   it('returns 404 when somebody else removed them first', async () => {
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(0, 4));
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(0, 3));
     // The delete's condition covers the row and its role, so the row is what
     // says which one lost: gone here, which is the outcome the caller wanted.
     targetOnSecondRead(undefined);
@@ -511,7 +502,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     // deleted with no decrement and the counter would overcount — after which
     // `ownerCount > :one` passes for the genuine last Owner. The condition
     // cancels instead, and the answer is not "already removed".
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(0, 4));
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(0, 3));
     targetOnSecondRead(OrgRole.Owner);
 
     const result = await handler(removeEvent(), buildContext());
@@ -526,10 +517,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     await handler(removeEvent(), buildContext());
 
     const written = JSON.stringify(transactItems());
-    // `ACCESSKEY#` — the key rows themselves. The removal does delete the
-    // member's `ACCESSKEY_MINT_SEQ#` counter, which is a row about them rather
-    // than a credential, and lives in OrgTable rather than beside the keys.
-    expect(written).not.toContain('ACCESSKEY#');
+    expect(written).not.toContain('ACCESSKEY');
     expect(written).not.toContain('RAGKEY');
   });
 

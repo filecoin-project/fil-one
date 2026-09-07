@@ -992,24 +992,6 @@ describe('create-access-key baseHandler', () => {
       ).toContainEqual({ pk: { S: 'ORG#org-1' }, sk: { S: 'MEMBER#user-1' } });
     });
 
-    it('advances the mint sequence in the transaction that writes the row', async () => {
-      // Same transaction as the row on purpose: a refused mint must advance
-      // nothing, or a narrowing would cancel over a key that never existed.
-      const event = buildEvent({ body: validBody({ keyName: 'My Key' }), userInfo: USER_INFO });
-
-      await baseHandler(event);
-
-      const items = keyRowWrites()[0]!.args[0].input.TransactItems ?? [];
-      const bump = items.find(
-        (item) => item.Update?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${USER_INFO.userId}`,
-      );
-      expect(bump?.Update).toMatchObject({
-        TableName: 'OrgTable',
-        UpdateExpression: 'ADD mintSeq :one',
-      });
-      expect(items.some((item) => item.Put?.TableName === 'UserInfoTable')).toBe(true);
-    });
-
     it('keeps the key when the role is the one the cap ran against', async () => {
       const event = buildEvent({ body: validBody({ keyName: 'My Key' }), userInfo: USER_INFO });
 

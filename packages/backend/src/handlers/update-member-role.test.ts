@@ -146,16 +146,6 @@ function stubOrgProfile(orgName = 'Acme Storage') {
     });
 }
 
-/** The member's mint sequence, which a narrowing reads before it lists keys. */
-function stubMintSeq(mintSeq: number) {
-  ddbMock
-    .on(GetItemCommand, {
-      TableName: 'OrgTable',
-      Key: { pk: { S: `ORG#${ORG_ID}` }, sk: { S: `ACCESSKEY_MINT_SEQ#${TARGET_ID}` } },
-    })
-    .resolves({ Item: marshall({ mintSeq }) });
-}
-
 /** The target's access keys, as the org partition holds them. */
 function stubMemberKeys(...keys: Array<Record<string, unknown>>) {
   ddbMock
@@ -756,53 +746,6 @@ describe('a narrowing revokes the keys the new role could not mint', () => {
         .commandCalls(QueryCommand)
         .filter((call) => call.args[0].input.TableName === 'UserInfoTable'),
     ).toHaveLength(0);
-  });
-
-  it('asserts the mint sequence the listing was taken against', async () => {
-    stubMintSeq(3);
-    stubMemberKeys({ permissions: ['read'] });
-
-    await handler(roleEvent(OrgRole.Member), buildContext());
-
-    expect(
-      transactItems().find(
-        (item) => item.ConditionCheck?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${TARGET_ID}`,
-      )?.ConditionCheck,
-    ).toMatchObject({
-      ConditionExpression: 'attribute_exists(pk) AND mintSeq = :seen',
-      ExpressionAttributeValues: { ':seen': { N: '3' } },
-    });
-  });
-
-  it('refuses the change when a key was minted after the listing', async () => {
-    // The listing is empty precisely because the row landed after it. The
-    // sequence is the only thing that can see that, and the retry lists it.
-    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
-
-    const result = await handler(roleEvent(OrgRole.Member), buildContext());
-
-    expect(result).toMatchObject({ statusCode: 409 });
-    expect(body(result).message).toContain('An access key was created for that member');
-    expect(mockDeleteAccessKey).not.toHaveBeenCalled();
-  });
-
-  it('asserts nothing about the sequence on a promotion, and does not read it', async () => {
-    // A widening strands nothing, so a key minted in the same window is theirs
-    // to keep and cancelling the promotion over it would be noise.
-    targetHolds(OrgRole.Member);
-
-    await handler(roleEvent(OrgRole.Admin), buildContext());
-
-    expect(
-      transactItems().some(
-        (item) => item.ConditionCheck?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${TARGET_ID}`,
-      ),
-    ).toBe(false);
-    expect(
-      ddbMock
-        .commandCalls(GetItemCommand)
-        .some((call) => call.args[0].input.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${TARGET_ID}`),
-    ).toBe(false);
   });
 
   it('names the revoked keys even when the failure cannot be named', async () => {

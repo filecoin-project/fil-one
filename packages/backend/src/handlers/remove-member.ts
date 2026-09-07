@@ -87,7 +87,7 @@ export async function baseHandler(
     userId: targetUserId,
     emailNorm: await removedMemberAddress(targetUserId),
   });
-  const { now, later } = planRevocations(doomed, wasOwner ? 4 : 3);
+  const { now, later } = planRevocations(doomed, wasOwner ? 3 : 2);
 
   try {
     await commitAudited({
@@ -157,8 +157,6 @@ async function removalFailureResponse(
   const failed = cancelledLabels(err, [
     'membership',
     'inverse',
-    // The mint-sequence delete, which carries no condition and so never cancels.
-    'mintSeq',
     ...(wasOwner ? ['ownerCount'] : []),
     ...Array.from({ length: revocations * 2 }, () => 'invitation'),
   ]);
