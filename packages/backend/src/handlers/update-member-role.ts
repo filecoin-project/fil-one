@@ -15,7 +15,7 @@ import type {
 } from '@filone/shared';
 import { AuditSubjects, userActor } from '../lib/audit.js';
 import { commitAfterRevokingKeys } from '../lib/commit-after-revoking-keys.js';
-import { reviewMemberAccessKeysForRole } from '../lib/member-keys.js';
+import { reviewKeysForRoleChange } from '../lib/member-keys.js';
 import { notifyRevokedKeys } from '../lib/key-revocation-email.js';
 import {
   pendingInvitationsFrom,
@@ -77,7 +77,9 @@ const SOURCE = 'update-member-role';
  * leaves the rest alone.
  *
  * The keys the new role could not mint go the same way, at the vendor and
- * before the role is written (`lib/commit-after-revoking-keys.ts`).
+ * before the role is written (`lib/commit-after-revoking-keys.ts`), and the
+ * transaction asserts no key was minted since that listing
+ * (`lib/access-key-mint-seq.ts`).
  */
 export async function baseHandler(
   event: AuthenticatedEvent,
@@ -126,14 +128,15 @@ export async function baseHandler(
   const change = withInvitationRevocations(base, now);
 
   const review = narrows
-    ? await reviewMemberAccessKeysForRole(orgId, targetUserId, role)
-    : { keysToRevoke: [] };
+    ? await reviewKeysForRoleChange(orgId, targetUserId, role)
+    : { keysToRevoke: [], fence: undefined };
   const changedBy = actorEmail ?? userId;
   const failure = { orgId, delta, labels: change.labels };
 
   const committed = await commitAfterRevokingKeys({
     items: change.items,
     keys: review.keysToRevoke,
+    fence: review.fence,
     orgId,
     orgProfile,
     actor: userActor({ userId, email: actorEmail }),
@@ -160,6 +163,7 @@ export async function baseHandler(
       }),
   });
   if ('response' in committed) return committed.response;
+  if ('keyMinted' in committed) return keyMintedResponse(committed.keyMinted);
 
   return await finishRoleChange({
     orgId,
@@ -387,6 +391,17 @@ function invitationRaceResponse(
     .body<ErrorWithRevokedKeys>({
       message: 'An invitation from that member changed while this was in flight — try again.',
       ...revoked,
+    })
+    .build();
+}
+
+/** A key was minted after the listing this revoked from; the same PATCH retried includes it. */
+function keyMintedResponse(revokedKeys: AccessKeySummary[]): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(409)
+    .body<ErrorWithRevokedKeys>({
+      message: 'An access key was created for that member while this was in flight — try again.',
+      revokedKeys,
     })
     .build();
 }

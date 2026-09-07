@@ -22,6 +22,7 @@ import type {
   GranularPermission,
 } from '@filone/shared';
 import { Resource } from 'sst';
+import { accessKeyMintSeqItem } from '../lib/access-key-mint-seq.js';
 import { AuditSubjects, twoPhaseAudit, userActor } from '../lib/audit.js';
 import { RevocationNotRecordedError, revokeAccessKey } from '../lib/key-revocation.js';
 import { resolveMembership } from '../lib/org-membership.js';
@@ -226,16 +227,24 @@ async function recordMintedKey({
         ...(recovered ? { recovered } : {}),
       },
       // The cap ran against a role read before the vendor call, so the row
-      // only lands if the role on file could still grant the key.
+      // only lands if the role on file could still grant the key. The sequence
+      // bump rides the same transaction, which is what lets a narrowing notice
+      // a row that landed after its listing (`lib/access-key-mint-seq.ts`) —
+      // and what keeps a refused mint from advancing it.
       items: [
         creatorRoleStillMintsCheck(creator),
+        accessKeyMintSeqItem(creator),
         { Put: { TableName: Resource.UserInfoTable.name, Item: marshall(row) } },
       ],
     });
     return { recorded: true };
   } catch (err) {
-    // The role check is item 0; `commitAudited` appends the audit Put last.
-    if (!cancelledLabels(err, ['creatorRole', 'keyRow']).includes('creatorRole')) throw err;
+    // The role check is item 0; `commitAudited` appends the audit Put last. The
+    // unconditioned bump never cancels, but it holds a position, so it holds a
+    // label.
+    if (!cancelledLabels(err, ['creatorRole', 'mintSeq', 'keyRow']).includes('creatorRole')) {
+      throw err;
+    }
     return { recorded: false, reason: 'creator_role_changed' };
   }
 }
@@ -342,8 +351,8 @@ async function discardUnrecordedKey({
  * without it.
  *
  * So the mint looks once more, being the only request holding the credential. A
- * demotion landing between the write above and this read is the one ordering
- * neither check sees.
+ * demotion landing after this read is the narrowing's to catch
+ * (`lib/access-key-mint-seq.ts`).
  *
  * The key, not the role: a promotion mid-mint strands nothing, a demotion that
  * still grants what the key holds is no reason to take it away, and an absent
