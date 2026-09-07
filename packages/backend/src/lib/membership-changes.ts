@@ -3,7 +3,6 @@ import type { TransactWriteItem } from '@aws-sdk/client-dynamodb';
 import { Resource } from 'sst';
 import { OrgRole, canManageTargetRole, canRetainAccessKey } from '@filone/shared';
 import type { AccessKeyPermissions, OrgMembershipSource } from '@filone/shared';
-import { accessKeyMintSeqDeleteItem } from './access-key-mint-seq.js';
 import { OrgKeys } from './org-membership.js';
 
 /**
@@ -159,8 +158,9 @@ export function roleChangeItems({
  * `attribute_exists(pk)` stays alongside it so a removal of somebody already
  * gone is a clean 404 rather than a silent success. The inverse delete is
  * unconditional, because a member whose inverse item is missing must still be
- * removable. The mint-sequence row goes the same way and for the same reason —
- * nothing else would ever collect it (`lib/access-key-mint-seq.ts`).
+ * removable. The member's mint sequence is left where it is: a removal fences on
+ * that row, and it has to keep counting across memberships anyway
+ * (`lib/access-key-mint-seq.ts`).
  */
 export function membershipDeleteItems({
   orgId,
@@ -189,7 +189,6 @@ export function membershipDeleteItems({
         Key: { pk: { S: OrgKeys.userPk(userId) }, sk: { S: OrgKeys.membershipSk(orgId) } },
       },
     },
-    accessKeyMintSeqDeleteItem({ orgId, userId }),
   ];
 }
 

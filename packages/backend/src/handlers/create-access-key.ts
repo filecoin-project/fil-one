@@ -1,4 +1,4 @@
-import { QueryCommand } from '@aws-sdk/client-dynamodb';
+import { QueryCommand, TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
@@ -151,7 +151,9 @@ export async function baseHandler(
   });
   if (!record.recorded) {
     await discardUnrecordedKey({ minted: mintedKey, mint, creator });
-    return creatorRoleChangedResponse();
+    return record.reason === 'creator_role_changed'
+      ? creatorRoleChangedResponse()
+      : mintConflictResponse();
   }
 
   if (await keyExceedsCurrentRole(creator)) {
@@ -190,8 +192,17 @@ interface KeyCreator {
   key: AccessKeyPermissions;
 }
 
-/** Whether the key row landed. When it did not, the credential is still live at the vendor. */
-type MintRecord = { recorded: true } | { recorded: false; reason: 'creator_role_changed' };
+/**
+ * Whether the key row landed. When it did not, the credential is still live at
+ * the vendor and the caller has to hand it back.
+ *
+ * `write_conflict` is DynamoDB refusing the whole transaction over contention on
+ * the mint sequence, which every mint for this member writes and every narrowing
+ * of their role asserts (`lib/access-key-mint-seq.ts`).
+ */
+type MintRecord =
+  | { recorded: true }
+  | { recorded: false; reason: 'creator_role_changed' | 'write_conflict' };
 
 /**
  * Write the key's row and the completion event as one transaction, so the
@@ -242,10 +253,18 @@ async function recordMintedKey({
     // The role check is item 0; `commitAudited` appends the audit Put last. The
     // unconditioned bump never cancels, but it holds a position, so it holds a
     // label.
-    if (!cancelledLabels(err, ['creatorRole', 'mintSeq', 'keyRow']).includes('creatorRole')) {
-      throw err;
+    if (cancelledLabels(err, ['creatorRole', 'mintSeq', 'keyRow']).includes('creatorRole')) {
+      return { recorded: false, reason: 'creator_role_changed' };
     }
-    return { recorded: false, reason: 'creator_role_changed' };
+    // A cancellation with no condition of ours in it is contention on the
+    // sequence row: a second mint for this member, or the narrowing that asserts
+    // it. Nothing landed, so the credential goes back rather than outliving the
+    // request as an orphan nothing local records. Anything else is rethrown — a
+    // timeout may have committed, and discarding a recorded key is worse.
+    if (err instanceof TransactionCanceledException) {
+      return { recorded: false, reason: 'write_conflict' };
+    }
+    throw err;
   }
 }
 
@@ -298,8 +317,8 @@ function optionalKeyAttributes({
 }
 
 /**
- * The creator's role narrowed while the key was being minted, and the row
- * refused to land.
+ * The row did not land — the creator's role narrowed mid-mint, or the
+ * transaction lost to contention on the sequence row.
  *
  * The credential exists at the vendor and nothing local records it, so it is
  * deleted here rather than left for the non-conforming-key review: the secret
@@ -327,7 +346,7 @@ async function discardUnrecordedKey({
     await minted.orchestrator.deleteAccessKey(minted.tenantId, minted.keyId);
   } catch (err) {
     cleanupFailed = true;
-    console.error('[create-access-key] Could not discard a key minted under a stale role', {
+    console.error('[create-access-key] Could not discard a key whose row never landed', {
       orgId: creator.orgId,
       userId: creator.userId,
       keyIdSuffix: auditKeyIdSuffix('s3', minted.accessKeyId),
@@ -399,7 +418,20 @@ async function discardRecordedKey({
   }
 }
 
-/** The answer both discard paths give: try again under the role you now hold. */
+/**
+ * The mint lost a race with another write to this member's keys. The credential
+ * is gone, so the retry mints a fresh one rather than recovering this.
+ */
+function mintConflictResponse(): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(409)
+    .body<ErrorResponse>({
+      message: 'Another change to this member’s keys was in flight — try again.',
+    })
+    .build();
+}
+
+/** The answer when the creator's role moved: try again under the one they hold now. */
 function creatorRoleChangedResponse(): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder()
     .status(409)
@@ -536,8 +568,8 @@ async function recoverDuplicateKey({
     creator,
     recovered: true,
   });
-  // This path answers 409 either way; a role that narrowed just leaves no row
-  // and no credential behind it.
+  // This path answers 409 either way; a row that did not land just leaves no
+  // credential behind it.
   if (!record.recorded) {
     await discardUnrecordedKey({ minted, mint, creator });
     return;

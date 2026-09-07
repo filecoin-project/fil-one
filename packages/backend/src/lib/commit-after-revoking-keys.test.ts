@@ -112,13 +112,17 @@ beforeEach(() => {
   notifyMember.mockResolvedValue(undefined);
 });
 
-/** The cancellation DynamoDB sends when one item's condition fails. */
-function cancelledAt(index: number, itemCount: number) {
+/**
+ * The cancellation DynamoDB sends when a condition fails. Takes several
+ * positions because DynamoDB reports every failed condition, not just the first.
+ */
+function cancelledAt(failed: number | readonly number[], itemCount: number) {
+  const positions = new Set(typeof failed === 'number' ? [failed] : failed);
   return new TransactionCanceledException({
     message: 'cancelled',
     $metadata: {},
     CancellationReasons: Array.from({ length: itemCount }, (_unused, position) => ({
-      Code: position === index ? 'ConditionalCheckFailed' : 'None',
+      Code: positions.has(position) ? 'ConditionalCheckFailed' : 'None',
     })),
   });
 }
@@ -157,6 +161,27 @@ describe('commitAfterRevokingKeys', () => {
     expect(onCancelled).not.toHaveBeenCalled();
     // Their clients are already broken either way.
     expect(notifyMember).toHaveBeenCalledWith(REVOKED);
+  });
+
+  it('leaves the caller its own answer when the fence is not the only item that failed', async () => {
+    // The org-deletion fence is the caller's item 0, and it has no retry. A key
+    // minted in the same window must not turn that into "try again".
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt([0, ITEMS.length], ITEMS.length + 2));
+    const cancelled = new Error('org deleting');
+    onCancelled.mockRejectedValue(cancelled);
+
+    await expect(commit()).rejects.toThrow('org deleting');
+  });
+
+  it('reads no fence into a change that carries none', async () => {
+    // A promotion strands no key and appends no fence, so the position the fence
+    // would have held belongs to the audit item. Nothing there is a mint.
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt([0, ITEMS.length], ITEMS.length + 1));
+
+    const outcome = await commit({ keys: [], fence: undefined });
+
+    expect(outcome).toStrictEqual({ response: { statusCode: 409 } });
+    expect(committedWrites()[0]!.items).toStrictEqual(ITEMS);
   });
 
   it('hands a cancellation with no revocation to the caller with nothing revoked', async () => {

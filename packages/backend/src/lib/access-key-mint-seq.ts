@@ -15,7 +15,10 @@ import { OrgKeys } from './org-membership.js';
  * already stale. This row is the item they both touch: the mint bumps it, and
  * the narrowing asserts it has not moved since it listed.
  *
- * A sequence, not a count of live keys: only equality is ever asked of it.
+ * A sequence, not a count of live keys: only equality is ever asked of it, and
+ * it outlives the membership: a member who left and rejoined must not be able to
+ * satisfy a fence read before they went. Org teardown collects the row
+ * (`lib/deletion-scrub.ts`).
  */
 
 /** Whose sequence, in which org. */
@@ -62,11 +65,6 @@ export function accessKeyMintSeqItem(member: MemberRef): TransactWriteItem {
       ExpressionAttributeValues: { ':one': { N: '1' } },
     },
   };
-}
-
-/** Delete the sequence, for a member who is leaving the org. */
-export function accessKeyMintSeqDeleteItem(member: MemberRef): TransactWriteItem {
-  return { Delete: { TableName: Resource.OrgTable.name, Key: seqKey(member) } };
 }
 
 /**

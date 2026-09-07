@@ -24,7 +24,8 @@ import { resolveOrgName } from './org-profile.js';
  *   counts so every owner-set transaction is single-table.
  * - `ORG#{orgId}` / `ACCESSKEY_MINT_SEQ#{userId}` — how many access-key rows have
  *   landed for the member, which a role narrowing asserts is unchanged since it
- *   listed their keys (`lib/access-key-mint-seq.ts`).
+ *   listed their keys. It outlives the membership on purpose
+ *   (`lib/access-key-mint-seq.ts`).
  *
  * Two more shapes belong to invitations, and their key builders are here beside
  * the membership ones because an accept transaction writes both families at

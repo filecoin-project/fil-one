@@ -5,6 +5,7 @@ import {
   GetItemCommand,
   PutItemCommand,
   QueryCommand,
+  TransactionCanceledException,
   TransactWriteItemsCommand,
 } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
@@ -126,6 +127,18 @@ function stubCreatorRole(role: OrgRole | undefined) {
     orgId: USER_INFO.orgId,
     userId: USER_INFO.userId,
     role: role ?? OrgRole.Owner,
+  });
+}
+
+/**
+ * The cancellation DynamoDB sends for the key-row transaction, one code per
+ * item: the role check, the sequence bump, the row, then the audit event.
+ */
+function cancelledWith(codes: readonly string[]) {
+  return new TransactionCanceledException({
+    message: 'cancelled',
+    $metadata: {},
+    CancellationReasons: codes.map((Code) => ({ Code })),
   });
 }
 
@@ -1097,6 +1110,40 @@ describe('create-access-key baseHandler', () => {
 
       expect((await baseHandler(event)).statusCode).toBe(201);
       expect(mockDeleteAccessKey).not.toHaveBeenCalled();
+    });
+
+    it('discards the key when the row refuses to land under a narrowed role', async () => {
+      // The `ConditionCheck` path: the row never landed, so only the credential
+      // has to go.
+      ddbMock
+        .on(TransactWriteItemsCommand)
+        .rejects(cancelledWith(['ConditionalCheckFailed', 'None', 'None', 'None']));
+
+      const result = await baseHandler(
+        buildEvent({ body: validBody({ keyName: 'My Key' }), userInfo: USER_INFO }),
+      );
+
+      expect(result.statusCode).toBe(409);
+      expect(JSON.parse(result.body!).code).toBe(ApiErrorCode.FORBIDDEN_ROLE);
+      expect(mockDeleteAccessKey).toHaveBeenCalled();
+    });
+
+    it('hands the credential back when the transaction lost to contention', async () => {
+      // Every mint for this member writes the sequence row and every narrowing
+      // of their role asserts it, so DynamoDB can cancel this one over
+      // contention alone. Nothing landed, and rethrowing would answer 500 while
+      // leaving a live credential no row names.
+      ddbMock
+        .on(TransactWriteItemsCommand)
+        .rejects(cancelledWith(['None', 'TransactionConflict', 'None', 'None']));
+
+      const result = await baseHandler(
+        buildEvent({ body: validBody({ keyName: 'My Key' }), userInfo: USER_INFO }),
+      );
+
+      expect(result.statusCode).toBe(409);
+      expect(JSON.parse(result.body!).message).toContain('try again');
+      expect(mockDeleteAccessKey).toHaveBeenCalledWith('aurora-t-1', 'aurora-key-1');
     });
 
     it('discards the key when the member was removed outright', async () => {

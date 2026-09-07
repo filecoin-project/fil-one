@@ -133,7 +133,7 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
       cancelled = { error };
     }
     if (cancelled) {
-      if (fenceRefused(cancelled.error, items.length)) return { keyMinted: [] };
+      if (fenceRefused(cancelled.error, fence, items.length)) return { keyMinted: [] };
       return { response: await onCancelled(cancelled.error, []) };
     }
     return { revoked: [] };
@@ -174,7 +174,7 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
     revoked: pass.revoked.length,
   });
   await notifyMember?.(pass.revoked);
-  if (fenceRefused(cancelled.error, items.length)) return { keyMinted: pass.revoked };
+  if (fenceRefused(cancelled.error, fence, items.length)) return { keyMinted: pass.revoked };
   return { response: await onCancelled(cancelled.error, pass.revoked) };
 }
 
@@ -189,11 +189,21 @@ async function captured(write: () => Promise<void>): Promise<{ error: unknown } 
 }
 
 /**
- * Whether the cancellation was the fence's own item, which sits one past the
- * caller's. `cancelledLabels` names positions, so the caller's items need no
- * names here — only the one this function appended.
+ * Whether the fence's own item is the only thing that cancelled. It sits one
+ * past the caller's, so `cancelledLabels` needs no names for those — only the
+ * one this function appended.
+ *
+ * No fence, no refusal: the position named here would be the audit item
+ * `commitAudited` appends, and nothing there is a mint.
+ *
+ * The caller's failures come first, the way `commitAudited` puts the mutation's
+ * ahead of the audit item's: a change refused because the org is being torn down
+ * has no retry, and answering "a key was minted, try again" would send an admin
+ * round a loop that cannot end.
  */
-function fenceRefused(err: unknown, callerItems: number): boolean {
+function fenceRefused(err: unknown, fence: KeyMintFence | undefined, callerItems: number): boolean {
+  if (!fence) return false;
   const labels = [...Array.from({ length: callerItems }, () => 'caller'), 'fence'];
-  return cancelledLabels(err, labels).includes('fence');
+  const failed = cancelledLabels(err, labels);
+  return failed.length > 0 && failed.every((label) => label === 'fence');
 }
