@@ -174,6 +174,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
+    "ExportAuditEvents": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "ForgeDevManagementApiToken": {
       "type": "sst.sst.Secret"
       "value": string
@@ -243,6 +247,10 @@ declare module "sst" {
       "value": string
     }
     "ListAccessKeys": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "ListAuditEvents": {
       "name": string
       "type": "sst.aws.Function"
     }
