@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiErrorCode, OrgRole } from '@filone/shared';
 import type { MemberSummary, MeResponse } from '@filone/shared';
@@ -444,8 +444,10 @@ describe('the role-narrowing confirmation', () => {
     expect(screen.getByText(/carries DeleteBucket/)).toBeInTheDocument();
     expect(screen.getByText(/create a replacement key/)).toBeInTheDocument();
     expect(screen.getByText(/2 of their other keys stay within the new role/)).toBeInTheDocument();
+    // The whole sentence, tail included: matching only the prefix is what let
+    // "1 key has … and are not affected" pass.
     expect(
-      screen.getByText(/1 key in this organization have no recorded owner/),
+      screen.getByText(/1 key in this organization has no recorded owner and is not affected\./),
     ).toBeInTheDocument();
     expect(mockRoleChangePreview).toHaveBeenCalledWith('user-2', OrgRole.Member);
     expect(mockUpdateRole).not.toHaveBeenCalled();
@@ -509,6 +511,74 @@ describe('the role-narrowing confirmation', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: /^Chang/ })).toBeEnabled());
     expect(screen.getByText('Change this role?')).toBeInTheDocument();
+  });
+
+  it('shows a last-owner refusal inside the dialog, which covers the page notice', async () => {
+    // The page notice sits behind the modal, so a caller who could not read it
+    // would just click again and earn the same refusal.
+    mockUpdateRole.mockRejectedValue(
+      apiError('This organization would be left without an owner.', 409, ApiErrorCode.LAST_OWNER),
+    );
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText('Role for grace@example.com'), {
+      target: { value: OrgRole.Member },
+    });
+    await confirmNarrowing();
+
+    const dialog = await screen.findByTestId('role-narrowing-dialog');
+    expect(within(dialog).getByText('That change was refused')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('This organization would be left without an owner.'),
+    ).toBeInTheDocument();
+    // The page notice stays too, for once the dialog is closed.
+    expect(
+      within(screen.getByTestId('members-last-owner')).getByText(/without an owner/),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('Change this role?')).toBeInTheDocument();
+  });
+
+  it('does not open onto the previous member’s refusal', async () => {
+    // The prompt stays mounted once opened, so a refusal held there outlives
+    // the dialog unless it is tied to the change it answered.
+    mockUpdateRole.mockRejectedValue(apiError('No owner left.', 409, ApiErrorCode.LAST_OWNER));
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText('Role for grace@example.com'), {
+      target: { value: OrgRole.Member },
+    });
+    await confirmNarrowing();
+    await screen.findByText('That change was refused');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.change(await screen.findByLabelText('Role for Ada Lovelace'), {
+      target: { value: OrgRole.Admin },
+    });
+    const dialog = await screen.findByTestId('role-narrowing-dialog');
+
+    expect(within(dialog).getByText('Change your own role?')).toBeInTheDocument();
+    expect(within(dialog).queryByText('That change was refused')).not.toBeInTheDocument();
+  });
+
+  it('keeps the second person through the dialog’s closing transition', async () => {
+    // Closing nulls the target while the panel is still mounted for its fade,
+    // and copy that switches to the third person mid-fade is the dialog talking
+    // about somebody else.
+    mockUpdateRole.mockResolvedValue({
+      userId: 'user-1',
+      role: OrgRole.Admin,
+      previousRole: OrgRole.Owner,
+    });
+    renderPage();
+
+    fireEvent.change(await screen.findByLabelText('Role for Ada Lovelace'), {
+      target: { value: OrgRole.Admin },
+    });
+    expect(await screen.findByText('Change your own role?')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Change this role?')).not.toBeInTheDocument();
   });
 
   it('drops the cached access keys when a narrowing revoked some', async () => {

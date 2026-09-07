@@ -95,7 +95,7 @@ interface LastOwnerNotice {
   message: string | null;
   clear: () => void;
   /** @returns whether the error was the last-owner refusal. */
-  capture: (err: unknown, fallback: string) => boolean;
+  capture: (err: unknown, message: string) => boolean;
 }
 
 /**
@@ -110,9 +110,9 @@ function useLastOwnerNotice(): LastOwnerNotice {
   return {
     message,
     clear: () => setMessage(null),
-    capture: (err, fallback) => {
+    capture: (err, message) => {
       if (errorCodeOf(err) !== ApiErrorCode.LAST_OWNER) return false;
-      setMessage(errorMessageOf(err, fallback));
+      setMessage(message);
       return true;
     },
   };
@@ -163,15 +163,13 @@ function useRoleChange(ctx: MutationContext) {
       );
     },
     onError: (err) => {
-      // The keys named here are already gone whatever the role now says, so the
-      // refusal has to carry them: a message about the role alone is half the
-      // answer.
       const revoked = revokedKeysOf(err);
-      // Those keys are gone whatever the role now says, so the list they are
-      // listed on is stale either way.
+      // Those keys are gone whatever the role now says, so the key list is stale
+      // either way, and a refusal that omits them is half the answer.
       invalidateRevokedKeyViews(ctx.client, revoked.length);
-      const remedy = `That change would leave the organization without an owner.${revokedSuffix(revoked)}`;
-      if (ctx.notice.capture(err, remedy)) return;
+      const remedy = 'That change would leave the organization without an owner.';
+      const refusal = `${errorMessageOf(err, remedy)}${revokedSuffix(revoked)}`;
+      if (ctx.notice.capture(err, refusal)) return;
       ctx.toastError(
         `${errorMessageOf(err, 'Failed to change that role')}${revokedSuffix(revoked)}`,
       );
@@ -209,7 +207,7 @@ function useMemberRemoval(ctx: MutationContext) {
     },
     onError: (err, member) => {
       const remedy = 'That removal would leave the organization without an owner.';
-      if (ctx.notice.capture(err, remedy)) return;
+      if (ctx.notice.capture(err, errorMessageOf(err, remedy))) return;
       // The confirmation closes on its own, so a refusal that leaves the row in
       // place leaves it actionable and every retry earns the same answer. The
       // same shape as the invitation revoke's INVITE_NOT_FOUND branch: re-read
@@ -277,10 +275,19 @@ function useOwnershipTransfer(ctx: MutationContext, onDone: () => void) {
       // to a caller who is now an Admin, and the server answers the second click
       // with a refusal rather than a second transfer.
       onDone();
-      ctx.toastSuccess(`${memberName(member)} owns this organization now. You are an admin.`);
+      // The caller's own keys, so the toast is the only place they hear it.
+      invalidateRevokedKeyViews(ctx.client, result.revokedKeys?.length ?? 0);
+      ctx.toastSuccess(
+        `${memberName(member)} owns this organization now. You are an admin.${revokedSuffix(result.revokedKeys)}`,
+      );
     },
     onError: (err) => {
-      ctx.toastError(errorMessageOf(err, 'Failed to transfer ownership'));
+      // Gone whatever the seat now says, the same as a role change's.
+      const revoked = revokedKeysOf(err);
+      invalidateRevokedKeyViews(ctx.client, revoked.length);
+      ctx.toastError(
+        `${errorMessageOf(err, 'Failed to transfer ownership')}${revokedSuffix(revoked)}`,
+      );
     },
   });
 }

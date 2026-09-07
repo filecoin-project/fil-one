@@ -26,6 +26,8 @@ export type RoleNarrowingDialogProps = {
   /** The preview could not be read, so the list is not the whole story. */
   error?: boolean;
   pending?: boolean;
+  /** Why the last attempt was refused, shown here rather than behind the modal. */
+  refusal?: string | undefined;
   onClose: () => void;
   onConfirm: () => void;
 };
@@ -55,6 +57,7 @@ export function RoleNarrowingDialog({
   loading = false,
   error = false,
   pending = false,
+  refusal,
   onClose,
   onConfirm,
 }: RoleNarrowingDialogProps) {
@@ -85,6 +88,7 @@ export function RoleNarrowingDialog({
             survivingCount={survivingCount}
             unattributedCount={unattributedCount}
           />
+          {refusal && <Alert variant="red" title="That change was refused" description={refusal} />}
         </div>
       </ModalBody>
       <ModalFooter fullWidth>
@@ -100,7 +104,9 @@ export function RoleNarrowingDialog({
         <ConfirmButton
           pending={pending}
           loading={loading}
-          count={keysToRevoke.length}
+          // A failed preview leaves the list empty while the change still
+          // revokes, so an unknown impact is destructive too.
+          destructive={keysToRevoke.length > 0 || error}
           onClick={onConfirm}
         />
       </ModalFooter>
@@ -162,7 +168,7 @@ function PreviewBody({
         description={`To keep a client running, create a replacement key with the narrower permissions first, then change the role.`}
         assertive={false}
       />
-      <Footnote survivingCount={survivingCount} unattributedCount={unattributedCount} />
+      <Footnote self={self} survivingCount={survivingCount} unattributedCount={unattributedCount} />
     </>
   );
 }
@@ -191,19 +197,27 @@ function AccessKeyRow({ accessKey }: { accessKey: AccessKeySummary }) {
 
 /** What the list above leaves out, so a short list is not read as the whole story. */
 function Footnote({
+  self,
   survivingCount,
   unattributedCount,
 }: {
+  self: boolean;
   survivingCount: number;
   unattributedCount: number;
 }) {
   const lines: string[] = [];
   if (survivingCount > 0) {
-    lines.push(`${survivingCount} of their other keys stay within the new role and keep working.`);
+    lines.push(
+      `${survivingCount} of ${self ? 'your' : 'their'} other keys stay within the new role and keep working.`,
+    );
   }
+  // Whole sentences per count: patching verbs one at a time is how "1 key has …
+  // and are not affected" happened.
   if (unattributedCount > 0) {
     lines.push(
-      `${unattributedCount} ${unattributedCount === 1 ? 'key' : 'keys'} in this organization have no recorded owner and are not affected.`,
+      unattributedCount === 1
+        ? '1 key in this organization has no recorded owner and is not affected.'
+        : `${unattributedCount} keys in this organization have no recorded owner and are not affected.`,
     );
   }
   if (lines.length === 0) return null;
@@ -214,23 +228,23 @@ function Footnote({
 function ConfirmButton({
   pending,
   loading,
-  count,
+  destructive,
   onClick,
 }: {
   pending: boolean;
   loading: boolean;
-  count: number;
+  destructive: boolean;
   onClick: () => void;
 }) {
   return (
     <Button
       id="role-narrowing-confirm-button"
-      variant={count > 0 ? 'destructive' : 'primary'}
+      variant={destructive ? 'destructive' : 'primary'}
       size="md"
       onClick={onClick}
       disabled={pending || loading}
     >
-      {pending ? 'Changing...' : count > 0 ? 'Change role and revoke' : 'Change role'}
+      {pending ? 'Changing...' : destructive ? 'Change role and revoke' : 'Change role'}
     </Button>
   );
 }
