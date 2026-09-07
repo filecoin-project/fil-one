@@ -78,18 +78,17 @@ function useLastNonNull<T>(target: T | null): T | null {
  * it on. So it is confirmed rather than committed on the change event, where one
  * click or one arrow key was enough.
  */
-function selfChangeDescription({ member, role }: RoleChange): string {
-  const from = ROLE_LABELS[member.role];
-  const to = ROLE_LABELS[role];
-  const opening = `You go from ${from} to ${to} in this organization.`;
-
+function selfChangeDescription({ role }: RoleChange): string {
+  // Only what the change costs on top of the roles themselves: the dialog's own
+  // header already reads "You go from X to Y."
+  //
   // Admin is the one step down that keeps `members.manage`, so it is the one
   // that leaves this page usable. Owner never arrives here — a move to Owner is
   // a promotion, and it has its own dialog.
   if (role === OrgRole.Admin) {
-    return `${opening} Billing and the organization itself go with the owner seat, and only an owner can hand it back.`;
+    return 'Billing and the organization itself go with the owner seat, and only an owner can hand it back.';
   }
-  return `${opening} Managing members goes with it, so this is the last change you can make on this page — putting it back takes another owner or admin.`;
+  return 'Managing members goes with it, so this is the last change you can make on this page, and putting it back takes another owner or admin.';
 }
 
 /**
@@ -242,7 +241,7 @@ export function MemberDialogs({
         title="Make this member an owner?"
         description={
           promotion
-            ? `${memberName(promotion.member)} will be able to manage billing, every member, and the organization itself — including removing you.`
+            ? `${memberName(promotion.member)} will be able to manage billing, every member, and the organization itself, including removing you.`
             : ''
         }
         confirmLabel="Make owner"

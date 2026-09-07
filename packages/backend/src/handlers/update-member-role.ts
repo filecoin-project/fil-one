@@ -33,7 +33,7 @@ import {
   roleChangeItems,
 } from '../lib/membership-changes.js';
 import type { LabelledItems } from '../lib/membership-changes.js';
-import { readOwnerCount } from '../lib/org-membership.js';
+import { readOwnerCount, readOwnerCountForDiagnosis } from '../lib/org-membership.js';
 import {
   OrgDeletingError,
   getOrgProfile,
@@ -310,11 +310,15 @@ async function changeFailureResponse(
     // cancels the transaction that would take it to zero. It reads `ownerCount`
     // though, so a missing counter cancels the same update for the opposite
     // reason — the guard was never armed — and saying "you are the last Owner"
-    // about an org whose counter we cannot read would be a guess.
-    if (context.delta === 'decrement' && (await readOwnerCount(context.orgId)) !== undefined) {
+    // about an org whose counter we cannot read would be a guess. A read that
+    // fails is the same guess, and it must not cost the answer the revoked keys.
+    if (
+      context.delta === 'decrement' &&
+      (await readOwnerCountForDiagnosis(context.orgId)) !== undefined
+    ) {
       return lastOwnerResponse(revoked);
     }
-    console.error('[update-member-role] ownerCount missing — role change refused', {
+    console.error('[update-member-role] ownerCount unreadable — role change refused', {
       orgId: context.orgId,
     });
     return ownerCountUnavailableResponse(revoked);

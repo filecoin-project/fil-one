@@ -256,6 +256,24 @@ export async function readOwnerCount(orgId: string): Promise<number | undefined>
 }
 
 /**
+ * The counter as an explanation of a cancellation that already happened.
+ *
+ * A read that fails explains nothing, so it reads as unknown rather than
+ * throwing. The callers are failure paths that already owe an answer naming the
+ * keys they revoked, and those keys are gone whatever this read does — a
+ * rejection escaping here would lose that answer and leave the operator with a
+ * bare 500.
+ */
+export async function readOwnerCountForDiagnosis(orgId: string): Promise<number | undefined> {
+  try {
+    return await readOwnerCount(orgId);
+  } catch (err) {
+    console.error('[org-membership] ownerCount could not be read', { orgId, error: err });
+    return undefined;
+  }
+}
+
+/**
  * The most inverse items one Query walk will collect. An org of one has a
  * single row and an invited user a handful; a user with more memberships than
  * this is a bug or an attack, and truncating names both in the log rather than

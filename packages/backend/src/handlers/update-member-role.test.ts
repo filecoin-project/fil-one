@@ -182,21 +182,34 @@ function stubMemberKeys(...keys: Array<Record<string, unknown>>) {
  */
 function stubOwnerCount(ownerCount: number | undefined) {
   ddbMock
-    .on(GetItemCommand, {
-      TableName: 'OrgTable',
-      Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: 'META' } },
-    })
-    .resolves(
-      ownerCount === undefined
-        ? {}
-        : {
-            Item: {
-              pk: { S: OrgKeys.orgPk(ORG_ID) },
-              sk: { S: 'META' },
-              ownerCount: { N: String(ownerCount) },
-            },
-          },
-    );
+    .on(GetItemCommand, OWNER_COUNT_READ)
+    .resolves(ownerCount === undefined ? {} : metaRow(ownerCount));
+}
+
+/**
+ * The counter read once and unreadable after: the pre-flight read succeeds, so
+ * the change reaches the transaction, and the failure path's reread throws.
+ */
+function stubOwnerCountThenUnreadable(ownerCount: number) {
+  ddbMock
+    .on(GetItemCommand, OWNER_COUNT_READ)
+    .resolvesOnce(metaRow(ownerCount))
+    .rejects(new Error('ProvisionedThroughputExceededException'));
+}
+
+const OWNER_COUNT_READ = {
+  TableName: 'OrgTable',
+  Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: 'META' } },
+};
+
+function metaRow(ownerCount: number) {
+  return {
+    Item: {
+      pk: { S: OrgKeys.orgPk(ORG_ID) },
+      sk: { S: 'META' },
+      ownerCount: { N: String(ownerCount) },
+    },
+  };
 }
 
 function transactItems() {
@@ -358,6 +371,22 @@ describe('PATCH /api/org/members/{userId} handler', () => {
     expect(body(result).code).toBeUndefined();
     expect(body(result).message).toStrictEqual(expect.stringContaining('contact support'));
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('names the revoked keys when the counter cannot be reread', async () => {
+    // Those credentials are already gone at the vendor. A reread that throws
+    // would answer 500 with nothing in it, and the console would go on offering
+    // dead keys as the ones the next attempt revokes.
+    targetHolds(OrgRole.Owner);
+    stubOwnerCountThenUnreadable(2);
+    stubMemberKeys({ permissions: ['read', 'DeleteBucket'] });
+    ddbMock.on(TransactWriteItemsCommand).resolvesOnce({}).rejects(cancelledAt(3, 5));
+
+    const result = await handler(roleEvent(OrgRole.Member), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 409 });
+    expect(body(result).message).toStrictEqual(expect.stringContaining('contact support'));
+    expect(body(result).revokedKeys).toHaveLength(1);
   });
 
   it('reports a transient conflict as a failure rather than a verdict', async () => {
