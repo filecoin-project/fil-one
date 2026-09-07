@@ -100,7 +100,7 @@ describe('getS3Endpoint', () => {
 
   it('returns the us-east-9 dev sandbox gateway', () => {
     expect(getS3Endpoint(S3Region.UsEast9, Stage.Staging)).toBe(
-      'https://ingot.dev.forge-sandbox.fil.one',
+      'https://s3.us-east-9.latest.dev.filonecontent.com',
     );
   });
 

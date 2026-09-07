@@ -126,7 +126,7 @@ export function getS3Endpoint(region: S3Region, stage: Stage | string): string {
       case S3Region.EuCentral3:
         return 'https://s3.eu-central-3.staging.filonecontent.com';
       case S3Region.UsEast9:
-        return 'https://ingot.dev.forge-sandbox.fil.one';
+        return 'https://s3.us-east-9.latest.dev.filonecontent.com';
     }
   }
   return `https://${region}.${S3_DATA_DOMAIN}`;

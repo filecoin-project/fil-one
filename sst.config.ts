@@ -702,7 +702,7 @@ export default $config({
     // /tenants body.
     const forgeEnv = {
       FORGE_MANAGEMENT_API_URL: isProduction ? '' : 'https://auth.staging.fil-forge.com',
-      FORGE_DEV_MANAGEMENT_API_URL: isProduction ? '' : 'https://hilt.dev.forge-sandbox.fil.one',
+      FORGE_DEV_MANAGEMENT_API_URL: isProduction ? '' : 'https://auth.latest.dev.fil-forge.com',
     };
 
     // Everything the service-orchestrator layer needs at runtime. FILONE_STAGE
