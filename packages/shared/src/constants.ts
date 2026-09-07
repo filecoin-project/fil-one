@@ -73,9 +73,7 @@ export function isFoundationEmail(email: string | undefined): boolean {
 export function getAvailableRegions(stage: Stage | string): S3Region[] {
   const regions: S3Region[] = [S3Region.EuWest1, S3Region.UsEast1];
   if (stage !== Stage.Production) {
-    // us-east-9 is temporarily disabled
-    // regions.push(S3Region.EuCentral3, S3Region.UsEast9);
-    regions.push(S3Region.EuCentral3);
+    regions.push(S3Region.EuCentral3, S3Region.UsEast9);
   }
   return regions;
 }
