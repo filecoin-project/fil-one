@@ -521,7 +521,10 @@ async function recoverDuplicateKey({
   });
   // This path answers 409 either way; a role that narrowed just leaves no row
   // and no credential behind it.
-  if (!record.recorded) await discardUnrecordedKey({ minted, mint, creator });
+  if (!record.recorded) {
+    await discardUnrecordedKey({ minted, mint, creator });
+    return;
+  }
 
   console.warn(
     `Recovered DynamoDB record for access key "${keyName}" (id=${recovered.id}) for org ${orgId} using ${orchestrator.id} orchestrator`,
