@@ -6,8 +6,8 @@
 // Un-provisions one region for every customer account in a stage, so the next
 // console request re-runs tenant setup from scratch. Use it after the upstream
 // orchestrator behind a region has been wiped or re-deployed (a Forge dev
-// network reset), or when a pilot region is retired — either way every account
-// keeps a dangling pointer to a tenant that no longer exists.
+// network reset), which leaves every account holding a dangling pointer to a
+// tenant that no longer exists.
 //
 // Provisioning state for a region is a single flat attribute on the account's
 // `ORG#{orgId}` / `PROFILE` row in UserInfoTable: an account is provisioned in
@@ -25,21 +25,15 @@
 // a key minted between an earlier run's scan and its pointer removal is picked
 // up by the next run.
 //
-// Which regions each stage allows:
+// Production is refused before the first AWS call: every region there carries
+// real customer data, and a reset takes the region away from every account at
+// once. Every other stage allows all four regions.
 //
-//   production      eu-central-3, us-east-9 — the pilot regions
-//   every other     all four
-//
-// Production refuses eu-west-1 (Aurora) and us-east-1 (FTH) by name: they are
-// generally available and carry real customer data, so clearing their tenant
-// pointers would cut off every production customer at once.
-//
-// Credentials: no `sst shell` (it cannot evaluate pulumi providers against
-// production). Table names come from `sst state export`, and every AWS call
-// uses your ambient credentials, so confirm they target the right account
-// first. Applying needs a role that can write UserInfoTable and
-// RagIndexerTable, delete SSM parameters, and call s3vectors:GetVectorBucket
-// and s3vectors:DeleteIndex.
+// Credentials: table names come from `sst state export`, and every AWS call
+// uses your ambient credentials, as in orgs-beta.ts and rag-access.ts, so
+// confirm they target the right account first. Applying needs a role that can
+// write UserInfoTable and RagIndexerTable, delete SSM parameters, and call
+// s3vectors:GetVectorBucket and s3vectors:DeleteIndex.
 //
 // The run scans, prints the plan, and asks for confirmation: type `yes` to
 // apply. `--yes` skips the prompt, `--dry-run` prints the plan and exits
@@ -68,7 +62,6 @@
 //
 //   node bin/reset-region-provisioning.ts --stage $USER --region eu-central-3 --dry-run
 //   node bin/reset-region-provisioning.ts --stage staging --region eu-central-3
-//   node bin/reset-region-provisioning.ts --stage production --region us-east-9
 
 import { writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
@@ -129,8 +122,8 @@ const skipPrompt = flags.has('--yes') && !dryRun;
 const stage = options.get('--stage') ?? usage('Missing required --stage.');
 const region = options.get('--region') ?? usage('Missing required --region.');
 
-// Before any AWS work: a region this stage will not accept costs a message,
-// not a state export against production.
+// Before any AWS work: a stage or region the script refuses costs a message
+// instead of a state export.
 try {
   assertRegionAllowed(stage, region);
 } catch (err) {

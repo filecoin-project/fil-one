@@ -162,20 +162,16 @@ production. Set `AWS_PROFILE` first.
 
 `reset-region-provisioning.ts` clears every account's pointer into one region,
 so the next console request re-runs tenant setup from scratch. Run it after the
-upstream orchestrator behind a region has been wiped or re-deployed, or when a
-pilot region is retired.
+upstream orchestrator behind a region has been wiped or re-deployed.
 
 ```bash
 node bin/reset-region-provisioning.ts --stage $USER --region eu-central-3 --dry-run
 node bin/reset-region-provisioning.ts --stage staging --region eu-central-3
-node bin/reset-region-provisioning.ts --stage production --region us-east-9
 ```
 
-**Production allows the pilot regions only.** `eu-central-3` and `us-east-9`
-are resettable there; `eu-west-1` (Aurora) and `us-east-1` (FTH) are refused by
-name, because they are generally available and carry real customer data, so
-clearing their tenant pointers would cut off every production customer at once.
-Every other stage allows all four. The check runs before the first AWS call.
+**Production is refused.** Every region there carries real customer data, and a
+reset takes the region away from every account at once. Every other stage
+allows all four regions. The check runs before the first AWS call.
 
 **Scan, plan, confirm.** The run prints one line per account — its tenant id,
 its access-key count, its RAG buckets with the S3 Vectors index behind each,
@@ -223,7 +219,7 @@ cannot stops before the scan.
 | `tail-logs.sh`                 | Tail CloudWatch logs for a Lambda function                                                                                                                             |
 | `tail-tenant-setup-logs.sh`    | Tail logs for the Aurora tenant setup Lambda                                                                                                                           |
 | `reset-db.ts`                  | Reset the Aurora database for a stage                                                                                                                                  |
-| `reset-region-provisioning.ts` | Un-provision one region for every account in a stage, in production too (see above)                                                                                    |
+| `reset-region-provisioning.ts` | Un-provision one region for every account in a non-production stage (see above)                                                                                        |
 | `aurora-s3-env.ts`             | Print Aurora S3 environment variables                                                                                                                                  |
 | `aurora-preview-url.ts`        | Pre-signed GetObject URL for an Aurora object, plus a billing report for the owning account (deletion state, Stripe dashboard link, subscription status, latest usage) |
 | `aurora-demo.ts`               | Demo script for Aurora S3 operations                                                                                                                                   |

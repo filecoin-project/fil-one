@@ -61,21 +61,13 @@ function orgRows(rows: OrgRows): Map<string, OrgRows> {
 }
 
 describe('assertRegionAllowed', () => {
-  const refusedInProduction = ['eu-west-1', 'us-east-1'];
-  for (const region of refusedInProduction) {
+  const allRegions = ['eu-west-1', 'us-east-1', 'eu-central-3', 'us-east-9'];
+  for (const region of allRegions) {
     it(`refuses ${region} in production`, () => {
       expect(() => assertRegionAllowed('production', region)).toThrow(/production/);
     });
   }
 
-  const pilotRegions = ['eu-central-3', 'us-east-9'];
-  for (const region of pilotRegions) {
-    it(`allows ${region} in production`, () => {
-      expect(() => assertRegionAllowed('production', region)).not.toThrow();
-    });
-  }
-
-  const allRegions = ['eu-west-1', 'us-east-1', 'eu-central-3', 'us-east-9'];
   for (const region of allRegions) {
     it(`allows ${region} on a non-production stage`, () => {
       expect(() => assertRegionAllowed('staging', region)).not.toThrow();

@@ -30,19 +30,6 @@ export const DEFAULT_ACCESS_KEY_REGION = 'eu-west-1';
 /** Inlined from packages/backend/src/lib/org-setup-status.ts. */
 export const FILONE_ORG_CREATED = 'FILONE_ORG_CREATED';
 
-/**
- * The regions production refuses.
- *
- * Aurora (eu-west-1) and FTH (us-east-1) are the generally-available regions
- * carrying real customer data; clearing their tenant pointers would cut off
- * every production customer at once. Production leaves the pilot regions,
- * which is what retiring one needs.
- */
-const PRODUCTION_REFUSED_REGIONS: Record<string, string> = {
-  'eu-west-1': 'Aurora',
-  'us-east-1': 'FTH',
-};
-
 /** One `ACCESSKEY#` / `BUCKET#` / `PROFILE` row as DynamoDB stores it. */
 export type StoredRow = Record<string, AttributeValue>;
 
@@ -99,8 +86,10 @@ export interface ResetPlanInput {
 /**
  * Stop before any AWS call when the stage does not allow the region.
  *
- * Throws rather than exiting so the caller owns the message; every other
- * stage accepts all four regions.
+ * Production is refused for every region: each one carries real customer
+ * data, and a reset takes the region away from every account at once. Every
+ * other stage accepts all four regions. Throws rather than exiting so the
+ * caller owns the message.
  */
 export function assertRegionAllowed(stage: string, region: string): void {
   if (!ORCHESTRATOR_ID_BY_REGION[region]) {
@@ -108,17 +97,10 @@ export function assertRegionAllowed(stage: string, region: string): void {
       `Unknown region "${region}". Known regions: ${Object.keys(ORCHESTRATOR_ID_BY_REGION).join(', ')}.`,
     );
   }
-  if (stage !== 'production') return;
-
-  const orchestrator = PRODUCTION_REFUSED_REGIONS[region];
-  if (orchestrator) {
+  if (stage === 'production') {
     throw new Error(
-      `Refusing to reset ${region} in production: ${orchestrator} is generally available and ` +
-        'carries real customer data, so clearing its tenant pointers would cut off every ' +
-        'production customer. Production allows only the pilot regions: ' +
-        `${Object.keys(ORCHESTRATOR_ID_BY_REGION)
-          .filter((candidate) => !PRODUCTION_REFUSED_REGIONS[candidate])
-          .join(', ')}.`,
+      `Refusing to reset ${region} in production: clearing its tenant pointers would cut off ` +
+        'every production account in the region. Run this against a non-production stage.',
     );
   }
 }
