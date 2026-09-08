@@ -9,9 +9,9 @@ export type Stage = (typeof Stage)[keyof typeof Stage];
  * A known stage or any other stage name, such as a developer's personal stage.
  *
  * `Stage | string` would collapse to `string` and lose the editor's completion
- * of the known values. `string & {}` is the idiom TypeScript does not merge a
- * literal union into, so callers see `Stage.Production` and `Stage.Staging`
- * in completion while any string is still accepted.
+ * of the known values. TypeScript does not merge a literal union into
+ * `string & {}`, so callers see `Stage.Production` and `Stage.Staging` in
+ * completion while any string is still accepted.
  */
 export type StageLike = Stage | (string & {});
 

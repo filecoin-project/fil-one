@@ -279,6 +279,7 @@ const AccessLevel = {
   Read: 'read',
   Write: 'write',
 } as const;
+type AccessLevel = (typeof AccessLevel)[keyof typeof AccessLevel];
 ```
 
 These two levels are about entitlement, not about who the caller is. Role-based distinctions belong in the permission registry above.
