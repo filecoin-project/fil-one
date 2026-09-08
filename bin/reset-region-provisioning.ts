@@ -272,12 +272,16 @@ async function requireVectorBucket(): Promise<void> {
 /**
  * Every ORG# row in one pass, bucketed by partition key, so each account is
  * planned with its access keys already in hand.
+ *
+ * Both inventory scans read consistently: a row written moments before the
+ * run must be in the plan, or the reset deletes around it and reports success.
  */
 async function scanOrgRows(): Promise<Map<string, OrgRows>> {
   const result = new Map<string, OrgRows>();
 
   for await (const item of scanAll(dynamo, {
     TableName: tables.userInfo,
+    ConsistentRead: true,
     FilterExpression: 'begins_with(pk, :orgPrefix)',
     ExpressionAttributeValues: { ':orgPrefix': { S: 'ORG#' } },
   })) {
@@ -310,6 +314,7 @@ async function scanRagRows(): Promise<StoredRow[]> {
 
   for await (const item of scanAll(dynamo, {
     TableName: tables.ragIndexer,
+    ConsistentRead: true,
     FilterExpression: 'begins_with(pk, :bucketPrefix) OR begins_with(pk, :checkpointPrefix)',
     ExpressionAttributeValues: {
       ':bucketPrefix': { S: 'BUCKET#' },
