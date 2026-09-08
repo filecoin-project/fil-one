@@ -252,7 +252,7 @@ describe('commitAfterRevokingKeys', () => {
     expect(onRefused).toHaveBeenCalledWith([summary('0001')], []);
   });
 
-  it('names what went when the write cancels after the revocation', async () => {
+  it('names what went when the write cancels after the revocation, and closes the intent', async () => {
     const cancelled = new Error('cancelled');
     ddbMock.on(TransactWriteItemsCommand).rejects(cancelled);
 
@@ -265,6 +265,26 @@ describe('commitAfterRevokingKeys', () => {
     );
     expect(notifyMember).toHaveBeenCalledWith(REVOKED);
     expect(onCancelled).toHaveBeenCalledWith(cancelled, REVOKED);
+    // The succeeded completion rode the transaction that cancelled, so it went
+    // with it. Without this the intent dangles and an operator cannot tell a
+    // refused request from a process that died holding one.
+    expect(standaloneEvents().map((event) => [event.phase, event.outcome])).toStrictEqual([
+      ['intent', undefined],
+      ['completion', 'failed'],
+    ]);
+  });
+
+  it('answers the cancellation even when the completion that closes it cannot be written', async () => {
+    // An audit outage must not become the answer: the keys are gone and the
+    // caller needs the refusal that says so, not a 500 about bookkeeping.
+    ddbMock.on(TransactWriteItemsCommand).rejects(new Error('cancelled'));
+    ddbMock.on(PutItemCommand).resolvesOnce({}).rejects(new Error('audit unavailable'));
+
+    expect(await commit()).toStrictEqual({ response: { statusCode: 409 } });
+    expect(console.error).toHaveBeenCalledWith(
+      "[the-change] The cancelled write's own completion did not land",
+      expect.objectContaining({ orgId: ORG_ID }),
+    );
   });
 
   it('lets the caller throw out of a cancellation rather than answering for it', async () => {

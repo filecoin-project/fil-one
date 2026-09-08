@@ -2,7 +2,7 @@ import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { NO_ROLE, OrgRole } from '@filone/shared';
-import type { AccessKeySummary } from '@filone/shared';
+import type { AccessKeySummary, RemoveMemberResponse } from '@filone/shared';
 import { AuditSubjects, userActor } from '../lib/audit.js';
 import { commitAfterRevokingKeys } from '../lib/commit-after-revoking-keys.js';
 import { notifyRevokedKeys } from '../lib/key-revocation-email.js';
@@ -225,7 +225,14 @@ async function finishRemoval({
     source: SOURCE,
   });
 
-  return { statusCode: 204, body: '' };
+  return new ResponseBuilder()
+    .status(200)
+    .body<RemoveMemberResponse>(
+      // Named only when there are any, so removing somebody who held no key
+      // answers with the empty body rather than an empty list.
+      revoked.length > 0 ? { revokedKeys: revoked } : {},
+    )
+    .build();
 }
 
 /**

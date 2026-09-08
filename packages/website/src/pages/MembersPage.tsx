@@ -58,7 +58,9 @@ function dropFromRoster(client: QueryClient, userId: string): void {
  * Its own invalidation because the roster and the key list are different
  * queries with different stale windows: an admin who opened Access keys a
  * moment ago would otherwise come back to it and see credentials that no
- * longer exist rendered as active.
+ * longer exist rendered as active. Every verb that revokes calls this — a role
+ * change, a removal, a transfer — since the list is org-wide for anyone who may
+ * manage members, so it holds the keys of whoever the change was about.
  */
 function invalidateRevokedKeyViews(client: QueryClient, revokedCount: number): void {
   if (revokedCount === 0) return;
@@ -67,6 +69,10 @@ function invalidateRevokedKeyViews(client: QueryClient, revokedCount: number): v
   // before any of this: left alone it goes on offering keys that no longer
   // exist as keys the next attempt will revoke.
   void client.invalidateQueries({ queryKey: queryKeys.roleChangePreviews });
+  // `/usage` counts keys per org, not per member, so revoking somebody else's
+  // moves the caller's own dashboard tile and the quick-setup checklist that
+  // reads it. Its stale window is five minutes, the longest of the three.
+  void client.invalidateQueries({ queryKey: queryKeys.usage });
 }
 
 /**
@@ -187,7 +193,7 @@ function keyNameList(keys: readonly AccessKeySummary[]): string {
   return rest > 0 ? `${named.join(', ')} and ${rest} more` : named.join(', ');
 }
 
-/** What a role change took away, appended to whatever it is being said beside. */
+/** What a change took away, appended to whatever it is being said beside. */
 function revokedSuffix(keys: readonly AccessKeySummary[] | undefined): string {
   if (!keys?.length) return '';
   return ` ${keys.length === 1 ? 'This key was' : `These ${keys.length} keys were`} revoked: ${keyNameList(keys)}.`;
@@ -199,15 +205,27 @@ function useMemberRemoval(ctx: MutationContext) {
     onMutate: (member: MemberSummary) => {
       ctx.pending.add(member.userId);
     },
-    onSuccess: (_result, member) => {
+    onSuccess: (result, member) => {
       dropFromRoster(ctx.client, member.userId);
       invalidateAfterMembershipChange(ctx.client, member.userId, ctx.selfUserId);
+      // Optional: this endpoint answered 204 with no body until the removal
+      // began revoking, so a console running against an older deploy reads
+      // `undefined` here rather than an empty object.
+      const revoked = result?.revokedKeys;
+      invalidateRevokedKeyViews(ctx.client, revoked?.length ?? 0);
       ctx.notice.clear();
-      ctx.toastSuccess(`${memberName(member)} was removed from the organization`);
+      ctx.toastSuccess(
+        `${memberName(member)} was removed from the organization${revokedSuffix(revoked)}`,
+      );
     },
     onError: (err, member) => {
+      // Gone whatever the roster now says, so the key list is stale on every
+      // branch below and a refusal that omits them is half the answer.
+      const revoked = revokedKeysOf(err);
+      invalidateRevokedKeyViews(ctx.client, revoked.length);
       const remedy = 'That removal would leave the organization without an owner.';
-      if (ctx.notice.capture(err, errorMessageOf(err, remedy))) return;
+      if (ctx.notice.capture(err, `${errorMessageOf(err, remedy)}${revokedSuffix(revoked)}`))
+        return;
       // The confirmation closes on its own, so a refusal that leaves the row in
       // place leaves it actionable and every retry earns the same answer. The
       // same shape as the invitation revoke's INVITE_NOT_FOUND branch: re-read
@@ -217,10 +235,16 @@ function useMemberRemoval(ctx: MutationContext) {
       if (isStaleRemovalTarget(err)) {
         if (errorStatusOf(err) === 404) dropFromRoster(ctx.client, member.userId);
         void ctx.client.invalidateQueries({ queryKey: queryKeys.members });
-        ctx.toastInfo(errorMessageOf(err, 'That person is no longer on this roster.'));
+        const stale = errorMessageOf(err, 'That person is no longer on this roster.');
+        // An error when it took credentials with it: the roster being stale is
+        // the smaller half of what happened, and `toastInfo` would bury it.
+        if (revoked.length > 0) ctx.toastError(`${stale}${revokedSuffix(revoked)}`);
+        else ctx.toastInfo(stale);
         return;
       }
-      ctx.toastError(errorMessageOf(err, 'Failed to remove that member'));
+      ctx.toastError(
+        `${errorMessageOf(err, 'Failed to remove that member')}${revokedSuffix(revoked)}`,
+      );
     },
     onSettled: (_result, _err, member) => {
       ctx.pending.remove(member.userId);
@@ -270,15 +294,24 @@ function useOwnershipTransfer(ctx: MutationContext, onDone: () => void) {
       patchRosterRole(ctx.client, result.userId, OrgRole.Owner);
       patchRosterRole(ctx.client, result.previousOwnerUserId, OrgRole.Admin);
       invalidateAfterMembershipChange(ctx.client, result.previousOwnerUserId, ctx.selfUserId);
+      invalidateRevokedKeyViews(ctx.client, result.revokedKeys?.length ?? 0);
       ctx.notice.clear();
       // The dialog goes with the seat. Left open, it offers a destructive button
       // to a caller who is now an Admin, and the server answers the second click
       // with a refusal rather than a second transfer.
       onDone();
-      ctx.toastSuccess(`${memberName(member)} owns this organization now. You are an admin.`);
+      ctx.toastSuccess(
+        `${memberName(member)} owns this organization now. You are an admin.${revokedSuffix(result.revokedKeys)}`,
+      );
     },
     onError: (err) => {
-      ctx.toastError(errorMessageOf(err, 'Failed to transfer ownership'));
+      // The keys here are the caller's own, so this is the one flow where the
+      // person reading the refusal is the person whose clients just stopped.
+      const revoked = revokedKeysOf(err);
+      invalidateRevokedKeyViews(ctx.client, revoked.length);
+      ctx.toastError(
+        `${errorMessageOf(err, 'Failed to transfer ownership')}${revokedSuffix(revoked)}`,
+      );
     },
   });
 }

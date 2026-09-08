@@ -11,6 +11,7 @@ import type {
 import { accessKeyMintSeqUnchangedCheck } from './access-key-mint-seq.js';
 import type { KeyMintFence } from './access-key-mint-seq.js';
 import { auditEvent, commitAudited, twoPhaseAudit } from './audit.js';
+import type { AuditCorrelation } from './audit.js';
 import { cancelledLabels } from './membership-changes.js';
 import type { AccessKeyToRevoke } from './member-keys.js';
 import type { OrgProfileItem } from './org-profile.js';
@@ -173,9 +174,35 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
     orgId,
     revoked: pass.revoked.length,
   });
+  await closeCancelledIntent(correlation, revokedIds, { source, orgId });
   await notifyMember?.(pass.revoked);
   if (fenceRefused(cancelled.error, fence, items.length)) return { keyMinted: pass.revoked };
   return { response: await onCancelled(cancelled.error, pass.revoked) };
+}
+
+/**
+ * Close the intent the cancelled transaction took with it.
+ *
+ * The succeeded completion rode the membership items, so it cancelled too and
+ * the intent is still open. Every return path closes its own, including the ones
+ * that changed nothing (`lib/audit.ts`), or a dangling intent cannot be told
+ * from a process that died mid-flight.
+ *
+ * Logged rather than thrown: the keys are gone and the caller needs the refusal
+ * that names them, not a fault about bookkeeping on top of it.
+ */
+async function closeCancelledIntent<T extends RevocationAuditEventType>(
+  correlation: AuditCorrelation<T>,
+  details: Partial<AuditEventDetails[T]>,
+  { source, orgId }: { source: string; orgId: string },
+): Promise<void> {
+  const unclosed = await captured(() => correlation.complete({ outcome: 'failed', details }));
+  if (!unclosed) return;
+
+  console.error(`[${source}] The cancelled write's own completion did not land`, {
+    orgId,
+    error: unclosed.error,
+  });
 }
 
 /** What a write threw, wrapped so a thrown `undefined` still counts as a failure. */

@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { ApiErrorCode, OrgRole, S3Region } from '@filone/shared';
+import type { AccessKeySummary } from '@filone/shared';
 import { sstResourceMock } from '../test/sst-resource-mock.js';
 import { auditItemIn, expectNoSecrets } from '../test/audit-assertions.js';
 
@@ -287,7 +288,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
   it('removes both membership rows', async () => {
     const result = await handler(removeEvent(), buildContext());
 
-    expect(result).toMatchObject({ statusCode: 204 });
+    expect(result).toMatchObject({ statusCode: 200 });
     const items = transactItems();
     // Both rows, the mint-sequence fence, and the event.
     expect(items).toHaveLength(4);
@@ -370,7 +371,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
     const result = await handler(removeEvent(USER_ID), buildContext());
 
-    expect(result).toMatchObject({ statusCode: 204 });
+    expect(result).toMatchObject({ statusCode: 200 });
   });
 
   it('refuses a Member trying to leave, because the matrix grants them no removal', async () => {
@@ -531,7 +532,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
     // The removal is the urgent act; the invitation to them stays live until it
     // expires, which is a line an operator can act on rather than a silence.
-    expect(result).toMatchObject({ statusCode: 204 });
+    expect(result).toMatchObject({ statusCode: 200 });
     expect(unmarshall(auditItemIn(transactItems())).details).toMatchObject({
       revokedInvitations: 1,
     });
@@ -597,10 +598,16 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
     const result = await handler(removeEvent(), buildContext());
 
-    expect(result).toMatchObject({ statusCode: 204 });
+    expect(result).toMatchObject({ statusCode: 200 });
     expect(mockDeleteAccessKey.mock.calls).toStrictEqual([
       ['tenant:us-east-1', 'key-0'],
       ['tenant:us-east-1', 'key-1'],
+    ]);
+    // The admin doing this is not the key holder, so the response is the only
+    // place they learn which credentials the removal destroyed.
+    expect(body(result).revokedKeys.map((key: AccessKeySummary) => key.keyName)).toStrictEqual([
+      'key 0',
+      'key 1',
     ]);
   });
 
@@ -692,7 +699,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
       })
       .rejects(new Error('DynamoDB unavailable'));
 
-    expect(await handler(removeEvent(), buildContext())).toMatchObject({ statusCode: 204 });
+    expect(await handler(removeEvent(), buildContext())).toMatchObject({ statusCode: 200 });
   });
 
   it('names the keys already revoked when the removal then cancelled', async () => {

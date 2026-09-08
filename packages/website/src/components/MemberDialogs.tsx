@@ -197,7 +197,12 @@ function RoleNarrowingPreview({
       keys={preview.data?.keys}
       survivingCount={preview.data?.retainedKeyCount ?? 0}
       unattributedCount={preview.data?.unattributedKeyCount ?? 0}
-      loading={preview.isPending}
+      // `isFetching`, not just `isPending`: this component stays mounted while
+      // the dialog is closed, so a second opening has cached data and is
+      // `isPending: false` while it refetches. Gated on the pending state alone
+      // it would show the last opening's key list as settled and let the change
+      // be confirmed against it.
+      loading={preview.isPending || preview.isFetching}
       error={preview.isError}
       pending={pending}
       refusal={refusal}
@@ -245,7 +250,10 @@ function TransferOwnershipPreview({
       open={open}
       orgName={orgName}
       affectedKeys={outgoingOwnerPreview.data?.keys}
-      previewLoading={open && outgoingOwnerPreview.isPending}
+      // Every opening waits for its own answer, not just the first: the query
+      // outlives the closed dialog, so a reopening refetches with data already
+      // in hand. See {@link RoleNarrowingPreview}.
+      previewLoading={outgoingOwnerPreview.isPending || outgoingOwnerPreview.isFetching}
       previewError={outgoingOwnerPreview.isError}
       memberName={memberName}
       pending={pending}

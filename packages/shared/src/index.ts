@@ -93,6 +93,7 @@ export type {
   ListMembersResponse,
   MemberSummary,
   AccessKeySummary,
+  RemoveMemberResponse,
   RoleChangePreviewResponse,
   UpdateMemberRoleFailure,
   TransferOwnershipRequest,

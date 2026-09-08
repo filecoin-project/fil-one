@@ -326,6 +326,23 @@ describe('POST /api/org/transfer handler', () => {
     expect(body(result).revokedKeys.map((key: { id: string }) => key.id)).toStrictEqual(['key-0']);
   });
 
+  it('names the caller’s own keys the transfer revoked', async () => {
+    // The caller held them, so the response is where they learn which of their
+    // own clients just stopped. No email goes out for the same reason.
+    stubMemberKeys(
+      { granularPermissions: ['PutObjectRetention'] },
+      { granularPermissions: ['PutObjectLegalHold'] },
+    );
+
+    const result = await handler(transferEvent(), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 200 });
+    expect(body(result).revokedKeys.map((key: { id: string }) => key.id)).toStrictEqual([
+      'key-0',
+      'key-1',
+    ]);
+  });
+
   it('refuses a transfer with no counter to read, before a key is touched', async () => {
     // The transaction bumps `ownerCount` by nothing, and that update conditions
     // on the attribute existing, so a missing META row cancels the transfer

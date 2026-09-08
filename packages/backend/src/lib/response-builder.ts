@@ -131,11 +131,6 @@ export function tenantNotReadyResponse(): APIGatewayProxyStructuredResultV2 {
 export type ErrorWithRevokedKeys = ErrorResponse & { revokedKeys: AccessKeySummary[] };
 
 /**
- * The 500 for an unattributable fault, carrying the keys a revocation pass
- * already took. `errorHandlerMiddleware` answers with it too; nothing about the
- * fault itself is disclosed either way.
- */
-/**
  * The answer to a cancellation nothing can name. Rethrows when no key was
  * revoked, so the middleware answers; otherwise names the keys, which are gone
  * whatever the failure was.
@@ -158,6 +153,11 @@ export function unattributableFailure(
   return unexpectedFailureResponse(revokedKeys);
 }
 
+/**
+ * The 500 for an unattributable fault, carrying the keys a revocation pass
+ * already took. `errorHandlerMiddleware` answers with it too; nothing about the
+ * fault itself is disclosed either way.
+ */
 export function unexpectedFailureResponse(
   revokedKeys: AccessKeySummary[] = [],
 ): APIGatewayProxyStructuredResultV2 {
@@ -175,10 +175,6 @@ export function badRequestResponse(message: string): APIGatewayProxyStructuredRe
 }
 
 /**
- * The person a member verb names is not in the org. About the target, not the
- * caller: `authorize` answers for a caller without a membership, with a 403.
- */
-/**
  * How a vendor-refusal message names what is still live: `The key "nightly"`, or
  * `3 keys ("a", "b", "c")`.
  *
@@ -192,6 +188,10 @@ export function refusedKeysSubject(failedKeys: readonly AccessKeySummary[]): str
   return failedKeys.length === 1 ? `The key ${named}` : `${failedKeys.length} keys (${named})`;
 }
 
+/**
+ * The person a member verb names is not in the org. About the target, not the
+ * caller: `authorize` answers for a caller without a membership, with a 403.
+ */
 export function notAMemberResponse(
   revokedKeys?: AccessKeySummary[],
 ): APIGatewayProxyStructuredResultV2 {

@@ -31,6 +31,16 @@ vi.mock('../lib/members-api.js', () => ({
   revokeInvitation: vi.fn(),
 }));
 
+/** One revoked key, as a revoking endpoint reports it on success or refusal. */
+const REVOKED_KEY = {
+  id: 'key-1',
+  keyName: 'nightly backup',
+  region: 'us-east-1',
+  createdAt: '2026-02-01T00:00:00.000Z',
+  reason: 'exceeds_role' as const,
+  excess: ['DeleteBucket'],
+};
+
 /** No keys to lose, which is what most of these cases are about. */
 const NO_KEYS_AT_RISK = {
   currentRole: OrgRole.Owner,
@@ -726,6 +736,64 @@ describe('MembersPage — a removal the roster is stale for', () => {
   });
 });
 
+describe('MembersPage — a removal that revoked keys', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListInvitations.mockResolvedValue({ invitations: [] });
+    mockRoleChangePreview.mockResolvedValue(NO_KEYS_AT_RISK);
+    window.history.replaceState(null, '', '/members');
+  });
+
+  it('names the keys a removal revoked, and drops the views that listed them', async () => {
+    // The admin doing this is not the key holder, so the toast is the only
+    // place they learn which credentials the removal destroyed.
+    mockRemove.mockResolvedValue({ revokedKeys: [REVOKED_KEY] });
+    const { client } = renderPage();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+
+    await chooseRowAction('grace@example.com', 'Remove');
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+
+    expect(await screen.findByText(/This key was revoked: nightly backup/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.accessKeys }),
+    );
+    // `/usage` counts keys per org, so the dashboard tile moved too.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.usage });
+  });
+
+  it('still removes the member when the endpoint answers with no body', async () => {
+    // This route answered 204 until the removal began revoking, so a console
+    // against an older deploy reads nothing here.
+    mockRemove.mockResolvedValue(undefined);
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Remove');
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+
+    expect(
+      await screen.findByText('grace@example.com was removed from the organization'),
+    ).toBeInTheDocument();
+  });
+
+  it('names the keys a refused removal already revoked, rather than calling the roster stale', async () => {
+    // The 404 branch reads as an ordinary stale roster, which is the smaller
+    // half of what happened when the attempt took credentials with it.
+    mockRemove.mockRejectedValue(
+      Object.assign(new Error('That person is no longer on this roster.'), {
+        status: 404,
+        revokedKeys: [REVOKED_KEY],
+      }),
+    );
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Remove');
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+
+    expect(await screen.findByText(/This key was revoked: nightly backup/)).toBeInTheDocument();
+  });
+});
+
 describe('MembersPage — transferring the owner seat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -833,6 +901,60 @@ describe('MembersPage — transferring the owner seat', () => {
         stepUpAction: 'transfer-ownership:user-2',
       }),
     );
+  });
+
+  it('holds a reopened transfer until its own preview answers', async () => {
+    // The preview query outlives the closed dialog, so a second opening has
+    // cached data and is no longer `isPending` while it refetches. Gated on that
+    // alone the dialog would show the first opening's list as settled.
+    mockRoleChangePreview.mockResolvedValue(NO_KEYS_AT_RISK);
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+    fireEvent.change(await screen.findByLabelText('Type Acme to confirm'), {
+      target: { value: 'Acme' },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    let answerSecond = () => {};
+    mockRoleChangePreview.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answerSecond = () => resolve(NO_KEYS_AT_RISK);
+        }),
+    );
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+    fireEvent.change(await screen.findByLabelText('Type Acme to confirm'), {
+      target: { value: 'Acme' },
+    });
+    expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeDisabled();
+
+    await act(async () => {
+      answerSecond();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeEnabled(),
+    );
+  });
+
+  it('names the caller’s own keys a refused transfer already revoked', async () => {
+    // Here the person reading the refusal is the person whose clients stopped.
+    mockTransfer.mockRejectedValue(
+      Object.assign(new Error('The owner seat moved while you were transferring it.'), {
+        status: 409,
+        revokedKeys: [REVOKED_KEY],
+      }),
+    );
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+    await confirmTransfer();
+
+    expect(await screen.findByText(/This key was revoked: nightly backup/)).toBeInTheDocument();
   });
 
   it('reflects both seats when the transfer lands', async () => {

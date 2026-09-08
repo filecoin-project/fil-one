@@ -5,6 +5,7 @@ import type {
   ListInvitationsResponse,
   ListMembersResponse,
   OrgRole,
+  RemoveMemberResponse,
   RoleChangePreviewResponse,
   TransferOwnershipResponse,
   UpdateMemberRoleResponse,
@@ -58,8 +59,10 @@ export function getRoleChangePreview(
 /**
  * Remove a member from the org.
  */
-export function removeMember(userId: string): Promise<void> {
-  return apiRequest<void>(`/org/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+export function removeMember(userId: string): Promise<RemoveMemberResponse> {
+  return apiRequest<RemoveMemberResponse>(`/org/members/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
 }
 
 export function listInvitations(): Promise<ListInvitationsResponse> {

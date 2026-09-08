@@ -208,7 +208,13 @@ async function finishTransfer({
 
   return new ResponseBuilder()
     .status(200)
-    .body<TransferOwnershipResponse>({ userId: targetUserId, previousOwnerUserId: userId })
+    .body<TransferOwnershipResponse>({
+      userId: targetUserId,
+      previousOwnerUserId: userId,
+      // Named only when there are any, so a transfer that stranded nothing
+      // reads the same as one by an Owner who held no privileged key.
+      ...(revoked.length > 0 ? { revokedKeys: revoked } : {}),
+    })
     .build();
 }
 
