@@ -44,14 +44,9 @@
 // before saying yes. Without a TTY on stdin and without `--yes` the run exits
 // rather than consuming a stray line of input.
 //
-// Every run writes a JSON backup of the state it is about to delete, `--dry-run`
-// included, so the account-to-tenant mapping can be restored. A restore
-// re-creates the upstream tenant under the recorded tenantId, re-writes the
-// profile attributes, and mints fresh access keys from the recorded names,
-// permissions, bucket scopes and expiries — minting new keys is the one step it
-// cannot avoid, because the backup holds no secret material and the SSM values
-// are never read. RAG indexes come back by re-enabling RAG and letting the
-// indexer sync; the vectors themselves are not in the backup.
+// A run that finds something to reset writes a JSON backup of the state it is
+// about to delete, `--dry-run` included. bin/README.md describes what the file
+// holds and how a restore could be built on it.
 //
 // It deliberately does NOT call the orchestrators: upstream tenants, buckets
 // and access keys are left in place, because the reset assumes they are already
@@ -167,16 +162,18 @@ const plan = buildResetPlan({
   ragRows: await scanRagRows(),
 });
 
+if (plan.accounts.length === 0) {
+  console.log(
+    `Nothing to reset: ${plan.notProvisioned} account(s), none provisioned in ${region}.`,
+  );
+  process.exit(0);
+}
+
 writeBackup(plan);
 
 for (const line of formatResetPlan(plan)) console.log(line);
 console.log('');
 console.log(`Backup written to ${backupPath}`);
-
-if (plan.accounts.length === 0) {
-  console.log('Nothing to reset.');
-  process.exit(0);
-}
 
 if (dryRun) {
   console.log('Dry run — nothing was deleted.');
@@ -328,9 +325,10 @@ async function scanRagRows(): Promise<StoredRow[]> {
 /**
  * The plan as a file, written before anything is deleted.
  *
- * It carries the full stored rows rather than a summary, because it is what a
- * restore reads. `wx` refuses an existing file, so a second run with the same
- * `--backup` path stops instead of overwriting the record of the first.
+ * It carries the full stored rows rather than a summary, because that is what
+ * a future restore would read. `wx` refuses an existing file, so a second run
+ * with the same `--backup` path stops instead of overwriting the record of the
+ * first.
  */
 function writeBackup(resetPlan: ResetPlan): void {
   const backup = {

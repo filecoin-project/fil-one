@@ -182,16 +182,19 @@ already tearing down is marked in its plan line and reset like any other:
 clearing the attribute is what lets that teardown finish once the upstream
 tenant is gone.
 
-**Every run writes a backup.** A JSON file, `--dry-run` included, holding the
-stored rows the run is about to delete: the tenant id, the profile attributes
-and their prior values, the `ACCESSKEY#` rows, the RAG rows with their index
-names, and the SSM parameter names. It refuses to overwrite an existing file,
-and `--backup <path>` names it. A restore re-creates the upstream tenant under
-the recorded tenant id, re-writes the profile attributes, and mints fresh access
-keys from the recorded names, permissions, bucket scopes and expiries. Minting
-new keys is the one step it cannot avoid: the file carries no secret material
-and never the SSM values. RAG indexes come back by re-enabling RAG and letting
-the indexer sync.
+**A run with something to reset writes a backup.** A JSON file, `--dry-run`
+included, holding the stored rows the run is about to delete: the tenant id,
+the profile attributes and their prior values, the `ACCESSKEY#` rows, the RAG
+rows with their index names, and the SSM parameter names. It refuses to
+overwrite an existing file, and `--backup <path>` names it. A run that finds no
+account provisioned in the region writes nothing.
+
+There is no restore script yet. The file holds what one would need: re-create
+the upstream tenant under the recorded tenant id, re-write the profile
+attributes, and mint fresh access keys from the recorded names, permissions,
+bucket scopes and expiries. Minting new keys is the one step a restore could not
+avoid, since the file carries no secret material and never the SSM values. RAG
+indexes would come back by re-enabling RAG and letting the indexer sync.
 
 **What the reset leaves in place.** The orchestrators are never called, so
 upstream tenants, buckets and access keys stay where they are — the reset
