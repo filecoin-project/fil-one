@@ -275,10 +275,10 @@ The second gate. The role says whether the caller may make this kind of request;
 Two levels, applied per route:
 
 ```ts
-enum AccessLevel {
-  Read = 'read',
-  Write = 'write',
-}
+const AccessLevel = {
+  Read: 'read',
+  Write: 'write',
+} as const;
 ```
 
 These two levels are about entitlement, not about who the caller is. Role-based distinctions belong in the permission registry above.

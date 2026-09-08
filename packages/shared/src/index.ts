@@ -36,7 +36,7 @@ export {
   getUsageLimits,
   senderAddress,
 } from './constants.js';
-export type { AccessModel, UsageLimits } from './constants.js';
+export type { AccessModel, UsageLimits, StageLike, S3RegionLike } from './constants.js';
 export { formatBytes, formatBytesShort } from './formatBytes.js';
 export { UUID_PATTERN, isUuid } from './uuid.js';
 export type {
