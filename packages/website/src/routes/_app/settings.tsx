@@ -1,10 +1,5 @@
-import { createRoute } from '@tanstack/react-router';
-
 import { Route as appRoute } from '../_app';
-import { SettingsPage } from '../../pages/SettingsPage';
+import { legacyRedirectRoute } from '../../lib/legacy-route-redirect.js';
 
-export const Route = createRoute({
-  path: '/settings',
-  getParentRoute: () => appRoute,
-  component: SettingsPage,
-});
+/** The pre-org-scoping URL. See `dashboard.tsx` for why this stays. */
+export const Route = legacyRedirectRoute({ path: '/settings', getParentRoute: () => appRoute });

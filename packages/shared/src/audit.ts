@@ -37,6 +37,7 @@ import { RAG_KEY_DISPLAY_PREFIX_LENGTH } from './api/rag-api-keys.js';
 export const AUDIT_EVENT_TYPES = [
   'org.created',
   'org.renamed',
+  'org.logo_updated',
   'member.invited',
   'invite.revoked',
   'invite.accepted',
@@ -167,7 +168,18 @@ export type AuditDetailRecord = { [field: string]: AuditDetailValue | undefined 
  */
 export interface AuditEventDetails {
   'org.created': { orgName: string; source?: OrgMembershipSource };
-  'org.renamed': { name: string; previousName?: string };
+  /**
+   * The logo fields are optional and only present when the same `PATCH /org`
+   * call also changed the logo — a rename-only save carries neither. A
+   * logo-only save (the name unchanged) is `org.logo_updated` instead.
+   */
+  'org.renamed': {
+    name: string;
+    previousName?: string;
+    logoUrl?: string;
+    previousLogoUrl?: string;
+  };
+  'org.logo_updated': { logoUrl: string; previousLogoUrl?: string };
   'member.invited': {
     inviteId: string;
     email: string;
@@ -412,6 +424,7 @@ export type StandaloneAuditEvent =
 export const AUDIT_EVENT_TYPE_LABELS: Record<AuditEventType, string> = {
   'org.created': 'Organization created',
   'org.renamed': 'Organization renamed',
+  'org.logo_updated': 'Organization logo updated',
   'member.invited': 'Member invited',
   'invite.revoked': 'Invitation revoked',
   'invite.accepted': 'Invitation accepted',
@@ -436,7 +449,7 @@ export function getAuditEventTypeLabel(type: string): string {
   if (label) return label;
 
   const verb = type.split('.').pop() ?? '';
-  return verb ? verb.charAt(0).toUpperCase() + verb.slice(1).replaceAll('_', ' ') : 'Audit event';
+  return verb ? verb.charAt(0).toUpperCase() + verb.slice(1).replace(/_/g, ' ') : 'Audit event';
 }
 
 /**

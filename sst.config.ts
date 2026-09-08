@@ -264,6 +264,14 @@ export default $config({
     // ── S3 Bucket for user file storage ──────────────────────────────
     const userFilesBucket = new sst.aws.Bucket('UserFilesBucket');
 
+    // ── S3 Bucket for org logos ────────────────────────────────────────
+    // Platform identity data, not tenant data — an org logo is uploaded during
+    // "Create organization," before the org (and therefore any tenant) exists,
+    // so it cannot share presign.ts's tenant-scoped signer or trust boundary.
+    // Public read, the same treatment `me.picture` gets: a plain public URL,
+    // no presigned-GET machinery. See packages/backend/src/lib/org-logo-storage.ts.
+    const orgLogoBucket = new sst.aws.Bucket('OrgLogoBucket', { access: 'public' });
+
     // ── S3 Vectors bucket for RAG embeddings (FIL-548) ───────────────
     // One vector bucket hosts one index per RAG-enabled bucket. The
     // @filone/rag-shared S3VectorsStore reads the bucket name at runtime via
@@ -439,8 +447,11 @@ export default $config({
         name: $interpolate`filone-${$app.stage}-security-headers`,
         securityHeadersConfig: {
           contentSecurityPolicy: {
-            // i1.wp.com: WordPress Photon CDN — Auth0 proxies some avatar images through it
-            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https://lh3.googleusercontent.com https://s.gravatar.com https://cdn.auth0.com https://i1.wp.com https://avatars.githubusercontent.com; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com https://o4507369657991168.ingest.us.sentry.io https://plausible.io https://status.fil.one ${s3GatewayUrls}; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; report-uri ${sentryCspEndpoint}; report-to csp-endpoint`,
+            // i0/i1/i2.wp.com: WordPress Photon CDN, load-balanced across all three
+            // subdomains by hash of the source URL — Auth0 proxies some avatar images
+            // through whichever one it lands on, so all three need to be allowed, not
+            // just the one a single test happened to hit.
+            contentSecurityPolicy: $interpolate`default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https://lh3.googleusercontent.com https://s.gravatar.com https://cdn.auth0.com https://i0.wp.com https://i1.wp.com https://i2.wp.com https://avatars.githubusercontent.com; font-src 'self'; connect-src 'self' https://api.stripe.com https://api.hsforms.com https://o4507369657991168.ingest.us.sentry.io https://plausible.io https://status.fil.one ${s3GatewayUrls}; frame-src https://js.stripe.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; report-uri ${sentryCspEndpoint}; report-to csp-endpoint`,
             override: true,
           },
           frameOptions: {
@@ -1190,6 +1201,17 @@ export default $config({
       'transfer-ownership': {
         extraLink: mgmtRuntimeResources,
         extraEnv: { AUTH0_MGMT_DOMAIN: auth0MgmtDomain },
+      },
+      // Presigns a PUT into OrgLogoBucket; create-org itself never touches S3,
+      // it only persists the logoUrl string this route hands back.
+      'presign-org-logo': {
+        extraLink: [orgLogoBucket],
+      },
+      // Presigns a PUT into OrgLogoBucket too, under an `avatars/` prefix -
+      // see avatar-storage.ts for why this reuses the org logo bucket rather
+      // than standing up one of its own.
+      'presign-avatar': {
+        extraLink: [orgLogoBucket],
       },
 
       // ── Invitations ────────────────────────────────────────────────

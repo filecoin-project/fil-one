@@ -131,14 +131,28 @@ function onlyTheLeaderHasTheProfileRow() {
     .callsFake((input) => (input.ConsistentRead ? { Item: { name: { S: 'Old Corp' } } } : {}));
 }
 
-/** Answer the profile-row read the rename makes to capture the previous name. */
-function orgProfileNamed(name?: string) {
+/**
+ * Answer the profile-row read the rename makes to capture the previous name
+ * and slug. `slug` absent describes an org that predates the slug field —
+ * a rename never assigns one; only the backfill script and org creation do.
+ */
+function orgProfileNamed(name?: string, slug?: string, logoUrl?: string) {
   ddbMock
     .on(GetItemCommand, {
       TableName: 'UserInfoTable',
       Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
     })
-    .resolves(name === undefined ? {} : { Item: { name: { S: name } } });
+    .resolves(
+      name === undefined
+        ? {}
+        : {
+            Item: {
+              name: { S: name },
+              ...(slug ? { slug: { S: slug } } : {}),
+              ...(logoUrl ? { logoUrl: { S: logoUrl } } : {}),
+            },
+          },
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +192,10 @@ describe('PATCH /api/org handler', () => {
       });
 
     ddbMock.on(TransactWriteItemsCommand).resolves({});
-    orgProfileNamed('Old Corp');
+    // Harmless default for any other OrgTable read this suite doesn't care
+    // about (e.g. the membership lookup `callerHolds` stubs more narrowly).
+    ddbMock.on(GetItemCommand, { TableName: 'OrgTable' }).resolves({});
+    orgProfileNamed('Old Corp', 'old-corp');
     callerHolds(OrgRole.Owner);
   });
 
@@ -187,16 +204,20 @@ describe('PATCH /api/org handler', () => {
 
     expect(result).toMatchObject({
       statusCode: 200,
-      body: JSON.stringify({ name: 'New Corp' }),
+      body: JSON.stringify({ name: 'New Corp', slug: 'old-corp' }),
     });
     expect(updateInput()).toMatchObject({
       TableName: 'UserInfoTable',
       Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
-      ExpressionAttributeValues: { ':name': { S: 'New Corp' }, ':previousName': { S: 'Old Corp' } },
+      ExpressionAttributeValues: {
+        ':name': { S: 'New Corp' },
+        ':previousName': { S: 'Old Corp' },
+      },
       // Never conjure an org, and never record a transition that did not
       // happen: the write is conditional on the name the event names.
       ConditionExpression: 'attribute_exists(pk) AND #name = :previousName',
     });
+    expect(updateInput().ExpressionAttributeValues).not.toHaveProperty(':slug');
   });
 
   it('writes nothing when the submitted name is the one the org already has', async () => {
@@ -205,7 +226,10 @@ describe('PATCH /api/org handler', () => {
     // in a log a customer reads.
     const result = await handler(renameEvent({ name: 'Old Corp' }), buildContext());
 
-    expect(result).toMatchObject({ statusCode: 200, body: JSON.stringify({ name: 'Old Corp' }) });
+    expect(result).toMatchObject({
+      statusCode: 200,
+      body: JSON.stringify({ name: 'Old Corp', slug: 'old-corp' }),
+    });
     expect(ddbMock.commandCalls(TransactWriteItemsCommand)).toHaveLength(0);
   });
 
@@ -219,6 +243,8 @@ describe('PATCH /api/org handler', () => {
     await handler(renameEvent({ name: 'New Corp' }), buildContext());
 
     const items = transactItems();
+    // Just the profile update and the audit event — a rename never touches
+    // the slug.
     expect(items).toHaveLength(2);
     expect(items.find((item) => item.Put?.TableName === 'AuditTable')!.Put).toMatchObject({
       TableName: 'AuditTable',
@@ -333,6 +359,154 @@ describe('PATCH /api/org handler', () => {
 
     expect(updateInput()).toMatchObject({
       ExpressionAttributeValues: { ':name': { S: 'Acme-Corp Inc.' } },
+    });
+  });
+
+  describe('the slug never changes', () => {
+    it('touches nothing in OrgTable on a rename', async () => {
+      await handler(renameEvent({ name: 'New Corp' }), buildContext());
+
+      expect(transactItems().some((item) => item.Put?.TableName === 'OrgTable')).toBe(false);
+      expect(transactItems().some((item) => item.Delete?.TableName === 'OrgTable')).toBe(false);
+    });
+
+    it('keeps echoing the same slug the org already had', async () => {
+      orgProfileNamed('Old Corp', 'legacy-slug');
+
+      const result = await handler(renameEvent({ name: 'New Corp' }), buildContext());
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'New Corp', slug: 'legacy-slug' }),
+      });
+    });
+
+    it('omits the slug from the response for an org that predates it', async () => {
+      // Predates the slug backfill: a rename gives it no slug — only the
+      // backfill script and org creation ever assign one.
+      orgProfileNamed('Old Corp', undefined);
+
+      const result = await handler(renameEvent({ name: 'New Corp' }), buildContext());
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'New Corp' }),
+      });
+    });
+  });
+
+  describe('the logo', () => {
+    const LOGO_URL = 'https://OrgLogoBucket.s3.us-east-1.amazonaws.com/logos/logo.png';
+
+    it('updates only the logo when the name is unchanged', async () => {
+      const result = await handler(
+        renameEvent({ name: 'Old Corp', logoUrl: LOGO_URL }),
+        buildContext(),
+      );
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'Old Corp', slug: 'old-corp', logoUrl: LOGO_URL }),
+      });
+      // No slug work: just the profile update and the audit event.
+      expect(transactItems()).toHaveLength(2);
+      expect(updateInput()).toMatchObject({
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `ORG#${MOCK_ORG_ID}` }, sk: { S: 'PROFILE' } },
+        UpdateExpression: 'SET logoUrl = :logoUrl',
+        ConditionExpression: 'attribute_exists(pk)',
+        ExpressionAttributeValues: { ':logoUrl': { S: LOGO_URL } },
+      });
+      expect(auditedEvent()).toMatchObject({
+        type: 'org.logo_updated',
+        orgId: MOCK_ORG_ID,
+        subject: `org:${MOCK_ORG_ID}`,
+        details: { logoUrl: LOGO_URL },
+      });
+    });
+
+    it("carries the org's existing slug through a logo-only save", async () => {
+      orgProfileNamed('Old Corp', 'old-corp');
+
+      const result = await handler(
+        renameEvent({ name: 'Old Corp', logoUrl: LOGO_URL }),
+        buildContext(),
+      );
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'Old Corp', slug: 'old-corp', logoUrl: LOGO_URL }),
+      });
+    });
+
+    it('records the previous logo when replacing one that already existed', async () => {
+      orgProfileNamed('Old Corp', undefined, 'https://cdn.example.com/old.png');
+
+      await handler(renameEvent({ name: 'Old Corp', logoUrl: LOGO_URL }), buildContext());
+
+      expect(auditedEvent().details).toStrictEqual({
+        logoUrl: LOGO_URL,
+        previousLogoUrl: 'https://cdn.example.com/old.png',
+      });
+    });
+
+    it('writes nothing when the submitted logo is the one already stored', async () => {
+      orgProfileNamed('Old Corp', undefined, LOGO_URL);
+
+      const result = await handler(
+        renameEvent({ name: 'Old Corp', logoUrl: LOGO_URL }),
+        buildContext(),
+      );
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'Old Corp', logoUrl: LOGO_URL }),
+      });
+      expect(ddbMock.commandCalls(TransactWriteItemsCommand)).toHaveLength(0);
+    });
+
+    it('carries the logo into the rename write when both change together', async () => {
+      const result = await handler(
+        renameEvent({ name: 'New Corp', logoUrl: LOGO_URL }),
+        buildContext(),
+      );
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'New Corp', slug: 'old-corp', logoUrl: LOGO_URL }),
+      });
+      expect(updateInput()).toMatchObject({
+        UpdateExpression: 'SET #name = :name, nameConfirmed = :confirmed, logoUrl = :logoUrl',
+        ExpressionAttributeValues: { ':logoUrl': { S: LOGO_URL } },
+      });
+      expect(auditedEvent()).toMatchObject({
+        type: 'org.renamed',
+        details: { name: 'New Corp', previousName: 'Old Corp', logoUrl: LOGO_URL },
+      });
+    });
+
+    it('carries the existing logo over when only the name changes', async () => {
+      orgProfileNamed('Old Corp', undefined, LOGO_URL);
+
+      const result = await handler(renameEvent({ name: 'New Corp' }), buildContext());
+
+      expect(result).toMatchObject({
+        statusCode: 200,
+        body: JSON.stringify({ name: 'New Corp', logoUrl: LOGO_URL }),
+      });
+      // Untouched by this save, so the rename's own write never sets it again.
+      expect(updateInput().UpdateExpression).not.toContain('logoUrl');
+      expect(auditedEvent().details).toStrictEqual({ name: 'New Corp', previousName: 'Old Corp' });
+    });
+
+    it('rejects a logo URL that did not come from the upload endpoint', async () => {
+      const result = await handler(
+        renameEvent({ name: 'Old Corp', logoUrl: 'https://attacker.example/tracker.png' }),
+        buildContext(),
+      );
+
+      expect(result).toMatchObject({ statusCode: 400 });
+      expect(ddbMock.commandCalls(TransactWriteItemsCommand)).toHaveLength(0);
     });
   });
 

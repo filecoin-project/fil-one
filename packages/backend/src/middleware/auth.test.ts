@@ -791,7 +791,11 @@ describe('authMiddleware', () => {
 
       const transactCalls = ddbMock.commandCalls(TransactWriteItemsCommand);
       expect(transactCalls).toHaveLength(1);
-      expect(transactCalls[0].args[0].input.TransactItems).toStrictEqual([
+      const items = transactCalls[0].args[0].input.TransactItems!;
+      // Slugs are random, not derived from the org name — read back whatever
+      // `reserveOrgSlug` picked, then assert every row agrees on it.
+      const slug = items[2]!.Put!.Item!.slug!.S;
+      expect(items).toStrictEqual([
         // SUB → identity mapping
         {
           Put: {
@@ -830,6 +834,8 @@ describe('authMiddleware', () => {
               pk: { S: `ORG#${MOCK_ORG_ID}` },
               sk: { S: 'PROFILE' },
               name: { S: 'Alice Org' },
+              slug: { S: slug },
+              nameConfirmed: { BOOL: false },
               auroraSetupStatus: { S: OrgSetupStatus.FILONE_ORG_CREATED },
               createdBy: { S: MOCK_USER_ID },
               createdAt: { S: expect.any(String) },
@@ -872,9 +878,22 @@ describe('authMiddleware', () => {
             },
           },
         },
-        // The org.created event, seventh item and the one after the six rows an
-        // account is: an org cannot come into existence unrecorded, because the
-        // rows that create it and the row that records it are the same
+        // The org's slug reservation — the claim row `reserveOrgSlug` plans,
+        // landing in the same transaction as the rows it names.
+        {
+          Put: {
+            TableName: 'OrgTable',
+            Item: {
+              pk: { S: `SLUG#${slug}` },
+              sk: { S: 'LOOKUP' },
+              orgId: { S: MOCK_ORG_ID },
+            },
+            ConditionExpression: 'attribute_not_exists(pk)',
+          },
+        },
+        // The org.created event, the last item and the one after the seven rows
+        // an account is: an org cannot come into existence unrecorded, because
+        // the rows that create it and the row that records it are the same
         // transaction.
         {
           Put: {
@@ -947,7 +966,7 @@ describe('authMiddleware', () => {
             message: 'cancelled',
             $metadata: {},
             CancellationReasons: [
-              ...Array.from({ length: 6 }, () => ({ Code: 'None' })),
+              ...Array.from({ length: 7 }, () => ({ Code: 'None' })),
               { Code: 'TransactionConflict' },
             ],
           }),
@@ -971,7 +990,7 @@ describe('authMiddleware', () => {
       const calls = ddbMock.commandCalls(TransactWriteItemsCommand);
       expect(calls).toHaveLength(2);
       expect(hasAuditItem(calls[1].args[0].input.TransactItems)).toBe(false);
-      expect(calls[1].args[0].input.TransactItems).toHaveLength(6);
+      expect(calls[1].args[0].input.TransactItems).toHaveLength(7);
     });
 
     it('signs an existing user in without claiming an entitlement', async () => {

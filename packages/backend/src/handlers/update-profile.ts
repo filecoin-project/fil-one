@@ -9,6 +9,7 @@ import * as psl from 'psl';
 import { Resource } from 'sst';
 import { getDynamoClient } from '../lib/ddb-client.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
+import { AVATAR_KEY_PREFIX, isOwnedAssetUrl } from '../lib/avatar-storage.js';
 import {
   updateAuth0User,
   sendVerificationEmail,
@@ -32,7 +33,8 @@ function isDisposableDomain(domain: string): boolean {
 }
 
 /**
- * PATCH /api/me/profile — the caller's own name and email, and nothing else.
+ * PATCH /api/me/profile — the caller's own name, email, and avatar, and
+ * nothing else.
  *
  * A `self` route in the manifest: an authenticated session is the whole
  * requirement. No role gates it, and neither does membership — a user whose
@@ -76,7 +78,24 @@ async function baseHandler(event: AuthenticatedEvent): Promise<APIGatewayProxyRe
     response.email = parsed.data.email;
   }
 
-  if (response.name !== undefined || response.email !== undefined) {
+  if (parsed.data.pictureUrl !== undefined) {
+    if (!isOwnedAssetUrl(parsed.data.pictureUrl, AVATAR_KEY_PREFIX)) {
+      return new ResponseBuilder()
+        .status(400)
+        .body<ErrorResponse>({
+          message: 'Picture must be uploaded through the avatar upload endpoint.',
+        })
+        .build();
+    }
+    await updateAuth0User(sub, { picture: parsed.data.pictureUrl });
+    response.picture = parsed.data.pictureUrl;
+  }
+
+  if (
+    response.name !== undefined ||
+    response.email !== undefined ||
+    response.picture !== undefined
+  ) {
     requestTokenRefresh(event);
   }
 

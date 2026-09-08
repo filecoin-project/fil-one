@@ -1,10 +1,8 @@
-import { createRoute } from '@tanstack/react-router';
-
 import { Route as appRoute } from '../_app';
-import { BucketIntelligencePage } from '../../pages/BucketIntelligencePage';
+import { legacyRedirectRoute } from '../../lib/legacy-route-redirect.js';
 
-export const Route = createRoute({
+/** The pre-org-scoping URL. See `dashboard.tsx` for why this stays. */
+export const Route = legacyRedirectRoute({
   path: '/bucket-intelligence',
   getParentRoute: () => appRoute,
-  component: BucketIntelligencePage,
 });

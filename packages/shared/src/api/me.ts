@@ -6,12 +6,22 @@ import type { Permission } from '../permissions.js';
 export interface OrgMembershipSummary {
   orgId: string;
   orgName: string;
+  /** URL-safe identifier for this org, unique across the platform — what routes are scoped by. */
+  slug: string;
   role: OrgRole;
+  /** Uploaded logo, if any. Absent falls back to a generated monogram, same as `MeResponse.picture` does for the user. */
+  logoUrl?: string;
+  /** When this membership began. Absent for a row that predates the field. */
+  joinedAt?: string;
 }
 
 export interface MeResponse {
   orgId: string;
   orgName: string;
+  /** URL-safe identifier for the active org — what routes are scoped by. */
+  slug: string;
+  /** The active org's uploaded logo, if any. Falls back to a generated monogram. */
+  logoUrl?: string;
   emailVerified: boolean;
   email?: string;
   name?: string;
@@ -38,6 +48,18 @@ export interface MeResponse {
   permissions?: readonly Permission[];
   /** Every org the caller belongs to, for the org switcher. */
   memberships?: OrgMembershipSummary[];
+  /**
+   * Whether anyone has ever named this organization, as opposed to accepting the
+   * name derived for them at signup. False only for an organization created
+   * after this field shipped and never renamed since, which is what sends a new
+   * account through the naming step.
+   *
+   * Absent on the stored row reads as true, so every organization that predates
+   * the field is left alone rather than sent back through onboarding. Optional
+   * here for the same reason: a payload that omits it is a confirmed org, and
+   * only an explicit `false` sends the caller through the naming step.
+   */
+  nameConfirmed?: boolean;
   /**
    * Whether the organizations beta is switched on for this caller — their own
    * allowlist row, or {@link MeResponse.orgId}'s. Computed server-side like
@@ -84,8 +106,10 @@ export const UpdateProfileSchema = z
       .max(PROFILE_NAME_MAX_LENGTH, `Name must be at most ${PROFILE_NAME_MAX_LENGTH} characters`)
       .optional(),
     email: z.string().trim().email('Please provide a valid email address').optional(),
+    /** Must already point at a file `POST /api/me/avatar-upload-url` put there. */
+    pictureUrl: z.string().url().optional(),
   })
-  .refine((data) => data.name || data.email, {
+  .refine((data) => data.name || data.email || data.pictureUrl, {
     message: 'At least one field is required.',
   });
 
@@ -94,6 +118,30 @@ export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>;
 export interface UpdateProfileResponse {
   name?: string;
   email?: string;
+  /** Named to match {@link MeResponse.picture}, which this patches once saved. */
+  picture?: string;
+}
+
+/** Accepted image types for an avatar upload, and the size ceiling for one. */
+export const AVATAR_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * `POST /api/me/avatar-upload-url` — a place to put a personal avatar before
+ * `PATCH /api/me/profile` persists it, same shape as the org logo's own
+ * presign step (`PresignOrgLogoSchema` in `org.ts`).
+ */
+export const PresignAvatarSchema = z.object({
+  contentType: z.enum(AVATAR_CONTENT_TYPES),
+});
+
+export type PresignAvatarRequest = z.infer<typeof PresignAvatarSchema>;
+
+export interface PresignAvatarResponse {
+  /** Where the client PUTs the file. */
+  uploadUrl: string;
+  /** The public URL to read it back from afterward, and what gets sent to `UpdateProfileRequest.pictureUrl`. */
+  pictureUrl: string;
 }
 
 export interface RegenerateRecoveryCodeResponse {

@@ -3,7 +3,9 @@ import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { ApiErrorCode, OrgRole, canManageTargetRole } from '@filone/shared';
 import type { ErrorResponse, OrgRole as Role } from '@filone/shared';
-import { AuditSubjects, auditEvent, commitAudited, userActor } from '../lib/audit.js';
+import { AuditSubjects, auditEvent, auditPut, commitAudited, userActor } from '../lib/audit.js';
+import { prepareFloorOrg } from '../lib/account-creation.js';
+import type { FloorOrgPreparation } from '../lib/account-creation.js';
 import {
   normalizeInviteEmail,
   pendingInvitationsForRemoval,
@@ -16,31 +18,38 @@ import {
   membershipDeleteItems,
   ownerCountItem,
 } from '../lib/membership-changes.js';
-import { readOwnerCount, resolveMembership } from '../lib/org-membership.js';
-import { readUserProfile } from '../lib/user-profile.js';
+import { listMemberships, readOwnerCount, resolveMembership } from '../lib/org-membership.js';
+import { readUserProfile, readUserSub } from '../lib/user-profile.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo, getVerifiedEmail } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { authorize } from '../middleware/authorize.js';
+import { requireOrgMembershipMiddleware, requirePermission } from '../middleware/authorize.js';
 import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 /**
- * DELETE /api/org/members/{userId} — take a member out of the organization.
+ * DELETE /api/org/members/{userId} — take a member out of the organization,
+ * or leave it yourself.
  *
- * Removal counts against the same ceiling as every other verb: an Admin reaches
- * Admin and below, and removing an Owner is `owners.manage`, exactly like
- * demoting one. Otherwise deletion would reach what demotion forbids.
+ * Two different gates behind one route, decided in the handler because the
+ * requirement depends on whether the path's `userId` names the caller:
  *
- * Self-removal goes through the same rules rather than around them, which has a
- * consequence worth stating: an Owner or Admin can remove themselves — and the
- * last Owner still cannot, because their own removal carries the guarded
- * decrement like anyone else's — while a Member or ReadOnly cannot, since
- * `members.manage` is what this route costs and their roles do not hold it.
- * "Leave this organization" for those two is a capability the matrix does not
- * grant in M1; it needs a product decision (a `members.leave` permission, or a
- * self-service carve-out) rather than a quiet exception here.
+ * - **Removing someone else** costs `members.manage`, capped at the same
+ *   ceiling as every other verb — an Admin reaches Admin and below, and
+ *   removing an Owner is `owners.manage`, exactly like demoting one.
+ *   Otherwise deletion would reach what demotion forbids.
+ * - **Leaving** costs nothing beyond being a member: every role, including
+ *   Member and ReadOnly (who hold no `members.manage`), may remove
+ *   themselves. This is the self-service carve-out the route's own history
+ *   flagged as a needed product decision rather than a quiet exception — a
+ *   `members.leave` permission would only ever be granted to its own holder,
+ *   so a carve-out states that directly instead of adding an entry to the
+ *   matrix nothing else reads.
+ *
+ * Either way, the last Owner still cannot leave or be removed: that guard
+ * lives in the `ownerCount` decrement's own condition below, unconditional on
+ * who the caller is.
  *
  * One transaction: both membership rows, the `ownerCount` decrement when the
  * member was an Owner, the invitations the removal retires, and the event.
@@ -64,29 +73,61 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
  * Keys are untouched in M1. A departing member's access keys keep working until
  * somebody revokes them, which the console names in the confirmation dialog; the
  * revoke-by-default flow with per-key review is FIL-1021.
+ *
+ * A removal that would leave the target account with zero memberships instead
+ * gives it a floor org in the same transaction ({@link prepareFloorOrg}):
+ * every account needs somewhere to log in to, and lazily creating one only
+ * when it would otherwise have none is cheaper than every invited account
+ * carrying a personal org it may never use. Skipped for an account whose
+ * profile carries no `sub` — nothing to repoint the identity row of — which
+ * is logged loudly rather than blocking the removal itself.
  */
 export async function baseHandler(
   event: AuthenticatedEvent,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const targetUserId = event.pathParameters?.userId;
-  if (!targetUserId) return badRequestResponse();
-
   const { orgId, userId, membership } = getUserInfo(event);
   const actorEmail = getVerifiedEmail(event);
+
+  // Leaving costs nothing beyond being a member — the chain's
+  // `requireOrgMembershipMiddleware()` already confirmed that. Removing
+  // someone else is `members.manage`, checked ahead of the path param itself
+  // so a caller who could never do this either way is refused the same
+  // permission error a malformed request from them always got, not a 400
+  // that leaks whether the path happened to be well-formed.
+  if (targetUserId !== userId) {
+    const denied = requirePermission(event, 'members.manage');
+    if (denied) return denied;
+  }
+
+  if (!targetUserId) return badRequestResponse();
 
   const target = await resolveMembership(orgId, targetUserId);
   if (!target) return notAMemberResponse();
 
-  // `authorize('members.manage')` refused every caller without a membership row.
-  if (!canManageTargetRole(membership!.role, target.role)) {
-    return beyondCeilingResponse(target.role);
+  if (targetUserId !== userId) {
+    if (!canManageTargetRole(membership!.role, target.role)) {
+      return beyondCeilingResponse(target.role);
+    }
   }
 
   const wasOwner = target.role === OrgRole.Owner;
-  const doomed = await pendingInvitationsForRemoval(orgId, {
-    userId: targetUserId,
-    emailNorm: await removedMemberAddress(targetUserId),
-  });
+  const targetProfile = await readUserProfile(targetUserId);
+  // Neither depends on the other's result, only on the profile just read, so
+  // there is no reason to pay for their DynamoDB round-trips one after the
+  // other.
+  const [doomed, floorOrg] = await Promise.all([
+    pendingInvitationsForRemoval(orgId, {
+      userId: targetUserId,
+      emailNorm: removedMemberAddress(targetUserId, targetProfile?.email),
+    }),
+    prepareFloorOrgIfLastMembership({
+      targetUserId,
+      orgId,
+      name: targetProfile?.name,
+      email: targetProfile?.email,
+    }),
+  ]);
   const { now, later } = planRevocations(doomed, wasOwner ? 3 : 2);
 
   try {
@@ -95,6 +136,7 @@ export async function baseHandler(
         ...membershipDeleteItems({ orgId, userId: targetUserId, fromRole: target.role }),
         ...(wasOwner ? [ownerCountItem(orgId, 'decrement')] : []),
         ...now.flatMap((invitation) => retireInvitationItems(invitation, 'revoked')),
+        ...(floorOrg ? [...floorOrg.items, auditPut(floorOrg.event)] : []),
       ],
       event: auditEvent({
         type: 'member.removed',
@@ -113,6 +155,7 @@ export async function baseHandler(
       targetUserId,
       wasOwner,
       revocations: now.length,
+      floorOrg: floorOrg !== undefined,
     });
   }
 
@@ -133,8 +176,7 @@ export async function baseHandler(
  * belongs to stays live until it expires, and an operator reading this line is
  * the only person who can revoke it by hand.
  */
-async function removedMemberAddress(userId: string): Promise<string | undefined> {
-  const email = (await readUserProfile(userId))?.email;
+function removedMemberAddress(userId: string, email: string | undefined): string | undefined {
   if (!email) {
     console.error(
       '[remove-member] No address for the removed member — invitations to them stay live',
@@ -145,6 +187,42 @@ async function removedMemberAddress(userId: string): Promise<string | undefined>
   return normalizeInviteEmail(email);
 }
 
+/**
+ * A floor org for the removal to create alongside itself, or undefined when
+ * the target keeps somewhere else to log in — or when it doesn't, but nothing
+ * here can name the row that needs repointing.
+ *
+ * `listMemberships` is read fresh rather than reused from anywhere else: it is
+ * the strongly-consistent count of every org this account belongs to right
+ * now, and the removal about to happen is not among them yet, so a count of
+ * one means this org is the only one — the removal would take it to zero.
+ */
+async function prepareFloorOrgIfLastMembership({
+  targetUserId,
+  orgId,
+  name,
+  email,
+}: {
+  targetUserId: string;
+  orgId: string;
+  name?: string;
+  email?: string;
+}): Promise<FloorOrgPreparation | undefined> {
+  const memberships = await listMemberships(targetUserId);
+  if (memberships.length > 1) return undefined;
+
+  const sub = await readUserSub(targetUserId, { consistentRead: true });
+  if (!sub) {
+    console.error(
+      '[remove-member] Removed member has no sub on their profile — leaving them without an org',
+      { targetUserId, orgId },
+    );
+    return undefined;
+  }
+
+  return prepareFloorOrg({ userId: targetUserId, sub, leavingOrgId: orgId, name, email });
+}
+
 async function removalFailureResponse(
   err: unknown,
   {
@@ -152,15 +230,28 @@ async function removalFailureResponse(
     targetUserId,
     wasOwner,
     revocations,
-  }: { orgId: string; targetUserId: string; wasOwner: boolean; revocations: number },
+    floorOrg,
+  }: {
+    orgId: string;
+    targetUserId: string;
+    wasOwner: boolean;
+    revocations: number;
+    floorOrg: boolean;
+  },
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  // `prepareFloorOrg` returns seven items, plus the audit Put appended
+  // alongside them above (eight total); every one of their conditions failing
+  // means the same thing to the caller (try the removal again), so they share
+  // one label rather than naming each row.
   const failed = cancelledLabels(err, [
     'membership',
     'inverse',
     ...(wasOwner ? ['ownerCount'] : []),
     ...Array.from({ length: revocations * 2 }, () => 'invitation'),
+    ...(floorOrg ? Array.from({ length: 8 }, () => 'floorOrg') : []),
   ]);
   if (failed.length === 0) throw err;
+  if (failed.includes('floorOrg')) return floorOrgRaceResponse();
 
   // The decrement's own condition, which is the whole last-Owner invariant:
   // the org's only Owner cannot be removed, including by themselves. Unless
@@ -253,9 +344,26 @@ function invitationRaceResponse(): APIGatewayProxyStructuredResultV2 {
     .build();
 }
 
+/**
+ * The floor org this removal prepared could not be created — most likely the
+ * repoint's condition lost a race with something else that changed the
+ * target's home org in the same window. Retrying re-reads the membership
+ * count and prepares a fresh org, rather than resending stale items.
+ */
+function floorOrgRaceResponse(): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(409)
+    .body<ErrorResponse>({
+      message: 'That member’s account changed while this was in flight — try again.',
+    })
+    .build();
+}
+
 export const handler = middy(baseHandler)
   .use(httpHeaderNormalizer())
   .use(authMiddleware())
-  .use(authorize('members.manage'))
+  // Membership only at the gate — the handler decides whether this request
+  // also needs `members.manage`, since a self-targeted one does not.
+  .use(requireOrgMembershipMiddleware())
   .use(csrfMiddleware())
   .use(errorHandlerMiddleware());

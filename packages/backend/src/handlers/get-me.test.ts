@@ -48,6 +48,7 @@ import {
   stubAbsentMembershipRead,
   stubMembershipList,
   stubMembershipRead,
+  STUB_JOINED_AT,
 } from '../test/lambda-test-utilities.js';
 
 // ---------------------------------------------------------------------------
@@ -90,7 +91,9 @@ function ownerTail(orgName: string) {
     userId: MOCK_USER_ID,
     role: OrgRole.Owner,
     permissions: [...ROLE_PERMISSIONS[OrgRole.Owner]],
-    memberships: [{ orgId: MOCK_ORG_ID, orgName, role: OrgRole.Owner }],
+    memberships: [
+      { orgId: MOCK_ORG_ID, orgName, slug: '', role: OrgRole.Owner, joinedAt: STUB_JOINED_AT },
+    ],
     orgsBeta: false,
   };
 }
@@ -182,6 +185,8 @@ describe('GET /api/me handler', () => {
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
+        slug: '',
+        nameConfirmed: true,
         emailVerified: true,
         email: MOCK_EMAIL,
         mfaEnrollments: [],
@@ -190,6 +195,26 @@ describe('GET /api/me handler', () => {
         ...ownerTail('Example Corp'),
       }),
     });
+  });
+
+  it('reads the active org profile consistently, so a just-created org is never named empty', async () => {
+    profileResolves();
+
+    await handler(authenticatedEvent(), buildContext());
+
+    // Other code paths (e.g. the deletion fence) read this same row without
+    // consistency, on purpose — so this checks that at least one read of it
+    // was consistent, the one `/me` itself makes to name the org, rather than
+    // asserting every read of the key was.
+    const profileReads = ddbMock
+      .commandCalls(GetItemCommand)
+      .filter(
+        (call) =>
+          call.args[0].input.TableName === 'UserInfoTable' &&
+          call.args[0].input.Key?.pk?.S === `ORG#${MOCK_ORG_ID}` &&
+          call.args[0].input.Key?.sk?.S === 'PROFILE',
+      );
+    expect(profileReads.some((call) => call.args[0].input.ConsistentRead === true)).toBe(true);
   });
 
   it('returns 200 with emailVerified false for unverified users (verified-email gate opt-out)', async () => {
@@ -205,6 +230,8 @@ describe('GET /api/me handler', () => {
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
+        slug: '',
+        nameConfirmed: true,
         emailVerified: false,
         email: MOCK_EMAIL,
         mfaEnrollments: [],
@@ -230,6 +257,8 @@ describe('GET /api/me handler', () => {
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
         orgName: '',
+        slug: '',
+        nameConfirmed: true,
         emailVerified: true,
         email: MOCK_EMAIL,
         mfaEnrollments: [],
@@ -273,6 +302,8 @@ describe('GET /api/me handler', () => {
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
+        slug: '',
+        nameConfirmed: true,
         emailVerified: true,
         email: MOCK_EMAIL,
         mfaEnrollments: [
@@ -310,6 +341,8 @@ describe('GET /api/me handler', () => {
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
+        slug: '',
+        nameConfirmed: true,
         emailVerified: true,
         email: MOCK_EMAIL,
         mfaEnrollments: [],
@@ -357,6 +390,8 @@ describe('GET /api/me handler', () => {
       body: JSON.stringify({
         orgId: MOCK_ORG_ID,
         orgName: 'Example Corp',
+        slug: '',
+        nameConfirmed: true,
         emailVerified: true,
         email: MOCK_EMAIL,
         mfaEnrollments: [],
@@ -433,7 +468,13 @@ describe('GET /api/me handler', () => {
         userId: string;
         role: OrgRole;
         permissions: string[];
-        memberships: Array<{ orgId: string; orgName: string; role: OrgRole }>;
+        memberships: Array<{
+          orgId: string;
+          orgName: string;
+          slug: string;
+          role: OrgRole;
+          joinedAt?: string;
+        }>;
       };
     }
 
@@ -455,7 +496,13 @@ describe('GET /api/me handler', () => {
       expect(body.role).toBe(OrgRole.ReadOnly);
       expect(body.permissions).toStrictEqual([...ROLE_PERMISSIONS[OrgRole.ReadOnly]]);
       expect(body.memberships).toStrictEqual([
-        { orgId: MOCK_ORG_ID, orgName: 'Example Corp', role: OrgRole.ReadOnly },
+        {
+          orgId: MOCK_ORG_ID,
+          orgName: 'Example Corp',
+          slug: '',
+          role: OrgRole.ReadOnly,
+          joinedAt: STUB_JOINED_AT,
+        },
       ]);
     });
 
@@ -474,8 +521,20 @@ describe('GET /api/me handler', () => {
       const body = parseBody(await handler(authenticatedEvent(), buildContext()));
 
       expect(body.memberships).toStrictEqual([
-        { orgId: MOCK_ORG_ID, orgName: 'Example Corp', role: OrgRole.Owner },
-        { orgId: secondOrgId, orgName: 'Second Corp', role: OrgRole.Member },
+        {
+          orgId: MOCK_ORG_ID,
+          orgName: 'Example Corp',
+          slug: '',
+          role: OrgRole.Owner,
+          joinedAt: STUB_JOINED_AT,
+        },
+        {
+          orgId: secondOrgId,
+          orgName: 'Second Corp',
+          slug: '',
+          role: OrgRole.Member,
+          joinedAt: STUB_JOINED_AT,
+        },
       ]);
     });
 
@@ -516,8 +575,20 @@ describe('GET /api/me handler', () => {
 
       expect((result as { statusCode: number }).statusCode).toBe(200);
       expect(parseBody(result).memberships).toStrictEqual([
-        { orgId: MOCK_ORG_ID, orgName: 'Example Corp', role: OrgRole.Owner },
-        { orgId: secondOrgId, orgName: '', role: OrgRole.Member },
+        {
+          orgId: MOCK_ORG_ID,
+          orgName: 'Example Corp',
+          slug: '',
+          role: OrgRole.Owner,
+          joinedAt: STUB_JOINED_AT,
+        },
+        {
+          orgId: secondOrgId,
+          orgName: '',
+          slug: '',
+          role: OrgRole.Member,
+          joinedAt: STUB_JOINED_AT,
+        },
       ]);
       consoleError.mockRestore();
     });

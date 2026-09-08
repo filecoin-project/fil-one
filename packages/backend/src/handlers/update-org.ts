@@ -10,6 +10,7 @@ import { getDynamoClient } from '../lib/ddb-client.js';
 import { parseJsonBody } from '../lib/parse-json-body.js';
 import { ResponseBuilder } from '../lib/response-builder.js';
 import { SanitizedOrgNameSchema } from '../lib/org-name-validation.js';
+import { ORG_LOGO_KEY_PREFIX, isOwnedAssetUrl } from '../lib/org-logo-storage.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo, getVerifiedEmail } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -27,16 +28,25 @@ import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 const UpdateOrgBodySchema = UpdateOrgSchema.extend({ name: SanitizedOrgNameSchema });
 
 /**
- * PATCH /api/org — rename the organization.
+ * PATCH /api/org — rename the organization, and optionally its logo.
  *
- * Its own route because its requirement is its own: renaming an org is
+ * Its own route because its requirement is its own: changing either is
  * `org.rename`, held by Owner and Admin, while the profile fields it used to
  * share a body with are things any member changes about themselves. One route
  * carrying both would have to choose between locking a ReadOnly member out of
  * their own name and letting them rename the company.
  *
- * Rename is the only verb here. Ownership transfer and deletion are their own
- * permissions and their own routes when they ship.
+ * `logoUrl`, when present, must already be a URL `POST /api/org/logo-upload-url`
+ * returned — this handler only ever persists the string, same as `create-org`.
+ * It rides the rename's own transaction when the name changed too, or a
+ * lighter transaction of its own when it is the only thing that changed.
+ *
+ * Renaming never touches the org's slug: slugs are random and permanent (see
+ * `org-slug.ts`), reserved once at creation, so nothing here needs to
+ * re-derive or release one.
+ *
+ * Rename and logo are the only two verbs here. Ownership transfer and
+ * deletion are their own permissions and their own routes when they ship.
  */
 export async function baseHandler(
   event: AuthenticatedEvent,
@@ -48,16 +58,37 @@ export async function baseHandler(
 
   const parsed = parseJsonBody(event.body, UpdateOrgBodySchema);
   if ('error' in parsed) return parsed.error;
-  const { name } = parsed.data;
+  const { name, logoUrl } = parsed.data;
+
+  const rejected = foreignLogoUrlResponse(logoUrl);
+  if (rejected) return rejected;
 
   const profileKey = orgProfileKey(orgId);
-  const previousName = await readOrgName(profileKey);
+  const previous = await readOrgProfile(profileKey);
 
-  // Submitting the form unchanged is what the Settings page does on every save,
-  // and there is nothing to record: an event saying an org was renamed from
-  // "Acme" to "Acme" is noise in the log a customer reads.
-  if (previousName === name) {
-    return new ResponseBuilder().status(200).body<UpdateOrgResponse>({ name }).build();
+  const nameChanged = previous.name !== name;
+  // Absent means "the avatar picker was untouched", not "clear the logo" —
+  // there is no way to remove one through this endpoint yet.
+  const logoChanged = logoUrl !== undefined && logoUrl !== previous.logoUrl;
+
+  // Submitting the form unchanged is what the Settings page does on every
+  // save, and there is nothing to record: an event saying an org was renamed
+  // from "Acme" to "Acme" is noise in the log a customer reads.
+  if (!nameChanged && !logoChanged) return unchangedOrgResponse(name, previous);
+
+  const actor = userActor({ userId, email });
+
+  // Logo-only save: a lighter transaction of its own, single-purpose.
+  if (!nameChanged) {
+    return await saveLogoOnly({
+      profileKey,
+      orgId,
+      name,
+      slug: previous.slug,
+      logoUrl: logoUrl as string,
+      previousLogoUrl: previous.logoUrl,
+      actor,
+    });
   }
 
   try {
@@ -65,15 +96,25 @@ export async function baseHandler(
       key: profileKey,
       orgId,
       name,
-      previousName,
-      actor: userActor({ userId, email }),
+      previousName: previous.name,
+      logoUrl: logoChanged ? logoUrl : undefined,
+      previousLogoUrl: previous.logoUrl,
+      actor,
     });
   } catch (err) {
     if (renameConditionFailed(err)) return await renameConflictResponse(profileKey);
     throw err;
   }
 
-  return new ResponseBuilder().status(200).body<UpdateOrgResponse>({ name }).build();
+  const responseLogoUrl = logoChanged ? logoUrl : previous.logoUrl;
+  return new ResponseBuilder()
+    .status(200)
+    .body<UpdateOrgResponse>({
+      name,
+      ...(previous.slug ? { slug: previous.slug } : {}),
+      ...(responseLogoUrl ? { logoUrl: responseLogoUrl } : {}),
+    })
+    .build();
 }
 
 type OrgProfileKey = Record<'pk' | 'sk', { S: string }>;
@@ -82,26 +123,59 @@ function orgProfileKey(orgId: string): OrgProfileKey {
   return { pk: { S: `ORG#${orgId}` }, sk: { S: 'PROFILE' } };
 }
 
+/** The 400 for a `logoUrl` that did not come from our own upload endpoint, or nothing. */
+function foreignLogoUrlResponse(
+  logoUrl: string | undefined,
+): APIGatewayProxyStructuredResultV2 | undefined {
+  if (logoUrl === undefined || isOwnedAssetUrl(logoUrl, ORG_LOGO_KEY_PREFIX)) return undefined;
+  return new ResponseBuilder()
+    .status(400)
+    .body<ErrorResponse>({ message: 'Logo must be uploaded through the logo upload endpoint.' })
+    .build();
+}
+
+/** Nothing changed: the same 200 body a save always answers with, built from what's stored. */
+function unchangedOrgResponse(
+  name: string,
+  previous: { slug?: string; logoUrl?: string },
+): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(200)
+    .body<UpdateOrgResponse>({
+      name,
+      ...(previous.slug ? { slug: previous.slug } : {}),
+      ...(previous.logoUrl ? { logoUrl: previous.logoUrl } : {}),
+    })
+    .build();
+}
+
 /**
- * The org's current name, or undefined when the row carries none.
+ * The org's current name, slug, and logo, each possibly undefined when the
+ * row carries none.
  *
  * A read rather than `UPDATED_OLD`, because the event needs the previous name
  * and an update returns nothing for an attribute that was absent: every org
  * created before naming shipped has no `name` on its profile row, so the event
  * would record a rename with no predecessor. Consistent, because the value is
- * what the write then conditions on.
+ * what the write then conditions on. `slug` rides the same read purely to echo
+ * it back in the response — a rename never writes it, since the slug never
+ * changes. `logoUrl` rides along too, so both a rename and a logo-only save
+ * (`!nameChanged` below) can tell whether their respective field actually
+ * changed without a second round trip.
  */
-async function readOrgName(key: OrgProfileKey): Promise<string | undefined> {
+async function readOrgProfile(
+  key: OrgProfileKey,
+): Promise<{ name?: string; slug?: string; logoUrl?: string }> {
   const { Item } = await getDynamoClient().send(
     new GetItemCommand({
       TableName: Resource.UserInfoTable.name,
       Key: key,
-      ProjectionExpression: '#name',
+      ProjectionExpression: '#name, slug, logoUrl',
       ExpressionAttributeNames: { '#name': 'name' },
       ConsistentRead: true,
     }),
   );
-  return Item?.name?.S;
+  return { name: Item?.name?.S, slug: Item?.slug?.S, logoUrl: Item?.logoUrl?.S };
 }
 
 /**
@@ -159,12 +233,13 @@ async function renameConflictResponse(
 }
 
 /**
- * Write the new name and the event that records it, in one transaction.
+ * Write the new name (and, when it changed too, the logo) and the event that
+ * records it, in one transaction. Never touches the slug — see `org-slug.ts`.
  *
- * The write is conditional on the name the event names, not merely on the row
- * existing, so the transition the log records is the transition that happened.
- * Without it two concurrent renames both report their own predecessor and the
- * log claims a change that never took place.
+ * The name write is conditional on the name the event names, not merely on the
+ * row existing, so the transition the log records is the transition that
+ * happened. Without it two concurrent renames both report their own
+ * predecessor and the log claims a change that never took place.
  *
  * The pair being a transaction is the point: a rename that reached the profile
  * row without reaching the log would be a change to the org nobody can see.
@@ -174,12 +249,17 @@ async function renameOrg({
   orgId,
   name,
   previousName,
+  logoUrl,
+  previousLogoUrl,
   actor,
 }: {
   key: OrgProfileKey;
   orgId: string;
   name: string;
   previousName?: string;
+  /** Only when this same save also changed the logo — undefined leaves it untouched. */
+  logoUrl?: string;
+  previousLogoUrl?: string;
   actor: AuditActor;
 }): Promise<void> {
   await commitAudited({
@@ -188,7 +268,13 @@ async function renameOrg({
         Update: {
           TableName: Resource.UserInfoTable.name,
           Key: key,
-          UpdateExpression: 'SET #name = :name',
+          // Naming it is what confirms it, so the flag rides the same write
+          // rather than needing a request field of its own. `logoUrl` only
+          // joins the SET clause when this save changed it too.
+          UpdateExpression: [
+            'SET #name = :name, nameConfirmed = :confirmed',
+            logoUrl !== undefined ? ', logoUrl = :logoUrl' : '',
+          ].join(''),
           // An org created before naming shipped has no name to match, so the
           // two cases condition on absence and on the value respectively.
           ConditionExpression:
@@ -198,7 +284,9 @@ async function renameOrg({
           ExpressionAttributeNames: { '#name': 'name' },
           ExpressionAttributeValues: {
             ':name': { S: name },
+            ':confirmed': { BOOL: true },
             ...(previousName === undefined ? {} : { ':previousName': { S: previousName } }),
+            ...(logoUrl !== undefined ? { ':logoUrl': { S: logoUrl } } : {}),
           },
         },
       },
@@ -208,9 +296,92 @@ async function renameOrg({
       actor,
       orgId,
       subject: AuditSubjects.org(orgId),
-      details: { name, ...(previousName ? { previousName } : {}) },
+      details: {
+        name,
+        ...(previousName ? { previousName } : {}),
+        ...(logoUrl !== undefined
+          ? { logoUrl, ...(previousLogoUrl ? { previousLogoUrl } : {}) }
+          : {}),
+      },
     }),
   });
+}
+
+/**
+ * Write a logo-only change and the event that records it, in one transaction.
+ *
+ * No slug work: the name is unchanged, so nothing derived from it needs
+ * touching. The condition still only asks that the row exist — unlike
+ * {@link renameOrg}, there is no previous value to race against here, since
+ * this path only runs once `readOrgProfile` has already confirmed `logoUrl`
+ * actually differs from what is stored.
+ */
+async function updateOrgLogo({
+  key,
+  orgId,
+  logoUrl,
+  previousLogoUrl,
+  actor,
+}: {
+  key: OrgProfileKey;
+  orgId: string;
+  logoUrl: string;
+  previousLogoUrl?: string;
+  actor: AuditActor;
+}): Promise<void> {
+  await commitAudited({
+    items: [
+      {
+        Update: {
+          TableName: Resource.UserInfoTable.name,
+          Key: key,
+          UpdateExpression: 'SET logoUrl = :logoUrl',
+          ConditionExpression: 'attribute_exists(pk)',
+          ExpressionAttributeValues: { ':logoUrl': { S: logoUrl } },
+        },
+      },
+    ],
+    event: auditEvent({
+      type: 'org.logo_updated',
+      actor,
+      orgId,
+      subject: AuditSubjects.org(orgId),
+      details: { logoUrl, ...(previousLogoUrl ? { previousLogoUrl } : {}) },
+    }),
+  });
+}
+
+/**
+ * The logo-only branch of `baseHandler`, pulled out so its own try/catch does
+ * not add to the main function's complexity budget.
+ */
+async function saveLogoOnly({
+  profileKey,
+  orgId,
+  name,
+  slug,
+  logoUrl,
+  previousLogoUrl,
+  actor,
+}: {
+  profileKey: OrgProfileKey;
+  orgId: string;
+  name: string;
+  slug?: string;
+  logoUrl: string;
+  previousLogoUrl?: string;
+  actor: AuditActor;
+}): Promise<APIGatewayProxyStructuredResultV2> {
+  try {
+    await updateOrgLogo({ key: profileKey, orgId, logoUrl, previousLogoUrl, actor });
+  } catch (err) {
+    if (renameConditionFailed(err)) return await renameConflictResponse(profileKey);
+    throw err;
+  }
+  return new ResponseBuilder()
+    .status(200)
+    .body<UpdateOrgResponse>({ name, ...(slug ? { slug } : {}), logoUrl })
+    .build();
 }
 
 export const handler = middy(baseHandler)

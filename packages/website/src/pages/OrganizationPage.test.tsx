@@ -1,162 +1,184 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { OrgRole } from '@filone/shared';
-import type { MeResponse } from '@filone/shared';
+import { OrgRole, ROLE_PERMISSIONS } from '@filone/shared';
+import type { MeResponse, OrgMembershipSummary } from '@filone/shared';
 
-import { ToastProvider } from '../components/Toast/ToastProvider.js';
 import { seedPermissions } from '../lib/test-permissions.js';
+import { ToastProvider } from '../components/Toast/ToastProvider.js';
+import { queryKeys } from '../lib/query-client.js';
+
+const mockGetMe = vi.fn();
+const mockUpdateOrg = vi.fn();
+const mockPresignOrgLogoUpload = vi.fn();
+
+vi.mock('../lib/api.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api.js')>();
+  return {
+    ...actual,
+    getMe: (...args: unknown[]) => mockGetMe(...args),
+    updateOrg: (...args: unknown[]) => mockUpdateOrg(...args),
+    presignOrgLogoUpload: (...args: unknown[]) => mockPresignOrgLogoUpload(...args),
+  };
+});
+
+global.fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
+
 import { OrganizationPage } from './OrganizationPage.js';
 
-const mockListMembers = vi.fn();
-const mockListInvitations = vi.fn();
+const ORG_ID = 'org-1';
 
-vi.mock('../lib/members-api.js', () => ({
-  listMembers: () => mockListMembers(),
-  listInvitations: () => mockListInvitations(),
-  updateMemberRole: vi.fn(),
-  removeMember: vi.fn(),
-  transferOwnership: vi.fn(),
-  createInvitation: vi.fn(),
-  revokeInvitation: vi.fn(),
-}));
+function me(
+  role: OrgRole,
+  memberships: OrgMembershipSummary[] = [{ orgId: ORG_ID, orgName: 'Acme', slug: 'acme', role }],
+): MeResponse {
+  return {
+    orgId: ORG_ID,
+    orgName: 'Acme',
+    slug: 'acme',
+    nameConfirmed: true,
+    emailVerified: true,
+    email: 'user@example.com',
+    mfaEnrollments: [],
+    ragAccess: true,
+    orgsBeta: true,
+    userId: 'user-1',
+    role,
+    permissions: ROLE_PERMISSIONS[role],
+    memberships,
+  };
+}
 
-function renderPage(
-  role = OrgRole.Owner,
-  members = 0,
-  invitations = 0,
-  me: Partial<MeResponse> = {},
-) {
-  mockListMembers.mockResolvedValue({
-    members: Array.from({ length: members }, (_, i) => ({ userId: `u${String(i)}`, role })),
-  });
-  mockListInvitations.mockResolvedValue({
-    invitations: Array.from({ length: invitations }, (_, i) => ({ inviteId: `i${String(i)}` })),
-  });
+function renderPage(role: OrgRole, memberships?: OrgMembershipSummary[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  seedPermissions(client, role, me);
-  return render(
+  const account = me(role, memberships);
+  seedPermissions(client, role, account);
+  mockGetMe.mockResolvedValue(account);
+  const view = render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <OrganizationPage />
       </ToastProvider>
     </QueryClientProvider>,
   );
-}
-
-/** The tabs on offer, in the order the page lists them. */
-function tabNames(): string[] {
-  return screen.queryAllByRole('tab').map((tab) => tab.textContent ?? '');
+  return { ...view, client };
 }
 
 describe('OrganizationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdateOrg.mockResolvedValue({ name: 'Acme Two' });
   });
 
-  it('gives an Owner every tab their role reaches', async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('opens on the org name it already has, with nothing to save', async () => {
     renderPage(OrgRole.Owner);
 
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(tabNames()).toContain('Invitations');
-    expect(tabNames()).toContain('Billing');
+    expect(await screen.findByLabelText('Organization name')).toHaveValue('Acme');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it('offers the rename only to a role that holds org.rename', async () => {
+  it('shows a Save button once the name changes, and saves on click', async () => {
+    const { client } = renderPage(OrgRole.Owner);
+
+    const nameField = await screen.findByLabelText('Organization name');
+    fireEvent.change(nameField, { target: { value: 'Acme Two' } });
+    expect(mockUpdateOrg).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockUpdateOrg).toHaveBeenCalledWith({ name: 'Acme Two' }));
+    await waitFor(() =>
+      expect(client.getQueryData<MeResponse>(queryKeys.me)).toMatchObject({
+        orgName: 'Acme Two',
+        memberships: [{ orgId: ORG_ID, orgName: 'Acme Two' }],
+      }),
+    );
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it("keeps the org's slug through a rename, since slugs never change", async () => {
+    mockUpdateOrg.mockResolvedValue({ name: 'Acme Two', slug: 'acme' });
+    const { client } = renderPage(OrgRole.Owner);
+
+    const nameField = await screen.findByLabelText('Organization name');
+    fireEvent.change(nameField, { target: { value: 'Acme Two' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(client.getQueryData<MeResponse>(queryKeys.me)).toMatchObject({
+        orgName: 'Acme Two',
+        slug: 'acme',
+      }),
+    );
+  });
+
+  it('refuses a name the schema will not take, without asking the server', async () => {
     renderPage(OrgRole.Owner);
 
-    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    const nameField = await screen.findByLabelText('Organization name');
+    fireEvent.change(nameField, { target: { value: 'no/slashes' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(mockUpdateOrg).not.toHaveBeenCalled();
   });
 
-  it('adds a member from the page header, whichever tab is showing', async () => {
-    renderPage(OrgRole.Owner, 2, 0);
-
-    // Starts on Members, so the Invitations panel that owns the dialog is not
-    // even mounted yet.
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(screen.queryByTestId('invite-dialog')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('org-invite-button'));
-
-    // The button brings the caller to Invitations and opens the dialog there.
-    expect(await screen.findByTestId('invite-dialog')).toBeInTheDocument();
-    expect(screen.getByTestId('org-tab-invitations')).toHaveAttribute('data-selected');
-  });
-
-  it('hides the add from a role that cannot invite, and outside the beta', async () => {
-    renderPage(OrgRole.Member);
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(screen.queryByTestId('org-invite-button')).not.toBeInTheDocument();
-
-    renderPage(OrgRole.Owner, 0, 0, { orgsBeta: false });
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(screen.queryByTestId('org-invite-button')).not.toBeInTheDocument();
-  });
-
-  it.each([OrgRole.Member, OrgRole.ReadOnly])('hides the rename from %s', async (role) => {
-    renderPage(role);
-
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
-  });
-
-  it('leaves out a tab the caller cannot reach', async () => {
-    // The invitations endpoint is `members.manage`; a Member holds
-    // `members.read` and nothing more here, so the tab is not offered.
+  it('shows a fallback instead of the form for a role without org.rename', async () => {
     renderPage(OrgRole.Member);
 
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(tabNames()).not.toContain('Invitations');
+    expect(
+      await screen.findByText(/managed by your organization.s owners and admins/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Organization name')).not.toBeInTheDocument();
   });
 
-  it('keeps Billing out for a role that cannot read it', async () => {
-    // `billing.view` is Owner and Admin; a Member is not offered the tab at all
-    // rather than shown one that refuses.
-    renderPage(OrgRole.Member);
+  describe('the avatar picker', () => {
+    it('uploads the picked file and saves it, with no extra Save step', async () => {
+      mockPresignOrgLogoUpload.mockResolvedValue({
+        uploadUrl: 'https://upload.example/put',
+        logoUrl: 'https://cdn.example/logos/new.png',
+      });
+      mockUpdateOrg.mockResolvedValue({
+        name: 'Acme',
+        logoUrl: 'https://cdn.example/logos/new.png',
+      });
+      renderPage(OrgRole.Owner);
 
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(tabNames()).not.toContain('Billing');
+      const trigger = await screen.findByLabelText('Change avatar');
+      const input = trigger.parentElement!.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = new File(['data'], 'logo.png', { type: 'image/png' });
+      fireEvent.change(input, { target: { files: [file] } });
+
+      await waitFor(() =>
+        expect(mockUpdateOrg).toHaveBeenCalledWith({
+          name: 'Acme',
+          logoUrl: 'https://cdn.example/logos/new.png',
+        }),
+      );
+      expect(await screen.findByText('Organization logo updated')).toBeInTheDocument();
+    });
   });
 
-  it('offers Billing to an Admin, who holds billing.view', async () => {
-    renderPage(OrgRole.Admin);
+  describe('the danger zone', () => {
+    it('shows Delete organization to an Owner, pointed at support', async () => {
+      renderPage(OrgRole.Owner);
 
-    await waitFor(() => expect(tabNames()).toContain('Billing'));
-  });
+      expect(await screen.findByText('Delete organization')).toBeInTheDocument();
+      const link = screen.getByRole('link', { name: 'support@fil.one' });
+      expect(link).toHaveAttribute('href', 'mailto:support@fil.one');
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    });
 
-  it('offers a Read only member the roster and nothing that changes it', async () => {
-    renderPage(OrgRole.ReadOnly);
+    it('hides Delete organization from an Admin, who can rename but not delete', async () => {
+      renderPage(OrgRole.Admin);
 
-    await waitFor(() => expect(tabNames()).toContain('Members'));
-    expect(tabNames()).not.toContain('Invitations');
-  });
-
-  it('counts each list on its own tab', async () => {
-    renderPage(OrgRole.Owner, 4, 2);
-
-    // The number belongs with the label somebody reads before choosing a tab.
-    await waitFor(() => expect(screen.getByTestId('org-tab-members')).toHaveTextContent('4'));
-    expect(screen.getByTestId('org-tab-invitations')).toHaveTextContent('2');
-    // Neither the audit log nor billing counts anything, so neither carries a
-    // number.
-    expect(screen.getByTestId('org-tab-audit')).toHaveTextContent(/^Audit log$/);
-    expect(screen.getByTestId('org-tab-billing')).toHaveTextContent(/^Billing$/);
-
-    // People first, money last, and the audit log after the two tabs whose
-    // changes it records.
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      'Members4',
-      'Invitations2',
-      'Audit log',
-      'Billing',
-    ]);
-  });
-
-  it('names the organization it is about', async () => {
-    renderPage(OrgRole.Owner);
-
-    // Two browser tabs can sit in different orgs, and this is the page that
-    // removes people, so it says which one.
-    await waitFor(() => expect(screen.getByText(/Manage/)).toBeInTheDocument());
+      // The rename form is there — org.rename holds — but not the danger zone.
+      expect(await screen.findByLabelText('Organization name')).toBeInTheDocument();
+      expect(screen.queryByText('Delete organization')).not.toBeInTheDocument();
+    });
   });
 });
