@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { OrgRole } from './org.js';
-import { InvitedRoleSchema } from './invitations.js';
-import type { OrgMembershipSource } from './org.js';
+import { OrgRole } from './org.ts';
+import { InvitedRoleSchema } from './invitations.ts';
+import type { OrgMembershipSource } from './org.ts';
 import type { S3Region } from '../constants.js';
 import type { AccessKeyRevocationReason } from '../access-key-permissions.js';
 
