@@ -163,7 +163,7 @@ describe('buildResetPlan', () => {
         accessKeys: [],
       }),
     );
-    expect(result.accounts[0]!.deleting).toBe(true);
+    expect(result.accounts[0]).toHaveProperty('deleting', true);
   });
 
   it('claims an access-key row carrying no region for eu-west-1', () => {
@@ -177,7 +177,7 @@ describe('buildResetPlan', () => {
       'eu-west-1',
       'aurora',
     );
-    expect(result.accounts[0]!.accessKeys).toEqual([legacyKey]);
+    expect(result.accounts[0]).toHaveProperty('accessKeys', [legacyKey]);
   });
 
   it('leaves an access-key row naming another region out of the plan', () => {
@@ -187,10 +187,10 @@ describe('buildResetPlan', () => {
         accessKeys: [accessKeyRow('AKIAELSEWHERE', 'eu-west-1')],
       }),
     );
-    expect(result.accounts[0]!.accessKeys).toEqual([]);
+    expect(result.accounts[0]).toHaveProperty('accessKeys', []);
   });
 
-  it('rewinds the Aurora setup status and drops its failure count', () => {
+  it('records the prior Aurora setup status and failure count', () => {
     const result = plan(
       orgRows({
         profile: profileRow({
@@ -204,7 +204,7 @@ describe('buildResetPlan', () => {
       'eu-west-1',
       'aurora',
     );
-    expect(result.accounts[0]!.profileAttributes).toEqual({
+    expect(result.accounts[0]).toHaveProperty('profileAttributes', {
       auroraTenantId: 'tenant-1',
       auroraSetupStatus: 'FILONE_TENANT_CREATED',
       auroraSetupFailureCount: '3',
@@ -218,7 +218,7 @@ describe('buildResetPlan', () => {
       'eu-west-1',
       'aurora',
     );
-    expect(result.accounts[0]!.ssmParameterNames).toEqual([
+    expect(result.accounts[0]).toHaveProperty('ssmParameterNames', [
       '/filone/staging/aurora-s3/access-key/tenant-1',
       '/filone/staging/aurora-portal/tenant-api-key/tenant-1',
     ]);
@@ -238,7 +238,7 @@ describe('buildResetPlan', () => {
       rows,
     );
 
-    expect(result.accounts[0]!.ragBuckets).toEqual([
+    expect(result.accounts[0]).toHaveProperty('ragBuckets', [
       {
         bucketName: 'my-bucket',
         indexName: ragIndexName(ORG_ID, 'eu-central-3', 'my-bucket'),
@@ -252,7 +252,7 @@ describe('buildResetPlan', () => {
       orgRows({ profile: profileRow({ forgeTenantId: { S: 'tenant-1' } }), accessKeys: [] }),
       [ragRow(RAGKeys.bucketPk(ORG_ID, S3Region.EuWest1, 'my-bucket'), RAGKeys.enablementSk())],
     );
-    expect(result.accounts[0]!.ragBuckets).toEqual([]);
+    expect(result.accounts[0]).toHaveProperty('ragBuckets', []);
   });
 
   it('plans the dangling RAG rows of an account holding no tenant id', () => {
