@@ -47,12 +47,13 @@ builders, constants and pure helpers, and must keep resolving table names from
 Make the sources of `@filone/shared`, `@filone/rag-shared` and
 `@filone/backend` loadable by plain Node, and have lint keep them that way.
 
-**Relative imports name the `.ts` file.** Every relative specifier, and every
-cross-package deep import such as `@filone/shared/src/api/tenants.js`, ends in
-`.ts`. TypeScript already allows this: `allowImportingTsExtensions` is on in
-the base tsconfig, and 57 files in the repository use the form, including the
-generated API clients the backend bundles into every Lambda. esbuild, Vite and
-vitest resolve it without configuration.
+**Relative imports name the `.ts` file.** Every relative specifier ends in
+`.ts`, and so does every cross-package deep import, so the backend imports
+`@filone/shared/src/api/tenants.ts`. TypeScript already allows this:
+`allowImportingTsExtensions` is on in the base tsconfig, and 57 files in the
+repository use the form, including the generated API clients the backend
+bundles into every Lambda. esbuild, Vite and vitest resolve it without
+configuration.
 
 **Enums become const objects.** Each `enum X` becomes
 `export const X = { ... } as const` with a same-named type alias
