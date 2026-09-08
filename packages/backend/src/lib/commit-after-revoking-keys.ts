@@ -63,7 +63,7 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
   orgProfile,
   actor,
   trigger,
-  type,
+  auditEventType,
   subject,
   details,
   source,
@@ -79,7 +79,7 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
   orgProfile: OrgProfileItem | undefined;
   actor: AuditActor;
   trigger: RevocationTrigger;
-  type: T;
+  auditEventType: T;
   subject: AuditSubject;
   details: AuditEventDetails[T];
   /** Log prefix for a cancellation that lands after a revocation. */
@@ -103,7 +103,7 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
     try {
       await commitAudited({
         items,
-        event: auditEvent({ type, actor, orgId, subject, details }),
+        event: auditEvent({ type: auditEventType, actor, orgId, subject, details }),
       });
     } catch (error) {
       cancelled = { error };
@@ -116,7 +116,7 @@ export async function commitAfterRevokingKeys<T extends RevocationAuditEventType
   // `retry-without-audit` — a mode that exists for revocations, where an audit
   // outage must never keep a leaked key live, and for nothing else.
   const correlation = await twoPhaseAudit({
-    type,
+    type: auditEventType,
     mode: 'fail-closed',
     actor,
     orgId,

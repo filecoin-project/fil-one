@@ -122,7 +122,7 @@ export async function baseHandler(
     });
   }
 
-  const minted: MintedKey = {
+  const mintedKey: MintedKey = {
     keyId: accessKey.id,
     accessKeyId: accessKey.accessKeyId,
     keyName,
@@ -145,17 +145,17 @@ export async function baseHandler(
       ...optionalKeyAttributes({ granularPermissions, buckets, expiresAt }),
       ...attribution,
     },
-    minted,
-    mint,
+    minted: mintedKey,
+    mintedKey: mint,
     creator,
   });
   if (!record.recorded) {
-    await discardUnrecordedKey({ minted, mint, creator });
+    await discardUnrecordedKey({ minted: mintedKey, mint, creator });
     return creatorRoleChangedResponse();
   }
 
   if (await roleNarrowedSinceCap(creator)) {
-    await discardRecordedKey({ minted, creator, actor });
+    await discardRecordedKey({ minted: mintedKey, creator, actor });
     return creatorRoleChangedResponse();
   }
 
@@ -207,18 +207,18 @@ type MintRecord = { recorded: true } | { recorded: false; reason: 'creator_role_
 async function recordMintedKey({
   row,
   minted,
-  mint,
+  mintedKey,
   creator,
   recovered,
 }: {
   row: Record<string, unknown>;
   minted: MintedKey;
-  mint: AuditCorrelation<'key.created'>;
+  mintedKey: AuditCorrelation<'key.created'>;
   creator: KeyCreator;
   recovered?: true;
 }): Promise<MintRecord> {
   try {
-    await mint.complete({
+    await mintedKey.complete({
       outcome: 'succeeded',
       details: {
         // The id the console shows, by its last characters only.
@@ -515,7 +515,7 @@ async function recoverDuplicateKey({
       recovered: true,
     },
     minted,
-    mint,
+    mintedKey: mint,
     creator,
     recovered: true,
   });

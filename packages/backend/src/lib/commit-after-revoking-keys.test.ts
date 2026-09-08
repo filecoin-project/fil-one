@@ -71,7 +71,7 @@ function commit(overrides: Record<string, unknown> = {}) {
     orgProfile: undefined,
     actor: userActor({ userId: 'admin-1' }),
     trigger: 'role_narrowing',
-    type: 'member.role_changed',
+    auditEventType: 'member.role_changed',
     subject: AuditSubjects.user(MEMBER_ID),
     details: { role: OrgRole.Member, previousRole: OrgRole.Admin },
     source: 'the-change',

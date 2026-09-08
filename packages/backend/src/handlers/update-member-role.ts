@@ -130,7 +130,7 @@ export async function baseHandler(
     orgProfile,
     actor: userActor({ userId, email: actorEmail }),
     trigger: 'role_narrowing',
-    type: 'member.role_changed',
+    auditEventType: 'member.role_changed',
     subject: AuditSubjects.user(targetUserId),
     details: {
       role,
