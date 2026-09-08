@@ -171,7 +171,7 @@ node bin/reset-region-provisioning.ts --stage staging --region eu-central-3
 
 **Production is refused.** Every region there carries real customer data, and a
 reset takes the region away from every account at once. Every other stage
-allows all four regions. The check runs before the first AWS call.
+allows every region the script knows. The check runs before the first AWS call.
 
 **Scan, plan, confirm.** The run prints one line per account — its tenant id,
 its access-key count, its RAG buckets with the S3 Vectors index behind each,

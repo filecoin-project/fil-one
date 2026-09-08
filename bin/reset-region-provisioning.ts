@@ -27,7 +27,7 @@
 //
 // Production is refused before the first AWS call: every region there carries
 // real customer data, and a reset takes the region away from every account at
-// once. Every other stage allows all four regions.
+// once. Every other stage allows every region the script knows.
 //
 // Credentials: table names come from `sst state export`, and every AWS call
 // uses your ambient credentials, as in orgs-beta.ts and rag-access.ts, so

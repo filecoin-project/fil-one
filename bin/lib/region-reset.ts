@@ -88,7 +88,7 @@ export interface ResetPlanInput {
  *
  * Production is refused for every region: each one carries real customer
  * data, and a reset takes the region away from every account at once. Every
- * other stage accepts all four regions. Throws rather than exiting so the
+ * other stage accepts every known region. Throws rather than exiting so the
  * caller owns the message.
  */
 export function assertRegionAllowed(stage: string, region: string): void {
