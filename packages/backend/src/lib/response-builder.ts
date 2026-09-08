@@ -130,6 +130,46 @@ export function tenantNotReadyResponse(): APIGatewayProxyStructuredResultV2 {
  */
 export type ErrorWithRevokedKeys = ErrorResponse & { revokedKeys: AccessKeySummary[] };
 
+/**
+ * The 500 for an unattributable fault, carrying the keys a revocation pass
+ * already took. `errorHandlerMiddleware` answers with it too; nothing about the
+ * fault itself is disclosed either way.
+ */
+/**
+ * The answer to a cancellation nothing can name. Rethrows when no key was
+ * revoked, so the middleware answers; otherwise names the keys, which are gone
+ * whatever the failure was.
+ */
+export function unattributableFailure(
+  err: unknown,
+  {
+    source,
+    orgId,
+    revokedKeys,
+  }: { source: string; orgId: string; revokedKeys: AccessKeySummary[] },
+): APIGatewayProxyStructuredResultV2 {
+  if (revokedKeys.length === 0) throw err;
+
+  console.error(`[${source}] Unattributable failure after revoking keys`, {
+    orgId,
+    revoked: revokedKeys.length,
+    error: err,
+  });
+  return unexpectedFailureResponse(revokedKeys);
+}
+
+export function unexpectedFailureResponse(
+  revokedKeys: AccessKeySummary[] = [],
+): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(500)
+    .body<ErrorResponse | ErrorWithRevokedKeys>({
+      message: 'An unexpected server error occurred. Please try again later.',
+      ...(revokedKeys.length > 0 ? { revokedKeys } : {}),
+    })
+    .build();
+}
+
 export function badRequestResponse(message: string): APIGatewayProxyStructuredResultV2 {
   return new ResponseBuilder().status(400).body<ErrorResponse>({ message }).build();
 }

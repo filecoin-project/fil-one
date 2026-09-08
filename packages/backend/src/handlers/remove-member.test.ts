@@ -237,6 +237,7 @@ describe('DELETE /api/org/members/{userId} handler', () => {
 
     expect(result).toMatchObject({ statusCode: 204 });
     const items = transactItems();
+    // Both rows and the event.
     expect(items).toHaveLength(3);
     expect(items[0].Delete).toMatchObject({
       Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: OrgKeys.memberSk(TARGET_ID) } },
@@ -249,6 +250,9 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     expect(items[1].Delete).toMatchObject({
       Key: { pk: { S: OrgKeys.userPk(TARGET_ID) }, sk: { S: OrgKeys.membershipSk(ORG_ID) } },
     });
+    // The member's mint sequence stays: a narrowing already in flight fences on
+    // that row, and its reading must not be satisfiable by a rejoined member.
+    expect(JSON.stringify(items)).not.toContain('ACCESSKEY_MINT_SEQ');
   });
 
   it('records the removal with no secret in it', async () => {

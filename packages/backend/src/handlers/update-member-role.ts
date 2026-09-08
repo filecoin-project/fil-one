@@ -1,7 +1,6 @@
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import type { TransactWriteItem } from '@aws-sdk/client-dynamodb';
 import {
   ApiErrorCode,
   UpdateMemberRoleSchema,
@@ -16,8 +15,7 @@ import type {
 } from '@filone/shared';
 import { AuditSubjects, userActor } from '../lib/audit.js';
 import { commitAfterRevokingKeys } from '../lib/commit-after-revoking-keys.js';
-import { reviewMemberAccessKeysForRole } from '../lib/member-keys.js';
-import type { AccessKeyToRevoke } from '../lib/member-keys.js';
+import { reviewKeysForRoleChange } from '../lib/member-keys.js';
 import { notifyRevokedKeys } from '../lib/key-revocation-email.js';
 import {
   pendingInvitationsFrom,
@@ -29,11 +27,13 @@ import type { InvitationRecord } from '../lib/invitations.js';
 import { requireManageableMember } from '../lib/manageable-member.js';
 import {
   cancelledLabels,
+  labelled,
   ownerCountDeltaFor,
   ownerCountItem,
   roleChangeItems,
 } from '../lib/membership-changes.js';
-import { readOwnerCount } from '../lib/org-membership.js';
+import type { LabelledItems } from '../lib/membership-changes.js';
+import { readOwnerCount, readOwnerCountForDiagnosis } from '../lib/org-membership.js';
 import {
   OrgDeletingError,
   getOrgProfile,
@@ -42,7 +42,7 @@ import {
 } from '../lib/org-profile.js';
 import type { OrgProfileItem } from '../lib/org-profile.js';
 import { parseJsonBody } from '../lib/parse-json-body.js';
-import { ResponseBuilder } from '../lib/response-builder.js';
+import { ResponseBuilder, unattributableFailure } from '../lib/response-builder.js';
 import type { ErrorWithRevokedKeys } from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo, getVerifiedEmail } from '../lib/user-context.js';
@@ -77,7 +77,9 @@ const SOURCE = 'update-member-role';
  * leaves the rest alone.
  *
  * The keys the new role could not mint go the same way, at the vendor and
- * before the role is written (`lib/commit-after-revoking-keys.ts`).
+ * before the role is written (`lib/commit-after-revoking-keys.ts`), and the
+ * transaction asserts no key was minted since that listing
+ * (`lib/access-key-mint-seq.ts`).
  */
 export async function baseHandler(
   event: AuthenticatedEvent,
@@ -103,29 +105,38 @@ export async function baseHandler(
     return roleResponse({ userId: targetUserId, role, previousRole: role });
   }
 
-  const invitationsToRevoke = (await pendingInvitationsFrom(orgId, targetUserId)).filter(
+  // A widening strands nothing: every key its holder could mint before, they
+  // could mint after, so only a narrowing reads keys or the profile.
+  const narrows = roleNarrows(target.role, role);
+  const delta = ownerCountDeltaFor(target.role, role);
+
+  // Independent, so one wave rather than three.
+  const [pending, orgProfile, owners] = await Promise.all([
+    pendingInvitationsFrom(orgId, targetUserId),
+    narrows ? getOrgProfile(orgId) : undefined,
+    delta === 'decrement' ? readOwnerCount(orgId) : undefined,
+  ]);
+
+  const refused = refuseBeforeRevokingKeys(orgId, delta, owners);
+  if (refused) return refused;
+
+  const invitationsToRevoke = pending.filter(
     (invitation) => !canManageTargetRole(role, invitation.role),
   );
-  const delta = ownerCountDeltaFor(target.role, role);
   const base = roleChangeBase({ orgId, targetUserId, fromRole: target.role, toRole: role });
   const { now, later } = planRevocations(invitationsToRevoke, base.items.length);
   const change = withInvitationRevocations(base, now);
 
-  const refused = await refuseBeforeRevokingKeys(orgId, delta);
-  if (refused) return refused;
-
-  const { orgProfile, keysToRevoke } = await reviewAccessKeysForNarrowing(
-    orgId,
-    targetUserId,
-    target.role,
-    role,
-  );
+  const review = narrows
+    ? await reviewKeysForRoleChange(orgId, targetUserId, role)
+    : { keysToRevoke: [], fence: undefined };
   const changedBy = actorEmail ?? userId;
   const failure = { orgId, delta, labels: change.labels };
 
   const committed = await commitAfterRevokingKeys({
     items: change.items,
-    keys: keysToRevoke,
+    keys: review.keysToRevoke,
+    fence: review.fence,
     orgId,
     orgProfile,
     actor: userActor({ userId, email: actorEmail }),
@@ -152,6 +163,7 @@ export async function baseHandler(
       }),
   });
   if ('response' in committed) return committed.response;
+  if ('keyMinted' in committed) return keyMintedResponse(committed.keyMinted);
 
   return await finishRoleChange({
     orgId,
@@ -215,70 +227,29 @@ async function finishRoleChange({
 }
 
 /**
- * Every local precondition that can refuse this change is checked before a key
- * is touched, since a revocation cannot be undone. The last-Owner guard is the
- * decrement's own condition, so it is read here rather than waited for: a sole
- * Owner demoting themselves must be refused with their keys intact. A counter
- * that cannot be read refuses too. The decrement conditions on `ownerCount`, so
- * a missing META row cancels the transaction just the same, and the change
- * would end with the role unchanged and the keys gone.
+ * Every local precondition that can refuse this change, checked before a key is
+ * touched, since a revocation cannot be undone.
+ *
+ * The last-Owner guard is the decrement's own condition, so the count is read
+ * ahead rather than waited for: a sole Owner demoting themselves must be
+ * refused with their keys intact. A counter that cannot be read refuses too,
+ * because the decrement conditions on `ownerCount` and a missing META row
+ * cancels the transaction just the same — with the role unchanged and the keys
+ * gone.
  */
-async function refuseBeforeRevokingKeys(
+function refuseBeforeRevokingKeys(
   orgId: string,
   delta: ReturnType<typeof ownerCountDeltaFor>,
-): Promise<APIGatewayProxyStructuredResultV2 | undefined> {
+  owners: number | undefined,
+): APIGatewayProxyStructuredResultV2 | undefined {
   if (delta !== 'decrement') return undefined;
 
-  const owners = await readOwnerCount(orgId);
   if (owners === 1) return lastOwnerResponse();
   if (owners === undefined) {
     console.error('[update-member-role] ownerCount missing — role change refused', { orgId });
     return ownerCountUnavailableResponse();
   }
   return undefined;
-}
-
-/**
- * The keys the new role could not mint, and the profile row their revocation
- * resolves tenants from. A widening strands nothing: every key its holder could
- * mint before, they could mint after. Only a narrowing has to look at what they
- * already hold, so a promotion reads neither.
- */
-async function reviewAccessKeysForNarrowing(
-  orgId: string,
-  targetUserId: string,
-  fromRole: OrgRole,
-  toRole: OrgRole,
-): Promise<{ orgProfile: OrgProfileItem | undefined; keysToRevoke: AccessKeyToRevoke[] }> {
-  if (!roleNarrows(fromRole, toRole)) return { orgProfile: undefined, keysToRevoke: [] };
-
-  const orgProfile = await getOrgProfile(orgId);
-  const review = await reviewMemberAccessKeysForRole(orgId, targetUserId, toRole);
-  return { orgProfile, keysToRevoke: review.keysToRevoke };
-}
-
-/**
- * The transaction's items with a label per position, so a cancellation names
- * what failed rather than an index.
- *
- * Built together rather than as two lists kept in step by hand: DynamoDB
- * reports cancellations positionally, so a label list one item out of line
- * would answer a genuine last-Owner refusal with "an invitation changed". An
- * item and its label are added or omitted in the same expression, and the item
- * count is read off the list rather than counted.
- */
-interface LabelledItems {
-  items: TransactWriteItem[];
-  labels: string[];
-}
-
-function labelled(
-  entries: ReadonlyArray<readonly [label: string, item: TransactWriteItem]>,
-): LabelledItems {
-  return {
-    items: entries.map(([, item]) => item),
-    labels: entries.map(([label]) => label),
-  };
 }
 
 /** The fence, both membership rows, and the counter when the owner set moves. */
@@ -313,11 +284,7 @@ function withInvitationRevocations(base: LabelledItems, now: InvitationRecord[])
   };
 }
 
-/**
- * The answer when the role transaction cancels. The keys named in `revokedKeys`
- * are already gone whatever the role now says, so every answer carries them
- * rather than treating the request as a no-op.
- */
+/** The answer when the role transaction cancels; every answer carries `revokedKeys`. */
 async function changeFailureResponse(
   err: unknown,
   context: {
@@ -332,7 +299,13 @@ async function changeFailureResponse(
   if (isGuardRejection(err)) throw new OrgDeletingError(context.orgId);
 
   const failed = cancelledLabels(err, context.labels);
-  if (failed.length === 0) throw err;
+  if (failed.length === 0) {
+    return unattributableFailure(err, {
+      source: SOURCE,
+      orgId: context.orgId,
+      revokedKeys: context.revokedKeys,
+    });
+  }
 
   const revoked = { revokedKeys: context.revokedKeys };
 
@@ -341,11 +314,15 @@ async function changeFailureResponse(
     // cancels the transaction that would take it to zero. It reads `ownerCount`
     // though, so a missing counter cancels the same update for the opposite
     // reason — the guard was never armed — and saying "you are the last Owner"
-    // about an org whose counter we cannot read would be a guess.
-    if (context.delta === 'decrement' && (await readOwnerCount(context.orgId)) !== undefined) {
+    // about an org whose counter we cannot read would be a guess. A read that
+    // fails is the same guess, and it must not cost the answer the revoked keys.
+    if (
+      context.delta === 'decrement' &&
+      (await readOwnerCountForDiagnosis(context.orgId)) !== undefined
+    ) {
       return lastOwnerResponse(revoked);
     }
-    console.error('[update-member-role] ownerCount missing — role change refused', {
+    console.error('[update-member-role] ownerCount unreadable — role change refused', {
       orgId: context.orgId,
     });
     return ownerCountUnavailableResponse(revoked);
@@ -414,6 +391,17 @@ function invitationRaceResponse(
     .body<ErrorWithRevokedKeys>({
       message: 'An invitation from that member changed while this was in flight — try again.',
       ...revoked,
+    })
+    .build();
+}
+
+/** A key was minted after the listing this revoked from; the same PATCH retried includes it. */
+function keyMintedResponse(revokedKeys: AccessKeySummary[]): APIGatewayProxyStructuredResultV2 {
+  return new ResponseBuilder()
+    .status(409)
+    .body<ErrorWithRevokedKeys>({
+      message: 'An access key was created for that member while this was in flight — try again.',
+      revokedKeys,
     })
     .build();
 }

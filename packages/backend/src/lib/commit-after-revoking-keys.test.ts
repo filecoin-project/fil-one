@@ -3,6 +3,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import {
   DynamoDBClient,
   PutItemCommand,
+  TransactionCanceledException,
   TransactWriteItemsCommand,
 } from '@aws-sdk/client-dynamodb';
 import type { TransactWriteItem } from '@aws-sdk/client-dynamodb';
@@ -21,6 +22,7 @@ vi.mock('./revoke-member-keys.js', () => ({
 
 const ddbMock = mockClient(DynamoDBClient);
 
+import { accessKeyMintSeqUnchangedCheck } from './access-key-mint-seq.js';
 import { AuditSubjects, userActor } from './audit.js';
 import { commitAfterRevokingKeys } from './commit-after-revoking-keys.js';
 import type { AccessKeyToRevoke } from './member-keys.js';
@@ -67,6 +69,7 @@ function commit(overrides: Record<string, unknown> = {}) {
   return commitAfterRevokingKeys({
     items: ITEMS,
     keys: KEYS,
+    fence: { userId: MEMBER_ID, mintSeq: undefined },
     orgId: ORG_ID,
     orgProfile: undefined,
     actor: userActor({ userId: 'admin-1' }),
@@ -109,6 +112,27 @@ beforeEach(() => {
   notifyMember.mockResolvedValue(undefined);
 });
 
+/**
+ * The cancellation DynamoDB sends when a condition fails. Takes several
+ * positions because DynamoDB reports every failed condition, not just the first.
+ */
+function cancelledAt(failed: number | readonly number[], itemCount: number) {
+  const positions = new Set(typeof failed === 'number' ? [failed] : failed);
+  return new TransactionCanceledException({
+    message: 'cancelled',
+    $metadata: {},
+    CancellationReasons: Array.from({ length: itemCount }, (_unused, position) => ({
+      Code: positions.has(position) ? 'ConditionalCheckFailed' : 'None',
+    })),
+  });
+}
+
+/** The item `commitAfterRevokingKeys` appends for `fence`, at the end of the caller's. */
+const FENCE_CHECK = accessKeyMintSeqUnchangedCheck(ORG_ID, {
+  userId: MEMBER_ID,
+  mintSeq: undefined,
+});
+
 describe('commitAfterRevokingKeys', () => {
   it('stays one transaction and one event when there is no key to revoke', async () => {
     const outcome = await commit({ keys: [] });
@@ -118,12 +142,46 @@ describe('commitAfterRevokingKeys', () => {
     expect(standaloneEvents()).toStrictEqual([]);
     const [write] = committedWrites();
     expect(committedWrites()).toHaveLength(1);
-    expect(write!.items).toStrictEqual(ITEMS);
+    // The caller's items plus the fence, which a change that revokes nothing
+    // still carries — an empty listing is exactly the case a mint slips past.
+    expect(write!.items).toStrictEqual([...ITEMS, FENCE_CHECK]);
     expect(write!.event).toMatchObject({
       type: 'member.role_changed',
       details: { role: OrgRole.Member, previousRole: OrgRole.Admin },
     });
     expect(write!.event).not.toHaveProperty('phase');
+  });
+
+  it('answers the fence itself, so the caller cannot mistake it for its own item', async () => {
+    // A key was minted after the listing. The keys already revoked went before
+    // it did, so they ride the arm the caller has to answer.
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(ITEMS.length, ITEMS.length + 2));
+
+    expect(await commit()).toStrictEqual({ keyMinted: REVOKED });
+    expect(onCancelled).not.toHaveBeenCalled();
+    // Their clients are already broken either way.
+    expect(notifyMember).toHaveBeenCalledWith(REVOKED);
+  });
+
+  it('leaves the caller its own answer when the fence is not the only item that failed', async () => {
+    // The org-deletion fence is the caller's item 0, and it has no retry. A key
+    // minted in the same window must not turn that into "try again".
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt([0, ITEMS.length], ITEMS.length + 2));
+    const cancelled = new Error('org deleting');
+    onCancelled.mockRejectedValue(cancelled);
+
+    await expect(commit()).rejects.toThrow('org deleting');
+  });
+
+  it('reads no fence into a change that carries none', async () => {
+    // A promotion strands no key and appends no fence, so the position the fence
+    // would have held belongs to the audit item. Nothing there is a mint.
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt([0, ITEMS.length], ITEMS.length + 1));
+
+    const outcome = await commit({ keys: [], fence: undefined });
+
+    expect(outcome).toStrictEqual({ response: { statusCode: 409 } });
+    expect(committedWrites()[0]!.items).toStrictEqual(ITEMS);
   });
 
   it('hands a cancellation with no revocation to the caller with nothing revoked', async () => {
@@ -154,7 +212,7 @@ describe('commitAfterRevokingKeys', () => {
 
     const [write] = committedWrites();
     expect(committedWrites()).toHaveLength(1);
-    expect(write!.items).toStrictEqual(ITEMS);
+    expect(write!.items).toStrictEqual([...ITEMS, FENCE_CHECK]);
     expect(write!.event).toMatchObject({
       type: 'member.role_changed',
       phase: 'completion',

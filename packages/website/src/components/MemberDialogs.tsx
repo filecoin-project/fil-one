@@ -6,6 +6,7 @@ import type { MemberSummary } from '@filone/shared';
 import { ConfirmDialog } from './ConfirmDialog';
 import { RoleNarrowingDialog } from './RoleNarrowingDialog';
 import { TransferOwnershipDialog } from './TransferOwnershipDialog';
+import { errorMessageOf } from '../lib/api.js';
 import { getRoleChangePreview } from '../lib/members-api.js';
 import { queryKeys } from '../lib/query-client.js';
 import { memberName, ROLE_LABELS } from '../lib/use-member-scope.js';
@@ -77,18 +78,17 @@ function useLastNonNull<T>(target: T | null): T | null {
  * it on. So it is confirmed rather than committed on the change event, where one
  * click or one arrow key was enough.
  */
-function selfChangeDescription({ member, role }: RoleChange): string {
-  const from = ROLE_LABELS[member.role];
-  const to = ROLE_LABELS[role];
-  const opening = `You go from ${from} to ${to} in this organization.`;
-
+function selfChangeDescription({ role }: RoleChange): string {
+  // Only what the change costs on top of the roles themselves: the dialog's own
+  // header already reads "You go from X to Y."
+  //
   // Admin is the one step down that keeps `members.manage`, so it is the one
   // that leaves this page usable. Owner never arrives here — a move to Owner is
   // a promotion, and it has its own dialog.
   if (role === OrgRole.Admin) {
-    return `${opening} Billing and the organization itself go with the owner seat, and only an owner can hand it back.`;
+    return 'Billing and the organization itself go with the owner seat, and only an owner can hand it back.';
   }
-  return `${opening} Managing members goes with it, so this is the last change you can make on this page — putting it back takes another owner or admin.`;
+  return 'Managing members goes with it, so this is the last change you can make on this page, and putting it back takes another owner or admin.';
 }
 
 /**
@@ -97,12 +97,13 @@ function selfChangeDescription({ member, role }: RoleChange): string {
  */
 function RoleNarrowingPrompt({
   target,
-  self,
+  selfUserId,
   onClose,
   onConfirm,
 }: {
   target: RoleChange | null;
-  self: boolean;
+  /** The caller's own id, which decides whether the copy says "you". */
+  selfUserId: string | undefined;
   onClose: () => void;
   onConfirm: (change: RoleChange) => Promise<unknown>;
 }) {
@@ -112,16 +113,26 @@ function RoleNarrowingPrompt({
   // hold it itself, or a second click sends a second destructive request and a
   // successful change leaves the dialog naming a role nobody holds any more.
   const [pending, setPending] = useState(false);
+  // Shown in the dialog: the page notice `useRoleChange` sets sits behind this
+  // modal. Tagged with the change it answered, because this component stays
+  // mounted once opened — so it survives the closing fade but not a dialog
+  // reopened about somebody else.
+  const [refusal, setRefusal] = useState<{ change: RoleChange; message: string }>();
 
   async function confirm() {
     if (!target) return;
     setPending(true);
+    setRefusal(undefined);
     try {
       await onConfirm(target);
       onClose();
-    } catch {
-      // Rendered by the mutation's onError, and the dialog stays open so the
-      // reason is read beside what it was about to do.
+    } catch (err) {
+      // The dialog stays open so the reason is read beside what it was about to
+      // do. Also rendered by the mutation's onError, for the page behind.
+      setRefusal({
+        change: target,
+        message: errorMessageOf(err, 'That role could not be changed.'),
+      });
     } finally {
       setPending(false);
     }
@@ -132,8 +143,10 @@ function RoleNarrowingPrompt({
     <RoleNarrowingPreview
       change={change}
       open={target !== null}
-      self={self}
+      // From the retained change: closing nulls the target while the panel fades.
+      self={change.member.userId === selfUserId}
       pending={pending}
+      refusal={refusal?.change === change ? refusal.message : undefined}
       onClose={onClose}
       onConfirm={() => void confirm()}
     />
@@ -154,6 +167,7 @@ function RoleNarrowingPreview({
   open,
   self,
   pending,
+  refusal,
   onClose,
   onConfirm,
 }: {
@@ -161,6 +175,7 @@ function RoleNarrowingPreview({
   open: boolean;
   self: boolean;
   pending: boolean;
+  refusal?: string | undefined;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -175,7 +190,8 @@ function RoleNarrowingPreview({
       open={open}
       memberName={memberName(change.member)}
       self={self}
-      fromRole={ROLE_LABELS[change.member.role]}
+      // The role the server has, once it answers: the roster reading can be old.
+      fromRole={ROLE_LABELS[preview.data?.currentRole ?? change.member.role]}
       toRole={ROLE_LABELS[change.role]}
       note={self ? selfChangeDescription(change) : undefined}
       keys={preview.data?.keys}
@@ -184,6 +200,7 @@ function RoleNarrowingPreview({
       loading={preview.isPending}
       error={preview.isError}
       pending={pending}
+      refusal={refusal}
       onClose={onClose}
       onConfirm={onConfirm}
     />
@@ -224,7 +241,7 @@ export function MemberDialogs({
         title="Make this member an owner?"
         description={
           promotion
-            ? `${memberName(promotion.member)} will be able to manage billing, every member, and the organization itself — including removing you.`
+            ? `${memberName(promotion.member)} will be able to manage billing, every member, and the organization itself, including removing you.`
             : ''
         }
         confirmLabel="Make owner"
@@ -232,7 +249,7 @@ export function MemberDialogs({
 
       <RoleNarrowingPrompt
         target={targets.narrowing}
-        self={targets.narrowing?.member.userId === selfUserId}
+        selfUserId={selfUserId}
         onClose={close.narrowing}
         onConfirm={onChangeRole}
       />

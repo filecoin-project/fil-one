@@ -146,6 +146,16 @@ function stubOrgProfile(orgName = 'Acme Storage') {
     });
 }
 
+/** The member's mint sequence, which a narrowing reads before it lists keys. */
+function stubMintSeq(mintSeq: number) {
+  ddbMock
+    .on(GetItemCommand, {
+      TableName: 'OrgTable',
+      Key: { pk: { S: `ORG#${ORG_ID}` }, sk: { S: `ACCESSKEY_MINT_SEQ#${TARGET_ID}` } },
+    })
+    .resolves({ Item: marshall({ mintSeq }) });
+}
+
 /** The target's access keys, as the org partition holds them. */
 function stubMemberKeys(...keys: Array<Record<string, unknown>>) {
   ddbMock
@@ -182,21 +192,34 @@ function stubMemberKeys(...keys: Array<Record<string, unknown>>) {
  */
 function stubOwnerCount(ownerCount: number | undefined) {
   ddbMock
-    .on(GetItemCommand, {
-      TableName: 'OrgTable',
-      Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: 'META' } },
-    })
-    .resolves(
-      ownerCount === undefined
-        ? {}
-        : {
-            Item: {
-              pk: { S: OrgKeys.orgPk(ORG_ID) },
-              sk: { S: 'META' },
-              ownerCount: { N: String(ownerCount) },
-            },
-          },
-    );
+    .on(GetItemCommand, OWNER_COUNT_READ)
+    .resolves(ownerCount === undefined ? {} : metaRow(ownerCount));
+}
+
+/**
+ * The counter read once and unreadable after: the pre-flight read succeeds, so
+ * the change reaches the transaction, and the failure path's reread throws.
+ */
+function stubOwnerCountThenUnreadable(ownerCount: number) {
+  ddbMock
+    .on(GetItemCommand, OWNER_COUNT_READ)
+    .resolvesOnce(metaRow(ownerCount))
+    .rejects(new Error('ProvisionedThroughputExceededException'));
+}
+
+const OWNER_COUNT_READ = {
+  TableName: 'OrgTable',
+  Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: 'META' } },
+};
+
+function metaRow(ownerCount: number) {
+  return {
+    Item: {
+      pk: { S: OrgKeys.orgPk(ORG_ID) },
+      sk: { S: 'META' },
+      ownerCount: { N: String(ownerCount) },
+    },
+  };
 }
 
 function transactItems() {
@@ -358,6 +381,22 @@ describe('PATCH /api/org/members/{userId} handler', () => {
     expect(body(result).code).toBeUndefined();
     expect(body(result).message).toStrictEqual(expect.stringContaining('contact support'));
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('names the revoked keys when the counter cannot be reread', async () => {
+    // Those credentials are already gone at the vendor. A reread that throws
+    // would answer 500 with nothing in it, and the console would go on offering
+    // dead keys as the ones the next attempt revokes.
+    targetHolds(OrgRole.Owner);
+    stubOwnerCountThenUnreadable(2);
+    stubMemberKeys({ permissions: ['read', 'DeleteBucket'] });
+    ddbMock.on(TransactWriteItemsCommand).resolvesOnce({}).rejects(cancelledAt(3, 5));
+
+    const result = await handler(roleEvent(OrgRole.Member), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 409 });
+    expect(body(result).message).toStrictEqual(expect.stringContaining('contact support'));
+    expect(body(result).revokedKeys).toHaveLength(1);
   });
 
   it('reports a transient conflict as a failure rather than a verdict', async () => {
@@ -746,6 +785,69 @@ describe('a narrowing revokes the keys the new role could not mint', () => {
         .commandCalls(QueryCommand)
         .filter((call) => call.args[0].input.TableName === 'UserInfoTable'),
     ).toHaveLength(0);
+  });
+
+  it('asserts the mint sequence the listing was taken against', async () => {
+    stubMintSeq(3);
+    stubMemberKeys({ permissions: ['read'] });
+
+    await handler(roleEvent(OrgRole.Member), buildContext());
+
+    expect(
+      transactItems().find(
+        (item) => item.ConditionCheck?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${TARGET_ID}`,
+      )?.ConditionCheck,
+    ).toMatchObject({
+      ConditionExpression: 'attribute_exists(pk) AND mintSeq = :seen',
+      ExpressionAttributeValues: { ':seen': { N: '3' } },
+    });
+  });
+
+  it('refuses the change when a key was minted after the listing', async () => {
+    // The listing is empty precisely because the row landed after it. The
+    // sequence is the only thing that can see that, and the retry lists it.
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
+
+    const result = await handler(roleEvent(OrgRole.Member), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 409 });
+    expect(body(result).message).toContain('An access key was created for that member');
+    expect(mockDeleteAccessKey).not.toHaveBeenCalled();
+  });
+
+  it('asserts nothing about the sequence on a promotion, and does not read it', async () => {
+    // A widening strands nothing, so a key minted in the same window is theirs
+    // to keep and cancelling the promotion over it would be noise.
+    targetHolds(OrgRole.Member);
+
+    await handler(roleEvent(OrgRole.Admin), buildContext());
+
+    expect(
+      transactItems().some(
+        (item) => item.ConditionCheck?.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${TARGET_ID}`,
+      ),
+    ).toBe(false);
+    expect(
+      ddbMock
+        .commandCalls(GetItemCommand)
+        .some((call) => call.args[0].input.Key?.sk?.S === `ACCESSKEY_MINT_SEQ#${TARGET_ID}`),
+    ).toBe(false);
+  });
+
+  it('names the revoked keys even when the failure cannot be named', async () => {
+    // A throttle or an audit-append error is nobody's business decision, but
+    // those credentials are gone and the admin has to be told.
+    stubMemberKeys({ permissions: ['read', 'DeleteBucket'] });
+    ddbMock
+      .on(TransactWriteItemsCommand)
+      .resolvesOnce({})
+      .rejects(new Error('ProvisionedThroughputExceededException'));
+
+    const result = await handler(roleEvent(OrgRole.Member), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 500 });
+    expect(body(result).revokedKeys).toHaveLength(1);
+    expect(body(result).message).not.toContain('Throughput');
   });
 
   it('emails the member the keys that stopped working', async () => {

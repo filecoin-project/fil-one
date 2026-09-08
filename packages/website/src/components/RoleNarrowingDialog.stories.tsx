@@ -74,7 +74,7 @@ export const OwnRole: Story = {
       self
       fromRole="Owner"
       toRole="Admin"
-      note="You go from Owner to Admin in this organization. Billing and the organization itself go with the owner seat, and only an owner can hand it back."
+      note="Billing and the organization itself go with the owner seat, and only an owner can hand it back."
       keys={KEYS.slice(1)}
       survivingCount={1}
       unattributedCount={0}

@@ -1,8 +1,8 @@
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import type { TransactWriteItem } from '@aws-sdk/client-dynamodb';
 import { Resource } from 'sst';
-import { OrgRole, canManageTargetRole, roleNarrows } from '@filone/shared';
-import type { OrgMembershipSource } from '@filone/shared';
+import { OrgRole, canManageTargetRole, canRetainAccessKey } from '@filone/shared';
+import type { AccessKeyPermissions, OrgMembershipSource } from '@filone/shared';
 import { OrgKeys } from './org-membership.js';
 
 /**
@@ -158,7 +158,9 @@ export function roleChangeItems({
  * `attribute_exists(pk)` stays alongside it so a removal of somebody already
  * gone is a clean 404 rather than a silent success. The inverse delete is
  * unconditional, because a member whose inverse item is missing must still be
- * removable.
+ * removable. The member's mint sequence is left where it is: a removal fences on
+ * that row, and it has to keep counting across memberships anyway
+ * (`lib/access-key-mint-seq.ts`).
  */
 export function membershipDeleteItems({
   orgId,
@@ -309,35 +311,39 @@ export function inviterAuthorityCheck({
 
 /**
  * Assert, inside the transaction, that the creator still holds a role that
- * mints what the cap allowed.
+ * mints the key being written.
  *
  * The mint path evaluates its permission cap against the creator's role and
  * then writes the key row, and a role narrowing between the two would leave a
  * key above the role that authorized it. The narrowing revokes what it finds,
  * so this closes the window where a row lands after its listing: the row cannot
- * be written unless the role on file still holds everything the cap ran
- * against. A widening strands nothing, so a promotion landing in the same gap
- * is admitted rather than made to cancel a key the new role covers.
+ * be written unless the role on file could still grant everything the key
+ * carries.
  *
- * The admissible roles are asked of `roleNarrows` one by one, the way
- * {@link inviterAuthorityCheck} asks the registry, so the permission sets stay
- * the single answer to what a role may mint.
+ * The requested permissions rather than the cap role, because those are the
+ * question. An Owner demoted to Admin mid-mint keeps a key carrying nothing
+ * above Admin — comparing the whole former role would discard it, and the
+ * narrowing that demoted them would have retained the identical key.
+ *
+ * The admissible roles are asked of `canRetainAccessKey` one by one, the way
+ * {@link inviterAuthorityCheck} asks the registry, so a role change and a mint
+ * decide what a role may hold by the same test.
  */
 export function creatorRoleStillMintsCheck({
   orgId,
   userId,
-  role,
+  key,
 }: {
   orgId: string;
   userId: string;
-  /** The role the cap was evaluated against. */
-  role: OrgRole;
+  /** The permissions the requested key would carry. */
+  key: AccessKeyPermissions;
 }): TransactWriteItem {
   return {
     ConditionCheck: {
       TableName: Resource.OrgTable.name,
       Key: { pk: { S: OrgKeys.orgPk(orgId) }, sk: { S: OrgKeys.memberSk(userId) } },
-      ...roleIsOneOf((current) => !roleNarrows(role, current)),
+      ...roleIsOneOf((current) => canRetainAccessKey(current, key).retained),
     },
   };
 }
@@ -349,8 +355,8 @@ export function creatorRoleStillMintsCheck({
  * A predicate admitting nothing would build `#role IN ()`, which DynamoDB
  * rejects as a malformed expression rather than reporting an unmet condition —
  * so a caller must always admit at least one role. Both do, structurally rather
- * than by luck: no role narrows relative to itself, and every invitable role
- * has some role that may invite it.
+ * than by luck: the creator's own role passed the mint's cap, so it retains the
+ * key it asked for, and every invitable role has some role that may invite it.
  */
 function roleIsOneOf(admits: (role: OrgRole) => boolean) {
   const values = Object.fromEntries(
@@ -363,6 +369,30 @@ function roleIsOneOf(admits: (role: OrgRole) => boolean) {
     ConditionExpression: `attribute_exists(pk) AND #role IN (${Object.keys(values).join(', ')})`,
     ExpressionAttributeNames: { '#role': 'role' },
     ExpressionAttributeValues: values,
+  };
+}
+
+/**
+ * A transaction's items with a label per position, so a cancellation names what
+ * failed rather than an index.
+ *
+ * Built together rather than as two lists kept in step by hand: DynamoDB reports
+ * cancellations positionally, so a label list one item out of line would answer
+ * a genuine last-Owner refusal with "an invitation changed". An item and its
+ * label are added or omitted in the same expression, and the item count is read
+ * off the list rather than counted.
+ */
+export interface LabelledItems {
+  items: TransactWriteItem[];
+  labels: string[];
+}
+
+export function labelled(
+  entries: ReadonlyArray<readonly [label: string, item: TransactWriteItem]>,
+): LabelledItems {
+  return {
+    items: entries.map(([, item]) => item),
+    labels: entries.map(([label]) => label),
   };
 }
 
