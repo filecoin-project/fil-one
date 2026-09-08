@@ -31,6 +31,16 @@ vi.mock('../lib/members-api.js', () => ({
   revokeInvitation: vi.fn(),
 }));
 
+/** One revoked key, as a revoking endpoint reports it on success or refusal. */
+const REVOKED_KEY = {
+  id: 'key-1',
+  keyName: 'nightly backup',
+  region: 'us-east-1',
+  createdAt: '2026-02-01T00:00:00.000Z',
+  reason: 'exceeds_role' as const,
+  excess: ['DeleteBucket'],
+};
+
 /** No keys to lose, which is what most of these cases are about. */
 const NO_KEYS_AT_RISK = {
   currentRole: OrgRole.Owner,
@@ -125,6 +135,21 @@ async function chooseRowAction(member: string, action: string) {
  */
 async function confirmNarrowing() {
   const confirm = await screen.findByRole('button', { name: /^Change role/ });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  fireEvent.click(confirm);
+}
+
+/**
+ * Type the org name and confirm the transfer, once its preview has arrived.
+ *
+ * The button is held while the preview loads, for the same reason the narrowing
+ * dialog holds its own: it was added to disclose what the change revokes.
+ */
+async function confirmTransfer(orgName = 'Acme') {
+  fireEvent.change(await screen.findByLabelText(`Type ${orgName} to confirm`), {
+    target: { value: orgName },
+  });
+  const confirm = screen.getByRole('button', { name: 'Transfer ownership' });
   await waitFor(() => expect(confirm).toBeEnabled());
   fireEvent.click(confirm);
 }
@@ -243,8 +268,9 @@ describe('MembersPage', () => {
     await chooseRowAction('grace@example.com', 'Remove');
 
     expect(await screen.findByText('Remove this member?')).toBeInTheDocument();
-    // The dialog says what removal does not do, because it does not do it.
-    expect(screen.getByText(/Access keys they already created keep working/)).toBeInTheDocument();
+    // Removal is the narrowing to nothing: a key does not outlive the
+    // membership that created it, and the dialog says so before the click.
+    expect(screen.getByText(/every access key they created is revoked/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove member' }));
     await waitFor(() => expect(mockRemove).toHaveBeenCalledWith('user-2'));
@@ -710,6 +736,64 @@ describe('MembersPage — a removal the roster is stale for', () => {
   });
 });
 
+describe('MembersPage — a removal that revoked keys', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListInvitations.mockResolvedValue({ invitations: [] });
+    mockRoleChangePreview.mockResolvedValue(NO_KEYS_AT_RISK);
+    window.history.replaceState(null, '', '/members');
+  });
+
+  it('names the keys a removal revoked, and drops the views that listed them', async () => {
+    // The admin doing this is not the key holder, so the toast is the only
+    // place they learn which credentials the removal destroyed.
+    mockRemove.mockResolvedValue({ revokedKeys: [REVOKED_KEY] });
+    const { client } = renderPage();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+
+    await chooseRowAction('grace@example.com', 'Remove');
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+
+    expect(await screen.findByText(/This key was revoked: nightly backup/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.accessKeys }),
+    );
+    // `/usage` counts keys per org, so the dashboard tile moved too.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.usage });
+  });
+
+  it('still removes the member when the endpoint answers with no body', async () => {
+    // This route answered 204 until the removal began revoking, so a console
+    // against an older deploy reads nothing here.
+    mockRemove.mockResolvedValue(undefined);
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Remove');
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+
+    expect(
+      await screen.findByText('grace@example.com was removed from the organization'),
+    ).toBeInTheDocument();
+  });
+
+  it('names the keys a refused removal already revoked, rather than calling the roster stale', async () => {
+    // The 404 branch reads as an ordinary stale roster, which is the smaller
+    // half of what happened when the attempt took credentials with it.
+    mockRemove.mockRejectedValue(
+      Object.assign(new Error('That person is no longer on this roster.'), {
+        status: 404,
+        revokedKeys: [REVOKED_KEY],
+      }),
+    );
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Remove');
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }));
+
+    expect(await screen.findByText(/This key was revoked: nightly backup/)).toBeInTheDocument();
+  });
+});
+
 describe('MembersPage — transferring the owner seat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -737,6 +821,61 @@ describe('MembersPage — transferring the owner seat', () => {
     expect(screen.queryByRole('button', { name: /^Transfer ownership/ })).not.toBeInTheDocument();
   });
 
+  it('names the caller’s own keys the transfer revokes', async () => {
+    // The outgoing Owner becomes an Admin, and an Admin cannot hold a key
+    // carrying the two privileged granulars.
+    mockRoleChangePreview.mockResolvedValue({
+      currentRole: OrgRole.Owner,
+      role: OrgRole.Admin,
+      keys: [
+        {
+          id: 'key-9',
+          keyName: 'compliance writer',
+          region: 'eu-west-1',
+          createdAt: '2026-05-14T00:00:00.000Z',
+          reason: 'exceeds_role',
+          excess: ['PutObjectRetention'],
+        },
+      ],
+      survivingCount: 0,
+      unattributedCount: 0,
+    });
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+
+    expect(await screen.findByText('One of your access keys is revoked')).toBeInTheDocument();
+    expect(screen.getByText(/compliance writer/)).toBeInTheDocument();
+    expect(mockRoleChangePreview).toHaveBeenCalledWith('user-1', OrgRole.Admin);
+  });
+
+  it('will not transfer before the preview has answered', async () => {
+    // Otherwise "still loading" and "nothing to revoke" look identical, and the
+    // disclosure this preview was added for never happens.
+    mockRoleChangePreview.mockImplementation(() => new Promise(() => {}));
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+
+    fireEvent.change(await screen.findByLabelText('Type Acme to confirm'), {
+      target: { value: 'Acme' },
+    });
+    expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeDisabled();
+  });
+
+  it('says so when the transfer preview cannot be read', async () => {
+    mockRoleChangePreview.mockRejectedValue(apiError('Preview unavailable', 503));
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+
+    expect(await screen.findByText('The affected keys could not be listed')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Type Acme to confirm'), { target: { value: 'Acme' } });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeEnabled(),
+    );
+  });
+
   it('holds the transfer until the organization’s name is typed', async () => {
     renderPage();
 
@@ -753,7 +892,8 @@ describe('MembersPage — transferring the owner seat', () => {
     expect(confirm).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText('Type Acme to confirm'), { target: { value: 'Acme' } });
-    expect(confirm).toBeEnabled();
+    // Also held until the preview of the caller's own keys answers.
+    await waitFor(() => expect(confirm).toBeEnabled());
 
     fireEvent.click(confirm);
     await waitFor(() =>
@@ -761,6 +901,60 @@ describe('MembersPage — transferring the owner seat', () => {
         stepUpAction: 'transfer-ownership:user-2',
       }),
     );
+  });
+
+  it('holds a reopened transfer until its own preview answers', async () => {
+    // The preview query outlives the closed dialog, so a second opening has
+    // cached data and is no longer `isPending` while it refetches. Gated on that
+    // alone the dialog would show the first opening's list as settled.
+    mockRoleChangePreview.mockResolvedValue(NO_KEYS_AT_RISK);
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+    fireEvent.change(await screen.findByLabelText('Type Acme to confirm'), {
+      target: { value: 'Acme' },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    let answerSecond = () => {};
+    mockRoleChangePreview.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answerSecond = () => resolve(NO_KEYS_AT_RISK);
+        }),
+    );
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+    fireEvent.change(await screen.findByLabelText('Type Acme to confirm'), {
+      target: { value: 'Acme' },
+    });
+    expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeDisabled();
+
+    await act(async () => {
+      answerSecond();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transfer ownership' })).toBeEnabled(),
+    );
+  });
+
+  it('names the caller’s own keys a refused transfer already revoked', async () => {
+    // Here the person reading the refusal is the person whose clients stopped.
+    mockTransfer.mockRejectedValue(
+      Object.assign(new Error('The owner seat moved while you were transferring it.'), {
+        status: 409,
+        revokedKeys: [REVOKED_KEY],
+      }),
+    );
+    renderPage();
+
+    await chooseRowAction('grace@example.com', 'Transfer ownership');
+    await confirmTransfer();
+
+    expect(await screen.findByText(/This key was revoked: nightly backup/)).toBeInTheDocument();
   });
 
   it('reflects both seats when the transfer lands', async () => {
@@ -781,8 +975,7 @@ describe('MembersPage — transferring the owner seat', () => {
     renderPage();
 
     await chooseRowAction('grace@example.com', 'Transfer ownership');
-    fireEvent.change(screen.getByLabelText('Type Acme to confirm'), { target: { value: 'Acme' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }));
+    await confirmTransfer();
 
     await waitFor(() => {
       const rows = screen.getAllByTestId('member-row');
@@ -797,8 +990,7 @@ describe('MembersPage — transferring the owner seat', () => {
     renderPage();
 
     await chooseRowAction('grace@example.com', 'Transfer ownership');
-    fireEvent.change(screen.getByLabelText('Type Acme to confirm'), { target: { value: 'Acme' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }));
+    await confirmTransfer();
 
     // Left open, it offers a destructive button to a caller who is now an
     // Admin, and the server answers the second click with a refusal.

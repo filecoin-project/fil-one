@@ -1,12 +1,7 @@
 import middy from '@middy/core';
 import httpHeaderNormalizer from '@middy/http-header-normalizer';
 import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
-import {
-  ApiErrorCode,
-  UpdateMemberRoleSchema,
-  canManageTargetRole,
-  roleNarrows,
-} from '@filone/shared';
+import { UpdateMemberRoleSchema, canManageTargetRole, roleNarrows } from '@filone/shared';
 import type {
   OrgRole,
   AccessKeySummary,
@@ -17,12 +12,7 @@ import { AuditSubjects, userActor } from '../lib/audit.js';
 import { commitAfterRevokingKeys } from '../lib/commit-after-revoking-keys.js';
 import { reviewKeysForRoleChange } from '../lib/member-keys.js';
 import { notifyRevokedKeys } from '../lib/key-revocation-email.js';
-import {
-  pendingInvitationsFrom,
-  planRevocations,
-  retireInvitationItems,
-  revokeDeferred,
-} from '../lib/invitations.js';
+import { pendingInvitationsFrom, planRevocations, revokeDeferred } from '../lib/invitations.js';
 import type { InvitationRecord } from '../lib/invitations.js';
 import { requireManageableMember } from '../lib/manageable-member.js';
 import {
@@ -31,9 +21,12 @@ import {
   ownerCountDeltaFor,
   ownerCountItem,
   roleChangeItems,
+  withInvitationRevocations,
 } from '../lib/membership-changes.js';
 import type { LabelledItems } from '../lib/membership-changes.js';
 import { readOwnerCount, readOwnerCountForDiagnosis } from '../lib/org-membership.js';
+import { readUserProfile } from '../lib/user-profile.js';
+import type { UserProfile } from '../lib/user-profile.js';
 import {
   OrgDeletingError,
   getOrgProfile,
@@ -42,8 +35,16 @@ import {
 } from '../lib/org-profile.js';
 import type { OrgProfileItem } from '../lib/org-profile.js';
 import { parseJsonBody } from '../lib/parse-json-body.js';
-import { ResponseBuilder, unattributableFailure } from '../lib/response-builder.js';
-import type { ErrorWithRevokedKeys } from '../lib/response-builder.js';
+import {
+  ResponseBuilder,
+  invitationRaceResponse,
+  keyMintedResponse,
+  lastOwnerResponse,
+  memberRoleChangedResponse,
+  ownerCountUnavailableResponse,
+  refusedKeysSubject,
+  unattributableFailure,
+} from '../lib/response-builder.js';
 import type { AuthenticatedEvent } from '../lib/user-context.js';
 import { getUserInfo, getVerifiedEmail } from '../lib/user-context.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -52,6 +53,32 @@ import { csrfMiddleware } from '../middleware/csrf.js';
 import { errorHandlerMiddleware } from '../middleware/error-handler.js';
 
 const SOURCE = 'update-member-role';
+
+/** The way out of a last-Owner refusal, for somebody demoting one. */
+const LAST_OWNER_REMEDY = 'Promote another member to owner first.';
+
+/**
+ * The two profiles only a narrowing reads: the org's, so the revocation pass
+ * knows which tenant holds each key, and the member's, so a fence refusal can
+ * name whose key was minted.
+ *
+ * One call holding the condition rather than two entries in the caller's wave,
+ * because they share it — a widening strands no key, so it reads neither and
+ * answers with both absent.
+ */
+async function readProfilesForNarrowing(
+  narrows: boolean,
+  orgId: string,
+  targetUserId: string,
+): Promise<{ orgProfile?: OrgProfileItem; targetProfile?: UserProfile }> {
+  if (!narrows) return {};
+
+  const [orgProfile, targetProfile] = await Promise.all([
+    getOrgProfile(orgId),
+    readUserProfile(targetUserId),
+  ]);
+  return { orgProfile, targetProfile };
+}
 
 /**
  * PATCH /api/org/members/{userId} — move a member to another role.
@@ -111,9 +138,9 @@ export async function baseHandler(
   const delta = ownerCountDeltaFor(target.role, role);
 
   // Independent, so one wave rather than three.
-  const [pending, orgProfile, owners] = await Promise.all([
+  const [pending, { orgProfile, targetProfile }, owners] = await Promise.all([
     pendingInvitationsFrom(orgId, targetUserId),
-    narrows ? getOrgProfile(orgId) : undefined,
+    readProfilesForNarrowing(narrows, orgId, targetUserId),
     delta === 'decrement' ? readOwnerCount(orgId) : undefined,
   ]);
 
@@ -163,7 +190,10 @@ export async function baseHandler(
       }),
   });
   if ('response' in committed) return committed.response;
-  if ('keyMinted' in committed) return keyMintedResponse(committed.keyMinted);
+  // Named by address: an admin told a key was created "for that member" cannot
+  // tell which of their members to go and look at.
+  if ('keyMinted' in committed)
+    return keyMintedResponse(targetProfile?.email ?? 'that member', committed.keyMinted);
 
   return await finishRoleChange({
     orgId,
@@ -244,10 +274,10 @@ function refuseBeforeRevokingKeys(
 ): APIGatewayProxyStructuredResultV2 | undefined {
   if (delta !== 'decrement') return undefined;
 
-  if (owners === 1) return lastOwnerResponse();
+  if (owners === 1) return lastOwnerResponse(LAST_OWNER_REMEDY);
   if (owners === undefined) {
     console.error('[update-member-role] ownerCount missing — role change refused', { orgId });
-    return ownerCountUnavailableResponse();
+    return ownerCountUnavailableResponse('updated');
   }
   return undefined;
 }
@@ -275,15 +305,6 @@ function roleChangeBase({
   ]);
 }
 
-/** The base plus the invitations that fit beside it, two items each. */
-function withInvitationRevocations(base: LabelledItems, now: InvitationRecord[]): LabelledItems {
-  const items = now.flatMap((invitation) => retireInvitationItems(invitation, 'revoked'));
-  return {
-    items: [...base.items, ...items],
-    labels: [...base.labels, ...items.map(() => 'invitation')],
-  };
-}
-
 /** The answer when the role transaction cancels; every answer carries `revokedKeys`. */
 async function changeFailureResponse(
   err: unknown,
@@ -307,7 +328,7 @@ async function changeFailureResponse(
     });
   }
 
-  const revoked = { revokedKeys: context.revokedKeys };
+  const { revokedKeys } = context;
 
   if (failed.includes('ownerCount')) {
     // The decrement's condition IS the last-Owner invariant: an org at one Owner
@@ -320,15 +341,15 @@ async function changeFailureResponse(
       context.delta === 'decrement' &&
       (await readOwnerCountForDiagnosis(context.orgId)) !== undefined
     ) {
-      return lastOwnerResponse(revoked);
+      return lastOwnerResponse(LAST_OWNER_REMEDY, revokedKeys);
     }
     console.error('[update-member-role] ownerCount unreadable — role change refused', {
       orgId: context.orgId,
     });
-    return ownerCountUnavailableResponse(revoked);
+    return ownerCountUnavailableResponse('updated', revokedKeys);
   }
-  if (failed.includes('invitation')) return invitationRaceResponse(revoked);
-  return concurrentChangeResponse(revoked);
+  if (failed.includes('invitation')) return invitationRaceResponse(revokedKeys);
+  return memberRoleChangedResponse('while you were editing it', revokedKeys);
 }
 
 function roleResponse(body: UpdateMemberRoleResponse): APIGatewayProxyStructuredResultV2 {
@@ -343,77 +364,12 @@ function vendorRefusedResponse(
   revokedKeys: AccessKeySummary[],
   failedKeys: AccessKeySummary[],
 ): APIGatewayProxyStructuredResultV2 {
-  const named = failedKeys.map((key) => `"${key.keyName}"`).join(', ');
-  const subject =
-    failedKeys.length === 1 ? `The key ${named}` : `${failedKeys.length} keys (${named})`;
-
   return new ResponseBuilder()
     .status(502)
     .body<UpdateMemberRoleFailure>({
-      message: `${subject} could not be revoked, so the role is unchanged. Try again.`,
+      message: `${refusedKeysSubject(failedKeys)} could not be revoked, so the role is unchanged. Try again.`,
       revokedKeys,
       failedKeys,
-    })
-    .build();
-}
-
-function lastOwnerResponse(
-  revoked: { revokedKeys: AccessKeySummary[] } = { revokedKeys: [] },
-): APIGatewayProxyStructuredResultV2 {
-  return new ResponseBuilder()
-    .status(409)
-    .body<ErrorWithRevokedKeys>({
-      message:
-        'This organization would be left without an owner. Promote another member to owner first.',
-      code: ApiErrorCode.LAST_OWNER,
-      ...revoked,
-    })
-    .build();
-}
-
-function ownerCountUnavailableResponse(
-  revoked: { revokedKeys: AccessKeySummary[] } = { revokedKeys: [] },
-): APIGatewayProxyStructuredResultV2 {
-  return new ResponseBuilder()
-    .status(409)
-    .body<ErrorWithRevokedKeys>({
-      message: 'The organization’s owner count could not be updated. Please contact support.',
-      ...revoked,
-    })
-    .build();
-}
-
-function invitationRaceResponse(
-  revoked: { revokedKeys: AccessKeySummary[] } = { revokedKeys: [] },
-): APIGatewayProxyStructuredResultV2 {
-  return new ResponseBuilder()
-    .status(409)
-    .body<ErrorWithRevokedKeys>({
-      message: 'An invitation from that member changed while this was in flight — try again.',
-      ...revoked,
-    })
-    .build();
-}
-
-/** A key was minted after the listing this revoked from; the same PATCH retried includes it. */
-function keyMintedResponse(revokedKeys: AccessKeySummary[]): APIGatewayProxyStructuredResultV2 {
-  return new ResponseBuilder()
-    .status(409)
-    .body<ErrorWithRevokedKeys>({
-      message: 'An access key was created for that member while this was in flight — try again.',
-      revokedKeys,
-    })
-    .build();
-}
-
-function concurrentChangeResponse(
-  revoked: { revokedKeys: AccessKeySummary[] } = { revokedKeys: [] },
-): APIGatewayProxyStructuredResultV2 {
-  return new ResponseBuilder()
-    .status(409)
-    .body<ErrorWithRevokedKeys>({
-      message: 'That member’s role changed while you were editing it.',
-      ...revoked,
     })
     .build();
 }

@@ -197,10 +197,66 @@ function RoleNarrowingPreview({
       keys={preview.data?.keys}
       survivingCount={preview.data?.retainedKeyCount ?? 0}
       unattributedCount={preview.data?.unattributedKeyCount ?? 0}
-      loading={preview.isPending}
+      // `isFetching`, not just `isPending`: this component stays mounted while
+      // the dialog is closed, so a second opening has cached data and is
+      // `isPending: false` while it refetches. Gated on the pending state alone
+      // it would show the last opening's key list as settled and let the change
+      // be confirmed against it.
+      loading={preview.isPending || preview.isFetching}
       error={preview.isError}
       pending={pending}
       refusal={refusal}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+/**
+ * The transfer dialog and the preview it reads.
+ *
+ * The outgoing Owner becomes an Admin, so the transfer runs the same pass a
+ * demotion does — and the preview is about the caller's own keys, not the
+ * target's. Rendered only once the caller is known, so the query is keyed on a
+ * real member rather than a placeholder; the transfer is not offered before then
+ * either. It only runs while the dialog is open, for the reason the narrowing
+ * preview's does.
+ */
+function TransferOwnershipPreview({
+  selfUserId,
+  open,
+  orgName,
+  memberName,
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  selfUserId: string;
+  open: boolean;
+  orgName: string;
+  memberName: string;
+  pending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const outgoingOwnerPreview = useQuery({
+    queryKey: queryKeys.roleChangePreview(selfUserId, OrgRole.Admin),
+    queryFn: () => getRoleChangePreview(selfUserId, OrgRole.Admin),
+    enabled: open,
+  });
+
+  return (
+    <TransferOwnershipDialog
+      open={open}
+      orgName={orgName}
+      affectedKeys={outgoingOwnerPreview.data?.keys}
+      // Every opening waits for its own answer, not just the first: the query
+      // outlives the closed dialog, so a reopening refetches with data already
+      // in hand. See {@link RoleNarrowingPreview}.
+      previewLoading={outgoingOwnerPreview.isPending || outgoingOwnerPreview.isFetching}
+      previewError={outgoingOwnerPreview.isError}
+      memberName={memberName}
+      pending={pending}
       onClose={onClose}
       onConfirm={onConfirm}
     />
@@ -261,22 +317,25 @@ export function MemberDialogs({
         title="Remove this member?"
         description={
           removal
-            ? `${memberName(removal)} loses access to this organization in the console. Access keys they already created keep working until somebody revokes them.`
+            ? `${memberName(removal)} loses access to this organization, and every access key they created is revoked. Anything still using one stops working straight away.`
             : ''
         }
         confirmLabel="Remove member"
       />
 
-      <TransferOwnershipDialog
-        open={targets.transfer !== null}
-        orgName={orgName}
-        memberName={transfer ? memberName(transfer) : ''}
-        pending={transferring}
-        onClose={close.transfer}
-        onConfirm={() => {
-          if (targets.transfer) onTransfer(targets.transfer);
-        }}
-      />
+      {selfUserId !== undefined && (
+        <TransferOwnershipPreview
+          selfUserId={selfUserId}
+          open={targets.transfer !== null}
+          orgName={orgName}
+          memberName={transfer ? memberName(transfer) : ''}
+          pending={transferring}
+          onClose={close.transfer}
+          onConfirm={() => {
+            if (targets.transfer) onTransfer(targets.transfer);
+          }}
+        />
+      )}
     </>
   );
 }

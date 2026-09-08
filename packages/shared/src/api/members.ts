@@ -99,6 +99,23 @@ export interface UpdateMemberRoleFailure {
 }
 
 /**
+ * `DELETE /api/org/members/{userId}` — take a member's rows away.
+ *
+ * A body rather than a bare 204, because removal revokes: somebody outside the
+ * org holds no role at all, so every attributed key they created goes with the
+ * membership. The admin doing this is not the key holder, so the response is
+ * the only place the caller learns which credentials it destroyed — the member
+ * is told by email.
+ */
+export interface RemoveMemberResponse {
+  /**
+   * The access keys the removal revoked, named only when there were any, so a
+   * removal of somebody holding none reads as the empty answer it is.
+   */
+  revokedKeys?: AccessKeySummary[];
+}
+
+/**
  * `GET /api/org/members/{userId}/role-change-preview?role=` — what a role
  * change would take away, before it happens.
  *
@@ -139,4 +156,10 @@ export interface TransferOwnershipResponse {
   userId: string;
   /** The caller, now an Admin — the org keeps exactly one Owner. */
   previousOwnerUserId: string;
+  /**
+   * The caller's own access keys the transfer revoked: an Admin holds no
+   * `privileged.grant`, so a key carrying one outlives the authority that
+   * minted it. Named here because the holder is the person reading this.
+   */
+  revokedKeys?: AccessKeySummary[];
 }

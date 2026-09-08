@@ -3,6 +3,8 @@ import type { TransactWriteItem } from '@aws-sdk/client-dynamodb';
 import { Resource } from 'sst';
 import { OrgRole, canManageTargetRole, canRetainAccessKey } from '@filone/shared';
 import type { AccessKeyPermissions, OrgMembershipSource } from '@filone/shared';
+import { retireInvitationItems } from './invitations.js';
+import type { InvitationRecord } from './invitations.js';
 import { OrgKeys } from './org-membership.js';
 
 /**
@@ -429,3 +431,15 @@ export function cancelledLabels(err: unknown, labels: readonly string[]): string
 
 /** The one cancellation reason that means a condition we wrote was not met. */
 const CONDITION_FAILED = 'ConditionalCheckFailed';
+
+/** The base plus the invitations that fit beside it, two items each. */
+export function withInvitationRevocations(
+  base: LabelledItems,
+  now: InvitationRecord[],
+): LabelledItems {
+  const items = now.flatMap((invitation) => retireInvitationItems(invitation, 'revoked'));
+  return {
+    items: [...base.items, ...items],
+    labels: [...base.labels, ...items.map(() => 'invitation')],
+  };
+}
