@@ -104,9 +104,13 @@ export async function baseHandler(
   const targetUserId = target.userId;
 
   const wasOwner = target.role === OrgRole.Owner;
+  // One read, two answers: the address the invitation sweep matches on, and the
+  // one a fence refusal names — an admin told "a key was created for that
+  // member" cannot tell which of their members to go and look at.
+  const targetEmail = await removedMemberAddress(targetUserId);
   const invitationsToRevoke = await pendingInvitationsForRemoval(orgId, {
     userId: targetUserId,
-    emailNorm: await removedMemberAddress(targetUserId),
+    ...(targetEmail ? { emailNorm: normalizeInviteEmail(targetEmail) } : {}),
   });
   const { now, later } = planRevocations(invitationsToRevoke, wasOwner ? 3 : 2);
 
@@ -155,7 +159,8 @@ export async function baseHandler(
       }),
   });
   if ('response' in committed) return committed.response;
-  if ('keyMinted' in committed) return keyMintedResponse('that member', committed.keyMinted);
+  if ('keyMinted' in committed)
+    return keyMintedResponse(targetEmail ?? 'that member', committed.keyMinted);
 
   return await finishRemoval({
     orgId,
@@ -254,27 +259,28 @@ function vendorRefusedResponse(
 }
 
 /**
- * The removed member's address, lowercased, or undefined when we do not hold
- * one.
+ * The removed member's address as stored, or undefined when we do not hold one.
  *
  * Held because the two paths that learn a verified address write it: account
  * creation and invitation acceptance (`lib/user-profile.ts`). So undefined is
  * now the rare answer — a row written before either did, or a read that failed
- * — rather than the only one, and it is worth a log line each time. It narrows
- * the sweep to the invitations the member issued: the invitation their old link
- * belongs to stays live until it expires, and an operator reading this line is
- * the only person who can revoke it by hand.
+ * — rather than the only one, and it is worth a log line each time. Without one
+ * the sweep narrows to the invitations the member issued: the invitation their
+ * old link belongs to stays live until it expires, and an operator reading this
+ * line is the only person who can revoke it by hand.
+ *
+ * As stored rather than normalized, because it has two readers now: the sweep
+ * matches on it and normalizes at the call site, and a fence refusal shows it
+ * to an admin, who should see the address the roster showed them.
  */
 async function removedMemberAddress(userId: string): Promise<string | undefined> {
   const email = (await readUserProfile(userId))?.email;
-  if (!email) {
+  if (!email)
     console.error(
       '[remove-member] No address for the removed member — invitations to them stay live',
       { userId },
     );
-    return undefined;
-  }
-  return normalizeInviteEmail(email);
+  return email;
 }
 
 /** What a cancelled removal needs to tell one refusal from another. */

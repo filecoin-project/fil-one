@@ -283,7 +283,13 @@ export function invitationRaceResponse(
 /**
  * A key was minted for the member after the listing this change revoked from,
  * so the fence refused the commit. The same request retried lists the new key
- * too. `subject` names whose key it was, since each verb reads differently.
+ * too.
+ *
+ * `subject` names whose key it was, since each verb reads differently: the
+ * member's own address where the caller is acting on somebody else, which the
+ * roster already showed them, and a description where the caller is the holder.
+ * Callers passing an address fall back to a description, since a profile row
+ * without one is not a reason to refuse differently.
  */
 export function keyMintedResponse(
   subject: string,

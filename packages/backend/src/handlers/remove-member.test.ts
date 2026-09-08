@@ -314,6 +314,31 @@ describe('DELETE /api/org/members/{userId} handler', () => {
     expect(items.filter((item) => item.Delete)).toHaveLength(2);
   });
 
+  it('refuses a removal when a key was minted after the listing, and names whose', async () => {
+    // Two rows, the fence, and the event: the fence is the third item, and it
+    // alone cancelling is what turns the removal into a retry.
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(2, 4));
+
+    const result = await handler(removeEvent(), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 409 });
+    // The address the roster already showed the admin. Told only "that member",
+    // they cannot tell which of their members to go and look at.
+    expect(body(result).message).toContain(
+      `An access key was created for ${TARGET_EMAIL} while this was in flight`,
+    );
+  });
+
+  it('names the member generically when a fence refusal has no address to use', async () => {
+    stubTargetProfile(undefined);
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(2, 4));
+
+    const result = await handler(removeEvent(), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 409 });
+    expect(body(result).message).toContain('An access key was created for that member');
+  });
+
   it('records the removal with no secret in it', async () => {
     await handler(removeEvent(), buildContext());
 

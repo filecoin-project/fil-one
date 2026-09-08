@@ -25,6 +25,8 @@ import {
 } from '../lib/membership-changes.js';
 import type { LabelledItems } from '../lib/membership-changes.js';
 import { readOwnerCount, readOwnerCountForDiagnosis } from '../lib/org-membership.js';
+import { readUserProfile } from '../lib/user-profile.js';
+import type { UserProfile } from '../lib/user-profile.js';
 import {
   OrgDeletingError,
   getOrgProfile,
@@ -54,6 +56,29 @@ const SOURCE = 'update-member-role';
 
 /** The way out of a last-Owner refusal, for somebody demoting one. */
 const LAST_OWNER_REMEDY = 'Promote another member to owner first.';
+
+/**
+ * The two profiles only a narrowing reads: the org's, so the revocation pass
+ * knows which tenant holds each key, and the member's, so a fence refusal can
+ * name whose key was minted.
+ *
+ * One call holding the condition rather than two entries in the caller's wave,
+ * because they share it — a widening strands no key, so it reads neither and
+ * answers with both absent.
+ */
+async function readProfilesForNarrowing(
+  narrows: boolean,
+  orgId: string,
+  targetUserId: string,
+): Promise<{ orgProfile?: OrgProfileItem; targetProfile?: UserProfile }> {
+  if (!narrows) return {};
+
+  const [orgProfile, targetProfile] = await Promise.all([
+    getOrgProfile(orgId),
+    readUserProfile(targetUserId),
+  ]);
+  return { orgProfile, targetProfile };
+}
 
 /**
  * PATCH /api/org/members/{userId} — move a member to another role.
@@ -113,9 +138,9 @@ export async function baseHandler(
   const delta = ownerCountDeltaFor(target.role, role);
 
   // Independent, so one wave rather than three.
-  const [pending, orgProfile, owners] = await Promise.all([
+  const [pending, { orgProfile, targetProfile }, owners] = await Promise.all([
     pendingInvitationsFrom(orgId, targetUserId),
-    narrows ? getOrgProfile(orgId) : undefined,
+    readProfilesForNarrowing(narrows, orgId, targetUserId),
     delta === 'decrement' ? readOwnerCount(orgId) : undefined,
   ]);
 
@@ -165,7 +190,10 @@ export async function baseHandler(
       }),
   });
   if ('response' in committed) return committed.response;
-  if ('keyMinted' in committed) return keyMintedResponse('that member', committed.keyMinted);
+  // Named by address: an admin told a key was created "for that member" cannot
+  // tell which of their members to go and look at.
+  if ('keyMinted' in committed)
+    return keyMintedResponse(targetProfile?.email ?? 'that member', committed.keyMinted);
 
   return await finishRoleChange({
     orgId,

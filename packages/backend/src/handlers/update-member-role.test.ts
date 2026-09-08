@@ -803,16 +803,36 @@ describe('a narrowing revokes the keys the new role could not mint', () => {
     });
   });
 
-  it('refuses the change when a key was minted after the listing', async () => {
+  it('refuses the change when a key was minted after the listing, and names whose', async () => {
     // The listing is empty precisely because the row landed after it. The
     // sequence is the only thing that can see that, and the retry lists it.
+    ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
+    // The address the roster already showed the admin: told only "that member",
+    // they cannot tell which of their members to go and look at.
+    ddbMock
+      .on(GetItemCommand, {
+        TableName: 'UserInfoTable',
+        Key: { pk: { S: `USER#${TARGET_ID}` }, sk: { S: 'PROFILE' } },
+      })
+      .resolves({ Item: { email: { S: 'member@example.com' } } });
+
+    const result = await handler(roleEvent(OrgRole.Member), buildContext());
+
+    expect(result).toMatchObject({ statusCode: 409 });
+    expect(body(result).message).toContain(
+      'An access key was created for member@example.com while this was in flight',
+    );
+    expect(mockDeleteAccessKey).not.toHaveBeenCalled();
+  });
+
+  it('falls back to naming the member generically when the profile has no address', async () => {
+    // A profile row without an address is not a reason to refuse differently.
     ddbMock.on(TransactWriteItemsCommand).rejects(cancelledAt(3, 5));
 
     const result = await handler(roleEvent(OrgRole.Member), buildContext());
 
     expect(result).toMatchObject({ statusCode: 409 });
     expect(body(result).message).toContain('An access key was created for that member');
-    expect(mockDeleteAccessKey).not.toHaveBeenCalled();
   });
 
   it('asserts nothing about the sequence on a promotion, and does not read it', async () => {
