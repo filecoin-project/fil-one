@@ -66,6 +66,7 @@
 import { writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { parseArgs } from 'node:util';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import {
   BatchWriteItemCommand,
@@ -98,29 +99,19 @@ import { assertStageResources, awsRegionForStage, resolveStageTables } from './l
 const USAGE =
   'Usage: node bin/reset-region-provisioning.ts --stage <stage> --region <region> [--dry-run] [--yes] [--backup <path>]';
 
-/**
- * Every flag this script understands.
- *
- * Enumerated so an unrecognized `--` argument stops the run, the way
- * bin/lib/args.ts and bin/orgs-beta.ts stop on one: a misspelled `--dry-run`
- * that is silently ignored is the worst possible place to be quiet.
- */
-const KNOWN_FLAGS = new Set(['--dry-run', '--yes']);
-const KNOWN_OPTIONS = new Set(['--stage', '--region', '--backup']);
-
 /** Attempts for a batch write DynamoDB keeps handing back as unprocessed. */
 const MAX_BATCH_WRITE_ATTEMPTS = 4;
 
 /** First backoff between those attempts; doubled each time. */
 const RETRY_BASE_MS = 200;
 
-const { flags, options } = parseArgs(process.argv.slice(2));
+const args = parseCommandLine();
 
-const dryRun = flags.has('--dry-run');
+const dryRun = args['dry-run'] ?? false;
 // A run carrying both stays a dry run: the flag that refuses to write wins.
-const skipPrompt = flags.has('--yes') && !dryRun;
-const stage = options.get('--stage') ?? usage('Missing required --stage.');
-const region = options.get('--region') ?? usage('Missing required --region.');
+const skipPrompt = (args.yes ?? false) && !dryRun;
+const stage = args.stage ?? usage('Missing required --stage.');
+const region = args.region ?? usage('Missing required --region.');
 
 // Before any AWS work: a stage or region the script refuses costs a message
 // instead of a state export.
@@ -138,7 +129,7 @@ const tenantIdAttribute = `${orchestratorId}TenantId`;
 const vectorBucket = `filone-${stage}-rag-vectors`;
 
 const backupPath =
-  options.get('--backup') ??
+  args.backup ??
   `region-backup-${stage}-${region}-${new Date().toISOString().replaceAll(':', '-')}.json`;
 
 requireAwsProfile();
@@ -232,27 +223,29 @@ console.log(`SSM parameters deleted: ${ssmParametersDeleted}`);
 console.log(`Backup: ${backupPath}`);
 console.log('Done.');
 
-function parseArgs(argv: readonly string[]): {
-  flags: Set<string>;
-  options: Map<string, string>;
-} {
-  const flags = new Set<string>();
-  const options = new Map<string, string>();
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (KNOWN_FLAGS.has(arg)) {
-      flags.add(arg);
-      continue;
-    }
-    if (!KNOWN_OPTIONS.has(arg)) usage(`Unrecognized argument: ${arg}`);
-
-    const value = argv[++i];
-    if (!value || value.startsWith('--')) usage(`Missing value for ${arg}.`);
-    options.set(arg, value);
+/**
+ * The command line, or usage and exit 1.
+ *
+ * Strict parsing stops the run on an unrecognized `--` argument, the way
+ * bin/lib/args.ts and bin/orgs-beta.ts stop on one: a misspelled `--dry-run`
+ * that is silently ignored is the worst possible place to be quiet.
+ */
+function parseCommandLine() {
+  try {
+    return parseArgs({
+      options: {
+        stage: { type: 'string' },
+        region: { type: 'string' },
+        backup: { type: 'string' },
+        'dry-run': { type: 'boolean' },
+        yes: { type: 'boolean' },
+      },
+      strict: true,
+      allowPositionals: false,
+    }).values;
+  } catch (err) {
+    return usage(err instanceof Error ? err.message : String(err));
   }
-
-  return { flags, options };
 }
 
 function usage(message: string): never {
