@@ -65,7 +65,7 @@ export interface RagBucketPlan {
 export interface AccountPlan {
   orgPk: string;
   orgId: string;
-  /** Absent when only dangling RAG rows put the account in the plan. */
+  /** Absent when only dangling RAG rows or access keys put the account in the plan. */
   tenantId?: string;
   /** True when AccountDeletionWorker is already tearing the account down. */
   deleting: boolean;
@@ -198,10 +198,17 @@ export function buildResetPlan({
   for (const [orgPk, { profile, accessKeys }] of orgRows) {
     const orgId = orgPk.slice(ORG_PK_PREFIX.length);
     const ragBuckets = takeRagBuckets(ragByOrg, orgId, region);
+    // Access keys are claimed by their own `region` attribute, whether or not
+    // the tenant pointer is still there: a key minted between the scan and the
+    // pointer removal of an earlier run has no pointer left to find it by, and
+    // this is what lets the next run pick it up.
+    const regionalAccessKeys = accessKeys.filter(
+      (row) => (row.region?.S ?? DEFAULT_ACCESS_KEY_REGION) === region,
+    );
     const tenantId = profile?.[tenantIdAttribute]?.S;
 
     if (!tenantId) {
-      if (ragBuckets.length === 0) {
+      if (ragBuckets.length === 0 && regionalAccessKeys.length === 0) {
         notProvisioned++;
         continue;
       }
@@ -210,7 +217,7 @@ export function buildResetPlan({
         orgId,
         deleting: profile?.deleting?.BOOL === true,
         profileAttributes: {},
-        accessKeys: [],
+        accessKeys: regionalAccessKeys,
         ragBuckets,
         ssmParameterNames: [],
       });
@@ -223,9 +230,7 @@ export function buildResetPlan({
       tenantId,
       deleting: profile?.deleting?.BOOL === true,
       profileAttributes: priorProfileAttributes(profile!, orchestratorId, tenantIdAttribute),
-      accessKeys: accessKeys.filter(
-        (row) => (row.region?.S ?? DEFAULT_ACCESS_KEY_REGION) === region,
-      ),
+      accessKeys: regionalAccessKeys,
       ragBuckets,
       ssmParameterNames: ssmParameterNames(stage, orchestratorId, tenantId),
     });

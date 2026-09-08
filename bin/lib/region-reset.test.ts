@@ -275,6 +275,34 @@ describe('buildResetPlan', () => {
     }).toEqual({ accounts: 1, tenantId: undefined, buckets: ['my-bucket'], notProvisioned: 0 });
   });
 
+  it('plans the dangling access keys of an account holding no tenant id', () => {
+    const strayKey = accessKeyRow('AKIASTRAY', 'eu-central-3');
+    const result = plan(orgRows({ profile: profileRow(), accessKeys: [strayKey] }));
+    expect({
+      accounts: result.accounts.length,
+      tenantId: result.accounts[0]!.tenantId,
+      accessKeys: result.accounts[0]!.accessKeys,
+      ssmParameterNames: result.accounts[0]!.ssmParameterNames,
+      notProvisioned: result.notProvisioned,
+    }).toEqual({
+      accounts: 1,
+      tenantId: undefined,
+      accessKeys: [strayKey],
+      ssmParameterNames: [],
+      notProvisioned: 0,
+    });
+  });
+
+  it("counts an account holding only another region's keys as not provisioned", () => {
+    const result = plan(
+      orgRows({ profile: profileRow(), accessKeys: [accessKeyRow('AKIAELSEWHERE', 'eu-west-1')] }),
+    );
+    expect({ accounts: result.accounts, notProvisioned: result.notProvisioned }).toEqual({
+      accounts: [],
+      notProvisioned: 1,
+    });
+  });
+
   it('plans RAG rows whose account has no row in UserInfoTable', () => {
     const result = plan(new Map(), [
       ragRow(RAGKeys.bucketPk(ORG_ID, S3Region.EuCentral3, 'my-bucket'), RAGKeys.enablementSk()),

@@ -20,7 +20,10 @@
 // instead of orphaning state nothing can name. For eu-west-1 it also rewinds
 // `auroraSetupStatus` to FILONE_ORG_CREATED and drops
 // `auroraSetupFailureCount`, because Aurora's setup state machine throws on any
-// other status.
+// other status. Regional ACCESSKEY# rows and RAG rows are planned by their own
+// region, so an account whose pointer is already gone still has them deleted:
+// a key minted between an earlier run's scan and its pointer removal is picked
+// up by the next run.
 //
 // Which regions each stage allows:
 //
