@@ -8,6 +8,7 @@ vi.mock('sst', () => sstResourceMock());
 import { OrgKeys } from './org-membership.js';
 import {
   cancelledLabels,
+  creatorRoleStillMintsCheck,
   inviterAuthorityCheck,
   membershipDeleteItems,
   membershipRows,
@@ -186,6 +187,55 @@ describe('inviterAuthorityCheck', () => {
       });
     },
   );
+});
+
+describe('creatorRoleStillMintsCheck', () => {
+  it('admits only Owner for a key that writes object retention', () => {
+    const check = creatorRoleStillMintsCheck({
+      orgId: ORG_ID,
+      userId: 'creator-id',
+      key: { permissions: ['write'], granularPermissions: ['PutObjectRetention'] },
+    });
+
+    expect(check.ConditionCheck).toMatchObject({
+      Key: { pk: { S: OrgKeys.orgPk(ORG_ID) }, sk: { S: OrgKeys.memberSk('creator-id') } },
+      ConditionExpression: 'attribute_exists(pk) AND #role IN (:role0)',
+      ExpressionAttributeNames: { '#role': 'role' },
+      ExpressionAttributeValues: { ':role0': { S: OrgRole.Owner } },
+    });
+  });
+
+  // The point of asking about the key rather than the cap role: an Owner
+  // demoted to Admin mid-mint keeps a key an Admin could have minted.
+  it('admits Admin for a key an Admin could mint', () => {
+    const check = creatorRoleStillMintsCheck({
+      orgId: ORG_ID,
+      userId: 'creator-id',
+      key: { permissions: ['read', 'DeleteBucket'] },
+    });
+
+    expect(check.ConditionCheck?.ConditionExpression).toBe(
+      'attribute_exists(pk) AND #role IN (:role0, :role1)',
+    );
+    expect(check.ConditionCheck?.ExpressionAttributeValues).toStrictEqual({
+      ':role0': { S: OrgRole.Owner },
+      ':role1': { S: OrgRole.Admin },
+    });
+  });
+
+  it('never admits ReadOnly, which holds no keys.create at all', () => {
+    const check = creatorRoleStillMintsCheck({
+      orgId: ORG_ID,
+      userId: 'creator-id',
+      key: { permissions: ['read'] },
+    });
+
+    expect(check.ConditionCheck?.ExpressionAttributeValues).toStrictEqual({
+      ':role0': { S: OrgRole.Owner },
+      ':role1': { S: OrgRole.Admin },
+      ':role2': { S: OrgRole.Member },
+    });
+  });
 });
 
 describe('cancelledLabels', () => {

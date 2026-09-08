@@ -14,6 +14,7 @@ export {
   getAvailableRegions,
   isSupportedRegion,
   supportsBucketManagement,
+  getRegionAccessModel,
   getS3Endpoint,
   getAuth0Domain,
   getStageFromHostname,
@@ -35,7 +36,7 @@ export {
   getUsageLimits,
   senderAddress,
 } from './constants.js';
-export type { UsageLimits } from './constants.js';
+export type { AccessModel, UsageLimits } from './constants.js';
 export { formatBytes, formatBytesShort } from './formatBytes.js';
 export { UUID_PATTERN, isUuid } from './uuid.js';
 export type {
@@ -91,6 +92,10 @@ export { TransferOwnershipSchema, UpdateMemberRoleSchema } from './api/members.j
 export type {
   ListMembersResponse,
   MemberSummary,
+  AccessKeySummary,
+  RemoveMemberResponse,
+  RoleChangePreviewResponse,
+  UpdateMemberRoleFailure,
   TransferOwnershipRequest,
   TransferOwnershipResponse,
   UpdateMemberRoleRequest,
@@ -144,6 +149,7 @@ export type {
   AuditIntentPhase,
   AuditKeyKind,
   AuditOutcome,
+  RevocationTrigger,
   AuditPhaseFields,
   AuditSinglePhase,
   AuditSubject,
@@ -162,6 +168,8 @@ export {
   roleHasPermission,
   canManageTargetRole,
   canChangeRole,
+  roleNarrows,
+  NO_ROLE,
 } from './permissions.js';
 export type { Permission } from './permissions.js';
 
@@ -169,8 +177,14 @@ export {
   ACCESS_KEY_PERMISSION_REQUIREMENT,
   GRANULAR_PERMISSION_REQUIREMENT,
   excessKeyPermissions,
+  canRetainAccessKey,
 } from './access-key-permissions.js';
-export type { ExcessKeyPermission } from './access-key-permissions.js';
+export type {
+  ExcessKeyPermission,
+  AccessKeyRevocationReason,
+  KeyRetentionResult,
+  AccessKeyPermissions,
+} from './access-key-permissions.js';
 
 export { ROUTE_MANIFEST } from './route-manifest.js';
 export type {
