@@ -153,16 +153,28 @@ export default $config({
     // profile, or billing row that happened to share a partition. Written only
     // through lib/audit.ts, which appends an event in the same transaction as
     // the mutation it records.
-    // Handlers reach this table with the same allResources link every route
-    // uses, so they hold dynamodb:* on it. Narrowing the audit grant to
-    // PutItem/Query is follow-up work: it is the one table where a handler
-    // holding DeleteItem contradicts the append-only claim.
+    // Routes reach it through the narrowed auditLog link below rather than
+    // through the table itself, because the Dynamo component's own link grants
+    // dynamodb:* and this is the one table where a handler holding DeleteItem
+    // contradicts the append-only claim.
     const auditTable = new sst.aws.Dynamo('AuditTable', {
       fields: {
         pk: 'string',
         sk: 'string',
+        // The event-type index: ORG#{orgId}#TYPE#{type} / {createdAt}#{eventId}.
+        // Org-scoped partition key, so a type-filtered query can never read
+        // across orgs, and the base sort key format, so it still gets its date
+        // range from a BETWEEN rather than a scan.
+        gsi1pk: 'string',
+        gsi1sk: 'string',
       },
       primaryIndex: { hashKey: 'pk', rangeKey: 'sk' },
+      // Projection defaults to ALL. The item is a few hundred bytes and the
+      // point of the index is that one query answers the request; KEYS_ONLY
+      // would turn every page into a batch of reads against the base table.
+      globalIndexes: {
+        byType: { hashKey: 'gsi1pk', rangeKey: 'gsi1sk' },
+      },
       ttl: 'ttl',
       transform: {
         table: {
@@ -178,6 +190,39 @@ export default $config({
           deletionProtectionEnabled: isProduction,
         },
       },
+    });
+
+    // How everything reaches AuditTable: the table's name, and the two actions
+    // an append-only log needs. Linking the Dynamo component directly would
+    // grant dynamodb:* on the table and its index, DeleteItem and UpdateItem
+    // included, which is the difference between an application that cannot
+    // modify an audit entry and one that merely does not.
+    //
+    // TransactWriteItems needs the underlying PutItem on each item it writes,
+    // so commitAudited works unchanged. No Scan: nothing reads this table
+    // without naming an org.
+    //
+    // Two statements because DynamoDB splits along the same line. A query may
+    // name the table or one of its indexes, so Query needs both ARNs; a write
+    // may only ever name the table, and granting PutItem on an index ARN would
+    // be a permission that can never match. The index is maintained by
+    // DynamoDB itself as the write lands, under its own permissions rather than
+    // the caller's.
+    //
+    // The one exception is the account deletion worker, which destroys an org's
+    // partition and takes DeleteItem on top of this link.
+    const auditLog = new sst.Linkable('AuditLog', {
+      properties: { name: auditTable.name },
+      include: [
+        sst.aws.permission({
+          actions: ['dynamodb:Query'],
+          resources: [auditTable.arn, $interpolate`${auditTable.arn}/index/*`],
+        }),
+        sst.aws.permission({
+          actions: ['dynamodb:PutItem'],
+          resources: [auditTable.arn],
+        }),
+      ],
     });
 
     // RAG indexer's own store: per-object chunk manifests
@@ -622,7 +667,7 @@ export default $config({
       userInfoTable,
       bulkDeleteTable,
       orgTable,
-      auditTable,
+      auditLog,
       userFilesBucket,
       ragVectorBucket,
       auth0ClientId,
@@ -664,8 +709,8 @@ export default $config({
     // serving every region in it; the region is sent per-tenant in the PUT
     // /tenants body.
     const forgeEnv = {
-      FORGE_MANAGEMENT_API_URL: isProduction ? '' : 'https://hilt.staging.fil.one',
-      FORGE_DEV_MANAGEMENT_API_URL: isProduction ? '' : 'https://hilt.dev.forge-sandbox.fil.one',
+      FORGE_MANAGEMENT_API_URL: isProduction ? '' : 'https://auth.staging.fil-forge.com',
+      FORGE_DEV_MANAGEMENT_API_URL: isProduction ? '' : 'https://auth.latest.dev.fil-forge.com',
     };
 
     // Everything the service-orchestrator layer needs at runtime. FILONE_STAGE
@@ -883,8 +928,10 @@ export default $config({
         userInfoTable,
         ragIndexerTable,
         ragVectorBucket,
+        auditLog,
         stripeSecretKey,
         stripePriceId,
+        orgTable,
         ...managementApiTokens,
         ...mgmtRuntimeResources,
       ],
@@ -901,6 +948,12 @@ export default $config({
       permissions: [
         ...ragPermissions,
         { actions: ['sqs:SendMessage'], resources: [accountDeletionDlq.arn] },
+        // The one credential in the system that may remove an audit entry. The
+        // auditLog link above deliberately withholds this from every route, and
+        // the teardown is the one place where deleting is the point: an org
+        // that asked to be erased must not leave a record of who belonged to it
+        // and what they did.
+        { actions: ['dynamodb:DeleteItem'], resources: [auditTable.arn] },
       ],
     });
 
@@ -1223,9 +1276,6 @@ export default $config({
         ],
       },
       'stripe-webhook': {
-        // HubSpot key: the webhook mirrors subscription status onto the contact
-        // so lifecycle sequences can tell a paying customer from a trial (FIL-828).
-        extraLink: [hubSpotServiceKey],
         extraEnv: {
           ...orchestratorEnv,
           STRIPE_WEBHOOK_SECRET_SSM_PATH: $interpolate`/filone/${$app.stage}/stripe-webhook-secret`,
@@ -1368,19 +1418,22 @@ export default $config({
     // webhook writes, and counts contacts HubSpot cannot match at all.
     const hubSpotContactSync = createFn('HubSpotContactSync', {
       handler: 'packages/backend/src/jobs/hubspot-contact-sync.handler',
-      // stripePriceId is unused here but getBillingSecrets() reads both keys in
-      // one literal, so omitting it throws on the first getStripeClient() call.
-      link: [billingTable, hubSpotServiceKey, stripeSecretKey, stripePriceId],
+      // The addresses it bootstraps contacts on come off UserInfoTable's PROFILE
+      // rows; Stripe is no longer read, so its secrets are no longer linked.
+      link: [billingTable, userInfoTable, hubSpotServiceKey],
       timeout: '300 seconds',
       memory: '256 MB',
     });
 
     new sst.aws.CronV2('HubSpotContactSyncCron', {
-      // Every 6 hours at :30 (00:30, 06:30, 12:30, 18:30 UTC) — offset from the
-      // other BillingTable scanners (usage 07/19, grace 08/20, drift 10/22) so
-      // the full-table Scans do not overlap. This 6h period is the worst-case
-      // propagation lag documented for ops on the HubSpot property itself.
-      schedule: 'cron(30 0/6 * * ? *)',
+      // Hourly at :30 — offset from the other BillingTable scanners (usage
+      // 07/19, grace 08/20, drift 10/22, all on the hour) so the full-table
+      // Scans do not overlap. `rate(1 hour)` would fire at whatever offset the
+      // deploy landed on and collide with them. This 1h period is the worst-case
+      // propagation lag for ops on the HubSpot property; each run reconciles at
+      // most MAX_CONTACTS_PER_RUN rows, so the frequency is also what sets how
+      // fast a backfill backlog drains.
+      schedule: 'cron(30 * * * ? *)',
       function: hubSpotContactSync.arn,
     });
 
