@@ -36,11 +36,17 @@ A module with none of these loads today:
 `subscription-store.ts`, `orgs-beta.ts` and the FTH tenant setup load. Adding
 the enum conversion lets `@filone/shared` load.
 
-One constraint survives every fix. Backend modules that read `Resource` from
-`sst` import fine and throw on the first property access outside `sst shell`,
-and `bin/` scripts run outside it by design. Scripts can therefore import key
-builders, constants and pure helpers, and must keep resolving table names from
-`sst state export` as they do now.
+One constraint survives every fix. `Resource` from `sst` imports fine and
+throws on the first property access outside `sst shell`, and `bin/` scripts
+run outside it by design. Most backend modules read it inside functions and
+load under plain Node once their specifiers resolve; `subscription-store.ts`,
+`deletion-record.ts`, `account-deletion-sweeper.ts`, `orgs-beta.ts` and
+`fth-tenant-setup.ts` were checked. `fth-orchestrator.ts` builds its
+management client at module level and reads a linked secret while doing so, so
+it and `service-orchestrator-registry.ts`, which imports it, throw at import.
+Scripts can therefore import key builders, constants and pure helpers from
+modules that defer their resource reads, and must keep resolving table names
+from `sst state export` as they do now.
 
 ## Decision
 
@@ -86,9 +92,12 @@ code comply with it, so `main` never fails lint:
   rule fires on every import and export declaration whose specifier ends in
   `.js`, once per imported name, and on nothing else; no third-party specifier
   in the three packages ends in `.js`. It does not inspect `vi.mock()` or
-  `import()` calls. The former never run under Node, and the 33 dynamic imports
-  are covered by the one-time rewrite. `import/extensions` was tried and
-  rejected because it also fires on website's extension-less imports.
+  `import()` calls. The former never run under Node. The latter need their own
+  guard: a rule in `@filone/oxlint-rules`, the repository's own oxlint plugin,
+  that reports an `import()` whose string argument ends in `.js`. Shared and
+  rag-shared have no dynamic imports today; the backend has 33, so the rule
+  lands with the backend rewrite. `import/extensions` was tried and rejected
+  because it also fires on website's extension-less imports.
 
 TypeScript offers no option that forbids the `.js` form. Under both `NodeNext`
 and `Bundler` resolution it maps `./x.js` to `x.ts` by design, and the mapping
@@ -125,21 +134,29 @@ constants instead of copying them. Shared goes before backend because a
 backend module that imports `@filone/shared` cannot load until shared's own
 internal specifiers resolve, whatever the backend's specifiers say.
 
-**4. Backend to `.ts` specifiers.** Rewrite the backend (1236 import lines,
-179 `vi.mock` calls, 33 dynamic imports), widen the lint override. After this
-step every pure backend helper loads under plain Node. This is the step with
-the merge cost described below; schedule it right after the ready IAM M2 pull
-requests land.
+**4. Defer resource reads in the FTH orchestrator.** Make
+`fth-orchestrator.ts` create its management client on first use instead of at
+module level, and export the console user code the `fth-console-key` script
+mirrors. A small pull request with no other change, so that after step 5 the
+orchestrator registry and everything it imports load under plain Node. Each
+step 6 pull request repeats the check for its own source module before
+deleting the mirror.
 
-**5. Replace the mirrors.** One script at a time, import the canonical module,
+**5. Backend to `.ts` specifiers.** Rewrite the backend (1236 import lines,
+179 `vi.mock` calls, 33 dynamic imports), widen the lint override, add the
+`import()` rule. After this step every backend helper that defers its
+resource reads loads under plain Node. This is the step with the merge cost
+described below; schedule it right after the ready IAM M2 pull requests land.
+
+**6. Replace the mirrors.** One script at a time, import the canonical module,
 delete the copy and its "keep in sync" comment, and delete the mirror-equality
 tests in `bin/lib`. Each script is its own pull request and its own runbook
 check.
 
-**6. Website, optional.** The same `sed` and the same override, if one
+**7. Website, optional.** The same `sed` and the same override, if one
 convention is preferred.
 
-The rewrite in steps 3 and 4 is one command per package and takes seconds, so
+The rewrite in steps 3 and 5 is one command per package and takes seconds, so
 the branch is created on the day it merges rather than kept alive.
 
 ## Impact on open pull requests
@@ -171,7 +188,7 @@ test files will see a few more.
 
 The IAM M2 branches are stacked in the order listed, with #675 on top, so
 their counts are cumulative and only the top of the stack has to be rebased.
-Landing step 4 after #686 merges leaves #675 above it and the five unrelated
+Landing step 5 after #686 merges leaves #675 above it and the five unrelated
 branches, about 40 files in total.
 
 Resolution is mechanical. Every conflict resolves by taking the pull request's
