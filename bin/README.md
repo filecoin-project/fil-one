@@ -189,12 +189,13 @@ rows with their index names, and the SSM parameter names. It refuses to
 overwrite an existing file, and `--backup <path>` names it. A run that finds no
 account provisioned in the region writes nothing.
 
-There is no restore script yet. The file holds what one would need: re-create
-the upstream tenant under the recorded tenant id, re-write the profile
-attributes, and mint fresh access keys from the recorded names, permissions,
-bucket scopes and expiries. Minting new keys is the one step a restore could not
-avoid, since the file carries no secret material and never the SSM values. RAG
-indexes would come back by re-enabling RAG and letting the indexer sync.
+There is no restore script yet. The file holds what one would need to re-create
+the upstream tenant under the recorded tenant id and re-write the profile
+attributes. Access keys cannot be restored: the file carries no secret material,
+and a freshly minted key comes with a fresh secret that only the customer
+creating it ever sees. The recorded `ACCESSKEY#` rows are the list of keys each
+customer would have to re-create. RAG indexes would come back by re-enabling RAG
+and letting the indexer sync.
 
 **What the reset leaves in place.** The orchestrators are never called, so
 upstream tenants, buckets and access keys stay where they are — the reset
