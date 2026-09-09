@@ -575,6 +575,6 @@ lifecycle feed from an orchestrator is what would close the rest.
   behavior on Aurora and FTH. `HeadBucket` answers 403 rather than 404 for a
   bucket outside a key's scope on both, so a member who guesses an exact name
   confirms it exists.
-- The enforceability memo, `iam-prd-enforceability-by-backend.md` (2026-08-11),
+- The enforceability memo, `iam-prd-enforceability-by-backend.md` in the knowledge-base repo (2026-08-11),
   sorted the PRD's requirements by what each backend can enforce. It is the
   source of the Forge-first path.
