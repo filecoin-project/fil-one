@@ -102,13 +102,13 @@ describe('getS3Endpoint', () => {
   // Hard-coded the expected region endpoints so that this test suite
   // reliably detects any accidental regressions in the code building
   // the S3 endpoint URLs.
-  const EXPECTED_PRODUCTION_REGION_ENDPOINTS: Partial<Record<S3Region, string>> = {
-    [S3Region.EuWest1]: 'https://eu-west-1.s3.filonecontent.com',
-    [S3Region.UsEast1]: 'https://s3.us-east-1.filonecontent.com',
-  };
-  for (const [region, endpoint] of Object.entries(EXPECTED_PRODUCTION_REGION_ENDPOINTS)) {
+  const EXPECTED_PRODUCTION_REGION_ENDPOINTS: [S3Region, string][] = [
+    [S3Region.EuWest1, 'https://eu-west-1.s3.filonecontent.com'],
+    [S3Region.UsEast1, 'https://s3.us-east-1.filonecontent.com'],
+  ];
+  for (const [region, endpoint] of EXPECTED_PRODUCTION_REGION_ENDPOINTS) {
     it(`returns ${endpoint} for ${region} in production`, () => {
-      expect(getS3Endpoint(region as S3Region, Stage.Production)).toBe(endpoint);
+      expect(getS3Endpoint(region, Stage.Production)).toBe(endpoint);
     });
   }
 });
