@@ -53,20 +53,22 @@ rather than granting them by role at the storage system.
 Each orchestrator declares the model its backend serves, `accessModel:
 'scoped-keys' | 'iam'`.
 
-**Scoped keys** is Aurora and FTH. An access key carries its own permissions
-and bucket list, the creator's role caps the permission set at creation, and a
-role narrowing revokes the keys the holder could no longer mint. Every member
-sees every bucket and the role decides what they may do. There is no
-bucket-level scoping of members on either production region. This half is built
-and merged.
+### Scoped keys (Aurora and FTH)
 
-**IAM** is Forge, once the Hilt network serving a region implements the
-contract below. Each member is a principal, bucket policies are the only thing
-that grants access, and an access key belongs to a member and carries what the
-policies give that member, evaluated per request. The role decides who may edit
-a policy and what may go into a statement; it never crosses the interface.
-Until Hilt ships the contract a Forge region declares `scoped-keys` and behaves
-as FTH does, which is what its integration does today.
+An access key carries its own permissions and bucket list, the creator's role
+caps the permission set at creation, and a role narrowing revokes the keys the
+holder could no longer mint. Every member sees every bucket and the role
+decides what they may do. There is no bucket-level scoping of members on either
+production region. This half is built and merged.
+
+### IAM (Forge)
+
+Each member is a principal, bucket policies are the only thing that grants
+access, and an access key belongs to a member and carries what the policies
+give that member, evaluated per request. The role decides who may edit a policy
+and what may go into a statement; it never crosses the interface. Until Hilt
+ships the contract a Forge region declares `scoped-keys` and behaves as FTH
+does, which is what its integration does today.
 
 A region's model changes once, in that direction, per Forge network.
 
@@ -122,10 +124,12 @@ union(Allow naming member) \ union(Deny naming member)
 **An explicit Deny wins over an Allow.** This follows AWS, and it costs nothing
 to reason about here because the storage system has no other input: it
 evaluates principals against statements, and there is no role or ceiling for a
-Deny to outrank. A Deny naming an Owner takes that bucket away from them until
-it is edited out, which an Owner can always do, since the permission to edit a
-policy comes from their role and not from the policy. A Deny naming every
-member locks the whole org out of a bucket until someone does.
+Deny to outrank. The one action outside the arithmetic is bucket enumeration,
+which every principal holds and no Deny removes. A Deny naming an Owner takes
+that bucket away from them until it is edited out, which an Owner can always
+do, since the permission to edit a policy comes from their role and not from
+the policy. A Deny naming every member locks the whole org out of a bucket
+until someone does.
 
 **Who edits** is `buckets.policy_manage`, a new permission held by Owner and
 Admin. Those are the two roles `members.manage` already sits at, so nobody
@@ -176,10 +180,11 @@ The member detail page carries a read-only list of the buckets a member
 reaches, so an admin can answer "what does this person have" from the person's
 page.
 
-**Concurrent edits need a compare-and-set.** Two admins editing one bucket's
-policy from the same read must not overwrite each other silently, and with no
-policy id there is no version to bump. The storage system supplies the
-mechanism, as a requirement below.
+**Concurrent edits take a compare-and-set.** With no policy id there is no
+version to bump, so the storage system supplies one instead. A read returns a
+strong ETag over the stored document, a write carries it back, and a write
+whose ETag no longer matches is refused with nothing written. Creating a
+bucket's first policy is the same check against no policy existing.
 
 ## Architectural changes
 
@@ -219,8 +224,9 @@ touch an S3 credential at all; they are management-API calls under the partner
 key.
 
 The usage handler subtracts exactly one console key from the org's key count,
-and N member credentials break that arithmetic. They also consume N of the
-tenant's key limit.
+and N member credentials break that arithmetic. Nothing else is spent: Hilt
+enforces no key limit, and the per-tenant limit the console reads is the
+vendors' own.
 
 `getBucket` has to change first. It proves a bucket exists by filtering a
 tenant-wide listing, so today it answers 200 for a bucket the caller cannot
@@ -240,12 +246,15 @@ keep the credential unexpiring for that reason.
 consistent with the storage system's last write. A credential cached at the
 gateway is good until the staleness bound, so removing a member from a bucket's
 policy stops their object browsing when the revocation reaches the gateway
-rather than at their next click. Bucket-addressed reads are never served from
-that cache and stay as fresh as they are today. The console can no longer
-refuse on its own, only relay a 403, so containment on Forge becomes wholly the
-storage system's. Nothing widens, because a narrowing that cannot reach the
-storage system is refused. And during a Hilt outage a warm credential keeps a
-scoped member's object browsing working, where today those reads fail closed.
+rather than at their next click, which is a firehose hop and not a wait for the
+cache to expire. Bucket-addressed reads are never served from that cache and
+stay as fresh as they are today. The console can no longer refuse on its own,
+only relay what the data plane answered, so containment on Forge becomes wholly
+the storage system's. A bucket out of reach comes back as a missing bucket and
+a forbidden action as a refusal, which is the pair the console surfaces.
+Nothing widens, because a narrowing that cannot reach the storage system is
+refused. And during a Hilt outage a warm credential keeps a scoped member's
+object browsing working, where today those reads fail closed.
 
 ### The orchestrator interface
 
@@ -339,18 +348,16 @@ authorized it.
 
 **A scoped member creates a bucket.**
 
-1. `POST /api/buckets` creates the bucket, signed with the tenant-wide
-   credential, because no policy can name a bucket that does not exist yet.
-2. The console writes the bucket's policy: an Allow naming the org's current
-   Owners and Admins, and an Allow naming the creator with the actions their
-   role permits. An unscoped creator is already in the first statement.
-3. A failure between the two leaves a bucket the creator cannot see. The
-   console retries the write on the same request; if that fails too, the
-   response says the bucket exists and the policy does not, and an Owner or
-   Admin repairs it.
+1. `POST /api/buckets` calls the management API's bucket create with the policy
+   in the same request, signed with the tenant-wide credential.
+2. The policy names the org's current Owners and Admins in one Allow, and the
+   creator in another with the actions their role permits. An unscoped creator
+   is already in the first statement.
+3. The storage system commits the bucket and its policy together, so a failure
+   leaves no bucket and never a bucket its creator cannot see.
 
-The two would be one call if the management API took a policy alongside a
-bucket create. That is worth having and is part of the ask.
+The gateway has not seen a bucket created this way and registers it on the
+first bucket-info call for the name.
 
 **Removal.**
 
@@ -381,8 +388,10 @@ sit outside the revocation pass.
 principals, policies, and keys, and the deletion scrub already reads the whole
 org partition.
 
-**Deleting a bucket** removes its policy with it. Hilt already revokes every
-delegation whose subject is the deleted bucket, which is the same semantics.
+**Deleting a bucket** removes its policy with it and revokes nothing. No
+delegation names a single bucket in this model, so there is nothing to revoke;
+the gateway drops the bucket from its registry on the same request and refuses
+any bucket it does not know, which retires the warm chains by itself.
 
 ## The IAM contract for Forge
 
@@ -407,16 +416,18 @@ object anywhere, and no route updates a key.
 
 1. **A tenant service credential** outside the principal model: the console's
    own key, tenant-wide and unexpiring, minted at tenant setup before any
-   principal exists. It is not a customer key and sits outside the key list and
-   the revocation rules.
-2. **Principals** per tenant, `(tenantId, userId)`, as bare identities a key
-   can bind to and a statement can name. They carry no permissions, no role,
-   and no all-buckets flag, so there is nothing on a principal to keep in step
-   with the console. A batched write for the provisioning sweep.
+   principal exists, and mintable on demand for a tenant that predates the
+   model. It is not a customer key and sits outside the key list, the key
+   count, and the revocation rules.
+2. **Principals** per tenant, `(tenantId, userId)`, that a key can bind to and
+   a statement can name. A principal carries no permissions, no role, and no
+   all-buckets flag, so there is nothing on it to keep in step with the
+   console. It does need an identity of its own that a revocation can target. A
+   batched write for the provisioning sweep.
 3. **Bucket policies** addressed by bucket: a statement list carrying effect,
-   principals, and actions; a compare-and-set token for concurrent edits; and a
-   query by principal. The management API carries no actor, since who may edit
-   a policy is the console's decision.
+   principals, and actions; an ETag the caller passes back to make an edit
+   conditional; and a query by principal. The management API carries no actor,
+   since who may edit a policy is the console's decision.
 4. **Keys bound to a principal**, issued with a name and expiry only, names
    unique per principal. The console holds one such key per member for its own
    traffic.
@@ -426,23 +437,28 @@ Deny` for the calling principal, with an explicit Deny winning. A key's
    fields on today's key do not describe an IAM key. A member-access read
    returns a principal's per-bucket access, is consistent with Hilt's own last
    write, and carries a latency target, since the bucket list and the activity
-   feed resolve it per request.
+   feed resolve it per request. Deny is what makes this more than a proof-chain
+   check: several S3 actions map to the same Forge commands, so the gateway has
+   to hold each key's effective action set per bucket and refuse anything
+   outside it rather than probing for a chain.
 6. **Revocation before acknowledgement.** Every narrowing of a principal or a
    policy publishes revocations for the delegations it invalidates before Hilt
-   acknowledges the change. The propagation time under a healthy revocation
-   path is the published staleness bound, and its worst case today is the next
-   UTC midnight plus skew. A policy edit costs on the order of the statements
-   it changes and touches no key, since a key holds no authority of its own.
+   acknowledges the change, and refuses the change outright when it cannot, so
+   a failed narrowing leaves the old access rather than a stale one. The
+   propagation time is the published staleness bound: a revocation that reaches
+   every warm cache holding a principal's grants, independent of when those
+   caches would have expired on their own. A policy edit costs on the order of
+   the statements it changes and touches no key, since a key holds no authority
+   of its own.
 7. **The `s3:*` vocabulary** crosses the API through the existing mapping, and
-   every principal holds `s3:ListAllMyBuckets`. The contract enum gains
-   `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`, which Hilt
-   already accepts.
+   every principal holds `s3:ListAllMyBuckets`, which no statement grants and
+   no Deny removes. The contract enum gains `s3:AbortMultipartUpload` and
+   `s3:ListMultipartUploadParts`, which Hilt already accepts.
 8. **Tenant identity per org and region.** When one network serves two regions
    for one org, the implementation sends a region-qualified external id, and
    Hilt's one-provider-per-tenant model holds unchanged.
 
-A bucket create that takes a policy, and a bucket lifecycle feed, would both
-help. They are asks rather than requirements.
+A bucket lifecycle feed would help and is an ask rather than a requirement.
 
 ## Migration strategy
 
@@ -460,11 +476,17 @@ depends on it.
    besides, where granting an org access is a row rather than a redeploy.
 4. The per-member credential store with its envelope encryption, and the
    `getBucket` existence change. Both are prerequisites for the flip.
-5. The per-network flip when a Hilt network ships the contract. Retire that
-   network's customer keys, write principals for existing members through the
-   provisioning sweep, then change the registry entry. `eu-central-3` and
-   `us-east-9` flip on their own schedules. After the flip, Hilt availability
-   gates membership writes for orgs with a tenant on that network.
+5. The per-network flip when a Hilt network ships the contract. The gateway
+   ships before the management API, since it has to enforce the new action sets
+   before any key depends on them. The flip then retires every key on the
+   network, including the console's own credential, so the console mints a
+   fresh one per tenant, writes principals for existing members through the
+   provisioning sweep, writes a policy per bucket naming the org's Owners and
+   Admins, and changes the registry entry last. No key on the network works
+   between the management-API deploy and that entry, which is tolerable only
+   because Forge runs demo and dev today. `eu-central-3` and `us-east-9` flip
+   on their own schedules. After the flip, Hilt availability gates membership
+   writes for orgs with a tenant on that network.
 
 ## Options considered
 
@@ -496,25 +518,22 @@ second name.
 
 ## Open questions
 
-1. What is the real staleness bound at the Forge gateway for a principal or
-   policy change? The worst case today is the next UTC midnight plus skew, and
-   the revocation path should be much faster, but the propagation time is
-   unmeasured.
-2. Can Hilt offer a compare-and-set on a bucket's policy document? Without one,
-   two admins editing the same bucket from the same read overwrite each other
-   silently.
-3. Can Hilt's per-tenant key limit absorb one console credential per member on
-   top of the customer keys?
-4. Should a statement naming every member be allowed to Deny? It is useful in
-   an Allow, as the way to grant a bucket to everybody. In a Deny it locks the
-   org out until an Owner edits it back, and we may want the console to refuse
-   it.
-5. Should FIL-1017's `ListBuckets` criterion be relaxed, or should the gateway
+1. How long does a narrowing take to reach the gateway? The path is a
+   revocation on the firehose rather than a cache expiry, so the number should
+   be small, and it is unmeasured. It is the figure Forge publishes.
+2. Should the console refuse a Deny naming every member? The storage system
+   accepts one, and it is the console that knows a Deny is about to lock an org
+   out of its own bucket until an Owner edits it back. A statement naming
+   everybody is useful in an Allow, as the way to grant a bucket to the whole
+   org.
+3. What is the latency of the per-bucket access read, which the bucket list and
+   the activity feed resolve on every request?
+4. Should FIL-1017's `ListBuckets` criterion be relaxed, or should the gateway
    filter the listing? Filtering is a change to a system we own, and the closed
    Hilt PR is the prior attempt at it.
-6. Does a partially failed multi-region revocation need an operator view, or is
+5. Does a partially failed multi-region revocation need an operator view, or is
    the retry on the same request enough?
-7. How large does the unscoped-role fan-out get in practice? A promotion
+6. How large does the unscoped-role fan-out get in practice? A promotion
    rewrites one policy per bucket in the region, and we have no figure for
    buckets per org on Forge. If it turns out large, the management API taking a
    batch of policy writes would fix it.
