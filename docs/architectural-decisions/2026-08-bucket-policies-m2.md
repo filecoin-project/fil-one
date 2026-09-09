@@ -540,10 +540,6 @@ second name.
 
 ## Future work
 
-**Groups.** Statements name individual members today. Naming a group would
-collapse the eight-writes case that multi-bucket policies were reaching for,
-without moving the policy off its bucket.
-
 **Prefix scope** inside a bucket (FIL-1018) fits the statement shape directly
 and is Forge-only.
 
