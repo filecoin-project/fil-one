@@ -137,7 +137,7 @@ export function getRegionAccessModel(_region: S3Region): AccessModel {
  * Operators terminate TLS themselves — every one must serve this hostname
  * before merge.
  */
-const S3_DATA_DOMAIN = 's3.filonecontent.com';
+const S3_DATA_DOMAIN = 'filonecontent.com';
 
 /**
  * Build the S3-compatible endpoint URL for a region and stage. Non-production
@@ -150,14 +150,19 @@ export function getS3Endpoint(region: S3Region, stage: Stage | string): string {
       case S3Region.EuWest1:
         return 'https://s3.dev.aur.lu';
       case S3Region.UsEast1:
-        return 'https://us-east-1.fortilyx.com';
+        return 'https://s3.us-east-1.staging.filonecontent.com';
       case S3Region.EuCentral3:
         return 'https://s3.eu-central-3.staging.filonecontent.com';
       case S3Region.UsEast9:
         return 'https://s3.us-east-9.latest.dev.filonecontent.com';
     }
   }
-  return `https://${region}.${S3_DATA_DOMAIN}`;
+
+  // TODO remove this branch this when Aurora supports the new domain name
+  if (region == S3Region.EuWest1) {
+    return `https://eu-west-1.s3.${S3_DATA_DOMAIN}`;
+  }
+  return `https://s3.${region}.${S3_DATA_DOMAIN}`;
 }
 
 /**
